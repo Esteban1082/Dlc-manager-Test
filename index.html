@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DLC Manager – Rob The Market</title>
+<title>DLC Manager v2.10 – Rob The Market</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -393,9 +393,7 @@
         <span id="sync-time" style="font-size:9px;color:var(--muted)">jamais synchronisé</span>
       </div>
     </div>
-    <button id="morning-btn" onclick="openMorningMode()"
-      style="display:none;padding:7px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;font-size:18px;cursor:pointer;transition:all .15s;align-items:center"
-      title="Mode ouverture de rayon" aria-label="Mode ouverture de rayon">🌅</button>
+
     <div class="date-display">
       <span id="clock">--:--</span>
       <span id="date-str"></span>
@@ -461,20 +459,67 @@
   <div id="produits-list"></div>
 </div>
 
-<!-- v2.9 : Vue Historique -->
-<div id="view-historique" class="view-container" style="display:none;padding:20px 24px 80px;">
+<!-- v2.10 : Vue Pertes -->
+<div id="view-pertes" class="view-container" style="display:none;padding:20px 24px 80px;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-    <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">🕓 Historique des retraits</div>
-    <button onclick="loadHistorique()" style="padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">↻ Actualiser</button>
+    <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">📉 Enregistrer une perte</div>
   </div>
-  <div id="histo-filters" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-    <button onclick="setHistoFilter('today',this)" class="filter-btn">Aujourd'hui</button>
-    <button onclick="setHistoFilter('semaine',this)" class="filter-btn active">Cette semaine</button>
-    <button onclick="setHistoFilter('mois',this)" class="filter-btn">Ce mois</button>
-    <button onclick="setHistoFilter('tout',this)" class="filter-btn">Tout</button>
+
+  <!-- Zone de recherche / scan -->
+  <div style="position:relative;margin-bottom:12px">
+    <div class="barcode-row">
+      <input id="pertes-search" type="text" placeholder="🔍  Rechercher un produit…"
+        oninput="onPertesInput()" onkeydown="if(event.key==='Enter'){hidePertesDropdown();searchPertesProduct()}"
+        autocomplete="off" aria-label="Rechercher un produit pour perte"
+        style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;transition:border-color .15s">
+      <button onclick="openPertesScanner()" title="Scanner" aria-label="Scanner un code-barres"
+        style="flex-shrink:0;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:20px;cursor:pointer;transition:all .15s">📷</button>
+    </div>
+    <div id="pertes-suggestions" style="display:none;position:absolute;left:0;right:0;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:4px"></div>
   </div>
-  <div id="historique-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px"></div>
-  <div id="historique-list"></div>
+
+  <!-- Div scanner pertes (injecté dynamiquement) -->
+  <div id="pertes-scanner-wrap" style="display:none;margin-bottom:12px"></div>
+
+  <!-- Carte produit sélectionné + saisie quantité -->
+  <div id="pertes-selected" style="display:none;background:var(--surface);border:1px solid var(--amber);border-radius:12px;padding:16px;margin-bottom:16px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+      <div style="flex:1;min-width:0">
+        <div id="ps-nom" style="font-family:'Fraunces',serif;font-size:17px;font-weight:700;margin-bottom:3px"></div>
+        <div id="ps-meta" style="font-size:12px;color:var(--muted)"></div>
+      </div>
+      <button onclick="clearPertesSelection()" style="flex-shrink:0;padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted);cursor:pointer;margin-left:8px">✕ Changer</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      <label style="font-size:12px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">Quantité perdue</label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button onclick="adjustQty(-1)" style="width:36px;height:36px;background:var(--border);border:none;border-radius:8px;font-size:18px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700">−</button>
+        <input id="pertes-qty" type="number" min="1" max="999" value="1"
+          style="width:64px;text-align:center;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:18px;font-weight:700;outline:none">
+        <button onclick="adjustQty(1)" style="width:36px;height:36px;background:var(--border);border:none;border-radius:8px;font-size:18px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700">＋</button>
+      </div>
+    </div>
+    <button onclick="enregistrerPerte()" aria-label="Enregistrer la perte"
+      style="width:100%;padding:14px;background:var(--red);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:#fff;cursor:pointer;transition:all .15s">
+      📉 Enregistrer la perte
+    </button>
+  </div>
+
+  <!-- Séparateur + Historique des pertes -->
+  <div style="display:flex;align-items:center;gap:12px;margin:24px 0 16px">
+    <div style="font-size:12px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;white-space:nowrap">Historique des pertes</div>
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+    <button onclick="loadPertes()" style="padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">↻</button>
+  </div>
+
+  <div id="pertes-histo-filters" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button onclick="setPertesFilter('today',this)" class="filter-btn">Aujourd'hui</button>
+    <button onclick="setPertesFilter('semaine',this)" class="filter-btn active">Cette semaine</button>
+    <button onclick="setPertesFilter('mois',this)" class="filter-btn">Ce mois</button>
+    <button onclick="setPertesFilter('tout',this)" class="filter-btn">Tout</button>
+  </div>
+  <div id="pertes-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px"></div>
+  <div id="pertes-list"></div>
 </div>
 <!-- v2.8: FAB (Floating Action Button) mobile -->
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
@@ -1723,9 +1768,7 @@ function renderStats() {
     <div class="stat"><span class="stat-icon">🟡</span><span class="stat-count" style="color:var(--yellow)">${c.yellow}</span><span class="stat-label">Bientôt</span></div>
     <div class="stat"><span class="stat-icon">🟢</span><span class="stat-count" style="color:var(--green)">${c.green}</span><span class="stat-label">OK</span></div>
     <div class="stat"><span class="stat-icon">📦</span><span class="stat-count" style="color:var(--muted)">${active.length}</span><span class="stat-label">Total actifs</span></div>`;
-  // v2.9 : bouton morning visible si urgents
-  const morningBtn = document.getElementById('morning-btn');
-  if (morningBtn) morningBtn.style.display = c.red > 0 ? 'inline-flex' : 'none';
+
 }
 
 function renderProducts() {
@@ -1848,10 +1891,23 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('view-dlc').style.display        = tab === 'dlc'        ? '' : 'none';
   document.getElementById('view-produits').style.display   = tab === 'produits'   ? '' : 'none';
-  document.getElementById('view-historique').style.display = tab === 'historique' ? '' : 'none';
+  document.getElementById('view-pertes').style.display    = tab === 'pertes'    ? '' : 'none';
   updateFabVisibility();
-  if (tab === 'produits')   renderProduitsBase();
-  if (tab === 'historique' && historiqueData.length === 0) loadHistorique();
+  if (tab === 'produits') {
+    if (sheetProducts.length === 0) {
+      // Base pas encore chargée → déclencher un rechargement
+      const listEl = document.getElementById('produits-list');
+      if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement de la base…</div>';
+      api({ action: 'getProducts' }).then(d => {
+        if (d.success) { sheetProducts = d.products; renderProduitsBase(); }
+      }).catch(() => {
+        if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur — vérifie la connexion</div>';
+      });
+    } else {
+      renderProduitsBase();
+    }
+  }
+  if (tab === 'pertes' && pertesData.length === 0) loadPertes();
 }
 
 // ── v2.9 : Base produits ──
@@ -1935,153 +1991,234 @@ function openAddProductToBase() {
   setTimeout(() => document.getElementById('f-name').focus(), 200);
 }
 
-// ── v2.9 : Historique des retraits ──
-let historiqueData   = [];
-let historiqueFilter = 'semaine';
+// ── v2.10 : Module Pertes ──
+let pertesData        = [];
+let pertesFilter      = 'semaine';
+let pertesScanner     = null;
+let pertesScannerOpen = false;
+let selectedPerte     = null; // { nom, marque, barcode }
 
-function setHistoFilter(f, btn) {
-  historiqueFilter = f;
-  document.querySelectorAll('#histo-filters .filter-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  renderHistorique();
+// ── Recherche textuelle produits ──
+function onPertesInput() {
+  const q = (document.getElementById('pertes-search')?.value || '').toLowerCase().trim();
+  const sug = document.getElementById('pertes-suggestions');
+  if (!sug) return;
+  if (!q || q.length < 2) { sug.style.display = 'none'; return; }
+  const matches = sheetProducts.filter(p =>
+    (p.nom_article || '').toLowerCase().includes(q) ||
+    (p.patissier   || '').toLowerCase().includes(q) ||
+    String(p.code_barres || '').includes(q)
+  ).slice(0, 8);
+  if (!matches.length) { sug.style.display = 'none'; return; }
+  sug.innerHTML = matches.map(p => {
+    const nom    = p.nom_article || p.nom || '';
+    const marque = p.patissier   || p.marque || '';
+    const code   = p.code_barres || '';
+    return `<div onclick="selectPerteProduit('${nom.replace(/'/g,"\'")}','${marque.replace(/'/g,"\'")}','${code}')"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s"
+      onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background=''"
+    >
+      <div style="font-family:'Fraunces',serif;font-size:14px;font-weight:600">${nom}</div>
+      <div style="font-size:11px;color:var(--muted)">${marque}${code ? ' · ' + code : ''}</div>
+    </div>`;
+  }).join('');
+  sug.style.display = 'block';
 }
 
-async function loadHistorique() {
-  const list = document.getElementById('historique-list');
+function hidePertesDropdown() {
+  const sug = document.getElementById('pertes-suggestions');
+  if (sug) sug.style.display = 'none';
+}
+
+function searchPertesProduct() {
+  hidePertesDropdown();
+  const q = (document.getElementById('pertes-search')?.value || '').toLowerCase().trim();
+  if (!q) return;
+  // Cherche d'abord par barcode exact, sinon par nom
+  const found = sheetProducts.find(p => String(p.code_barres || '') === q) ||
+                sheetProducts.find(p => (p.nom_article || '').toLowerCase().includes(q));
+  if (found) {
+    selectPerteProduit(found.nom_article || found.nom || '', found.patissier || found.marque || '', found.code_barres || '');
+  } else {
+    toast('⚠ Produit non trouvé dans la base', true);
+  }
+}
+
+function selectPerteProduit(nom, marque, barcode) {
+  selectedPerte = { nom, marque, barcode };
+  document.getElementById('pertes-search').value = '';
+  hidePertesDropdown();
+  closePertesScanner();
+  document.getElementById('ps-nom').textContent  = nom;
+  document.getElementById('ps-meta').textContent = marque + (barcode ? ' · ' + barcode : '');
+  document.getElementById('pertes-qty').value    = 1;
+  document.getElementById('pertes-selected').style.display = 'block';
+}
+
+function clearPertesSelection() {
+  selectedPerte = null;
+  document.getElementById('pertes-selected').style.display = 'none';
+  document.getElementById('pertes-search').value = '';
+  document.getElementById('pertes-search').focus();
+}
+
+function adjustQty(delta) {
+  const inp = document.getElementById('pertes-qty');
+  if (!inp) return;
+  const v = parseInt(inp.value) || 1;
+  inp.value = Math.max(1, Math.min(999, v + delta));
+}
+
+// ── Scanner pertes ──
+function openPertesScanner() {
+  if (pertesScannerOpen) { closePertesScanner(); return; }
+  const wrap = document.getElementById('pertes-scanner-wrap');
+  if (!wrap) return;
+  const divId = 'pertes-qr-div';
+  wrap.innerHTML = `<div id="${divId}" style="width:100%;max-width:400px;margin:0 auto;border-radius:12px;overflow:hidden"></div>`;
+  wrap.style.display = 'block';
+  pertesScannerOpen  = true;
+  try {
+    pertesScanner = new Html5Qrcode(divId);
+    pertesScanner.start({ facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 250, height: 120 } },
+      (decodedText) => {
+        closePertesScanner();
+        // Chercher dans la base par barcode
+        const found = sheetProducts.find(p => String(p.code_barres || '').trim() === decodedText.trim());
+        if (found) {
+          selectPerteProduit(found.nom_article || found.nom || '', found.patissier || found.marque || '', found.code_barres || '');
+          toast('📷 Produit trouvé : ' + (found.nom_article || found.nom));
+        } else {
+          // Pré-remplir la recherche pour aide manuelle
+          document.getElementById('pertes-search').value = decodedText;
+          toast('⚠ Code non trouvé dans la base — vérifiez le nom', true);
+        }
+      },
+      () => {}
+    ).catch(err => { toast('⚠ Erreur caméra : ' + err, true); closePertesScanner(); });
+  } catch(e) { toast('⚠ Erreur scanner', true); closePertesScanner(); }
+}
+
+function closePertesScanner() {
+  if (pertesScanner) {
+    pertesScanner.stop().catch(() => {});
+    pertesScanner = null;
+  }
+  pertesScannerOpen = false;
+  const wrap = document.getElementById('pertes-scanner-wrap');
+  if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
+}
+
+// ── Enregistrement de la perte ──
+async function enregistrerPerte() {
+  if (!selectedPerte) return;
+  const qty = parseInt(document.getElementById('pertes-qty')?.value) || 1;
+  const { nom, marque, barcode } = selectedPerte;
+  toast(`⏳ Enregistrement de la perte…`);
+  try {
+    const data = await api({
+      action: 'logPerte',
+      name:     nom,
+      brand:    marque,
+      barcode:  barcode,
+      quantity: String(qty)
+    });
+    if (data && data.success) {
+      toast(`✓ Perte enregistrée — ${qty} × ${nom}`);
+      clearPertesSelection();
+      // Rafraîchir l'historique
+      pertesData = [];
+      loadPertes();
+    } else {
+      toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action logPerte)'}`, true);
+    }
+  } catch(e) { toast('⚠ Erreur réseau', true); }
+}
+
+// ── Filtres et affichage historique pertes ──
+function setPertesFilter(f, btn) {
+  pertesFilter = f;
+  document.querySelectorAll('#pertes-histo-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderPertes();
+}
+
+async function loadPertes() {
+  const list = document.getElementById('pertes-list');
   if (list) list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
   try {
-    const data = await api({ action: 'getHistorique' });
-    historiqueData = (data.success && data.historique) ? data.historique : [];
-    renderHistorique();
+    const data = await api({ action: 'getPertes' });
+    pertesData = (data.success && data.pertes) ? data.pertes : [];
+    renderPertes();
   } catch(e) {
     if (list) list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur — vérifie le Apps Script</div>';
   }
 }
 
-function renderHistorique() {
+function renderPertes() {
   const now = new Date(); now.setHours(0,0,0,0);
-  const filtered = historiqueData.filter(h => {
-    if (!h.retiréLe) return true;
-    const d = new Date(h.retiréLe + 'T00:00:00');
-    if (historiqueFilter === 'today')   return d.getTime() === now.getTime();
-    if (historiqueFilter === 'semaine') { const w = new Date(now); w.setDate(now.getDate()-7);  return d >= w; }
-    if (historiqueFilter === 'mois')    { const m = new Date(now); m.setDate(now.getDate()-30); return m >= m; }
+  const filtered = pertesData.filter(h => {
+    if (!h.date) return true;
+    const d = new Date(h.date + 'T00:00:00');
+    if (pertesFilter === 'today')   return d.getTime() === now.getTime();
+    if (pertesFilter === 'semaine') { const w = new Date(now); w.setDate(now.getDate()-7);  return d >= w; }
+    if (pertesFilter === 'mois')    { const m = new Date(now); m.setDate(now.getDate()-30); return d >= m; }
     return true;
-  }).sort((a, b) => (b.retiréLe || '').localeCompare(a.retiréLe || ''));
+  }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-  const statsEl = document.getElementById('historique-stats');
-  const noms = new Set(filtered.map(h => h.name));
+  // Stats
+  const statsEl = document.getElementById('pertes-stats');
+  const totalQty = filtered.reduce((acc, h) => acc + (parseInt(h.quantity) || 1), 0);
+  const noms     = new Set(filtered.map(h => h.name));
   if (statsEl) statsEl.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
-      <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--amber)">${filtered.length}</div>
-      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Retraits</div>
+      <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--red)">${totalQty}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Unités perdues</div>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
       <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--text)">${noms.size}</div>
       <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Produits distincts</div>
     </div>`;
 
-  const list = document.getElementById('historique-list');
+  const list = document.getElementById('pertes-list');
   if (!list) return;
   if (!filtered.length) {
     list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
-      <div style="font-size:36px;margin-bottom:12px">🕓</div>
-      <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">Aucun retrait enregistré</div>
-      <div style="font-size:12px">Les retraits apparaîtront ici une fois le Apps Script mis à jour.</div>
+      <div style="font-size:36px;margin-bottom:12px">📉</div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">Aucune perte enregistrée</div>
+      <div style="font-size:12px">Scanne ou recherche un produit pour commencer.</div>
     </div>`;
     return;
   }
   // Grouper par date
   const byDate = {};
-  filtered.forEach(h => { const k = h.retiréLe || 'Inconnu'; if (!byDate[k]) byDate[k] = []; byDate[k].push(h); });
+  filtered.forEach(h => { const k = h.date || 'Inconnu'; if (!byDate[k]) byDate[k] = []; byDate[k].push(h); });
   let html = '';
   for (const [dateKey, items] of Object.entries(byDate)) {
-    const label = dateKey === 'Inconnu' ? 'Date inconnue' : fmtDate(dateKey);
+    const label  = dateKey === 'Inconnu' ? 'Date inconnue' : fmtDate(dateKey);
+    const dayQty = items.reduce((a, h) => a + (parseInt(h.quantity) || 1), 0);
     html += `<div class="histo-section-title">${label}
-      <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1px 8px;font-size:10px">${items.length}</span>
+      <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1px 8px;font-size:10px">${dayQty} unité${dayQty>1?'s':''}</span>
     </div>`;
     html += items.map(h => {
-      const dlcD = h.dlc ? daysUntil(h.dlc) : null;
-      const wasExp = dlcD !== null && dlcD <= 0;
-      const borderC = wasExp ? 'rgba(255,64,64,.3)' : 'rgba(76,219,138,.2)';
-      const bgC     = wasExp ? 'var(--red-bg)'      : 'var(--green-bg)';
-      const tag     = wasExp
-        ? `<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(255,64,64,.2);color:var(--red);white-space:nowrap">Périmé</span>`
-        : `<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(76,219,138,.15);color:var(--green);white-space:nowrap">Retiré OK</span>`;
-      return `<div style="background:${bgC};border:1px solid ${borderC};border-radius:10px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
+      const qty = parseInt(h.quantity) || 1;
+      return `<div style="background:var(--red-bg);border:1px solid rgba(255,64,64,.25);border-radius:10px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
         <div style="flex:1;min-width:0">
-          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${h.brand || ''}${h.dlc ? ' · DLC ' + fmtDate(h.dlc) : ''}</div>
+          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name || ''}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${h.brand || ''}${h.barcode ? ' · ' + h.barcode : ''}</div>
         </div>
-        ${tag}
+        <div style="flex-shrink:0;text-align:center;min-width:42px">
+          <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:var(--red);line-height:1">${qty}</div>
+          <div style="font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">unité${qty>1?'s':''}</div>
+        </div>
       </div>`;
     }).join('');
   }
   list.innerHTML = html;
 }
 
-// ── v2.9 : Mode ouverture de rayon ──
-function openMorningMode() {
-  const urgents = products.filter(p => !p.archived && daysUntil(p.dlc) <= 0);
-  const now = new Date();
-  document.getElementById('morning-date').textContent =
-    now.toLocaleDateString('fr-BE',{weekday:'long',day:'numeric',month:'long'}) + ' · ' +
-    now.toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'});
-  document.getElementById('morning-urgent-count').innerHTML = urgents.length > 0
-    ? `<div style="font-family:'Fraunces',serif;font-size:72px;font-weight:900;color:var(--red);line-height:1">${urgents.length}</div>
-       <div style="font-size:13px;color:var(--red);letter-spacing:2px;text-transform:uppercase;margin-top:6px">produit${urgents.length>1?'s':''} à retirer</div>`
-    : `<div style="font-size:56px;margin-bottom:10px">✅</div>
-       <div style="font-family:'Fraunces',serif;font-size:24px;color:var(--green)">Tout est OK !</div>
-       <div style="font-size:13px;color:var(--muted);margin-top:6px">Aucun produit périmé aujourd'hui.</div>`;
-  document.getElementById('morning-tout-btn').style.display = urgents.length > 0 ? 'block' : 'none';
-  document.getElementById('morning-list').innerHTML = urgents.map(p => `
-    <div style="display:flex;align-items:center;gap:10px;background:var(--red-bg);border:1px solid rgba(255,64,64,.3);border-radius:12px;padding:14px 16px">
-      <div style="flex:1;min-width:0">
-        <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
-        <div style="font-size:12px;color:var(--muted)">${p.brand} · DLC ${fmtDate(p.dlc)}</div>
-      </div>
-      <button onclick="morningVerify(${p.id})"
-        style="flex-shrink:0;padding:10px 16px;background:var(--green);border:none;border-radius:8px;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:#000;cursor:pointer">✓</button>
-    </div>`).join('');
-  document.getElementById('morning-mode').style.display = 'flex';
-}
-
-function closeMorningMode() {
-  document.getElementById('morning-mode').style.display = 'none';
-}
-
-function morningVerify(id) {
-  verifyProduct(id);
-  const remaining = products.filter(p => !p.archived && daysUntil(p.dlc) <= 0);
-  if (remaining.length === 0) {
-    document.getElementById('morning-urgent-count').innerHTML =
-      `<div style="font-size:56px;margin-bottom:10px">✅</div>
-       <div style="font-family:'Fraunces',serif;font-size:24px;color:var(--green)">Tout est retiré !</div>`;
-    document.getElementById('morning-list').innerHTML = '';
-    document.getElementById('morning-tout-btn').style.display = 'none';
-    setTimeout(closeMorningMode, 2000);
-  } else {
-    openMorningMode();
-  }
-}
-
-async function toutRetirerMorning() {
-  const urgents = products.filter(p => !p.archived && daysUntil(p.dlc) <= 0);
-  if (!urgents.length) return;
-  for (const p of urgents) {
-    products = products.filter(x => x.id !== p.id);
-    api({ action: 'logRetrait', brand: p.brand, name: p.name, dlc: p.dlc, barcode: p.barcode || '' }).catch(() => {});
-    if (p.eventId) { try { await api({ action: 'deleteEvent', eventId: p.eventId }); } catch(e) {} }
-  }
-  render(); updateCrStats(); updateCrToday(); updateNoDlcBadge();
-  document.getElementById('morning-urgent-count').innerHTML =
-    `<div style="font-size:56px;margin-bottom:10px">✅</div>
-     <div style="font-family:'Fraunces',serif;font-size:24px;color:var(--green)">${urgents.length} produit${urgents.length>1?'s retirés':' retiré'} !</div>`;
-  document.getElementById('morning-list').innerHTML = '';
-  document.getElementById('morning-tout-btn').style.display = 'none';
-  toast(`✓ ${urgents.length} produit${urgents.length>1?'s retirés':' retiré'}`);
-  setTimeout(closeMorningMode, 2000);
-}
+// ── v2.10 : Morning Mode supprimé (remplacé par Contrôle Rapide) ──
 
 // ── Init ──
 render();
@@ -2097,30 +2234,11 @@ setTimeout(fullSync, 500);
   <button class="tab-btn" data-tab="produits" onclick="switchTab('produits')">
     <span class="tab-icon">📋</span>Produits
   </button>
-  <button class="tab-btn" data-tab="historique" onclick="switchTab('historique')">
-    <span class="tab-icon">🕓</span>Historique
+  <button class="tab-btn" data-tab="pertes" onclick="switchTab('pertes')">
+    <span class="tab-icon">📉</span>Pertes
   </button>
 </div>
 
-<!-- v2.9 : Morning Mode -->
-<div id="morning-mode" style="display:none;position:fixed;inset:0;z-index:400;background:var(--bg);flex-direction:column;overflow-y:auto;">
-  <div style="padding:32px 24px;text-align:center;border-bottom:1px solid var(--border)">
-    <div style="font-size:40px;margin-bottom:8px">🌅</div>
-    <div style="font-family:'Fraunces',serif;font-size:26px;font-weight:900;color:var(--amber);margin-bottom:4px">Ouverture du rayon</div>
-    <div id="morning-date" style="font-size:13px;color:var(--muted)"></div>
-  </div>
-  <div style="padding:24px;flex:1">
-    <div id="morning-urgent-count" style="text-align:center;margin-bottom:24px"></div>
-    <div id="morning-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:24px"></div>
-    <button onclick="toutRetirerMorning()" id="morning-tout-btn"
-      style="width:100%;padding:16px;background:var(--red);border:none;border-radius:12px;font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:12px">
-      ✓✓ Tout retirer
-    </button>
-    <button onclick="closeMorningMode()"
-      style="width:100%;padding:14px;background:transparent;border:1px solid var(--border);border-radius:12px;font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);cursor:pointer">
-      → Accéder à l'app
-    </button>
-  </div>
-</div>
+
 </body>
 </html>
