@@ -287,7 +287,7 @@
 
   /* ── v2.8: FAB (floating action button) for mobile ── */
   .fab-add {
-    display:none; position:fixed; bottom:24px; right:20px; z-index:200;
+    display:none; position:fixed; bottom:84px; right:20px; z-index:200;
     width:56px; height:56px; border-radius:50%; background:var(--amber); color:#000;
     border:none; font-size:28px; font-weight:700; cursor:pointer;
     box-shadow:0 4px 16px rgba(232,160,69,.4);
@@ -323,6 +323,32 @@
     .toast-container { bottom:90px; right:14px; left:14px; }
     .toast { min-width:auto; }
   }
+
+  /* ── v2.9 : Tab Bar ── */
+  .tab-bar {
+    position:fixed; bottom:0; left:0; right:0; height:60px; z-index:150;
+    background:var(--bg); border-top:1px solid var(--border);
+    display:flex; align-items:stretch;
+  }
+  .tab-btn {
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; background:transparent; border:none; border-top:2px solid transparent;
+    color:var(--muted); font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1px;
+    text-transform:uppercase; cursor:pointer; transition:color .15s, border-color .15s;
+  }
+  .tab-btn.active { color:var(--amber); border-top-color:var(--amber); }
+  .tab-btn:active { transform:scale(0.95); }
+  .tab-icon { font-size:20px; line-height:1; }
+
+  /* ── v2.9 : Views padding (tab bar) ── */
+  .view-container { padding-bottom:80px; }
+
+  /* ── v2.9 : Historique cards ── */
+  .histo-section-title {
+    font-size:11px; color:var(--muted); letter-spacing:2px; text-transform:uppercase;
+    margin-bottom:8px; margin-top:16px; display:flex; align-items:center; gap:8px;
+  }
+  .histo-section-title::after { content:''; flex:1; height:1px; background:var(--border); }
 </style>
 </head>
 <body>
@@ -367,6 +393,9 @@
         <span id="sync-time" style="font-size:9px;color:var(--muted)">jamais synchronisé</span>
       </div>
     </div>
+    <button id="morning-btn" onclick="openMorningMode()"
+      style="display:none;padding:7px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;font-size:18px;cursor:pointer;transition:all .15s;align-items:center"
+      title="Mode ouverture de rayon" aria-label="Mode ouverture de rayon">🌅</button>
     <div class="date-display">
       <span id="clock">--:--</span>
       <span id="date-str"></span>
@@ -383,6 +412,7 @@
 
 <div class="stats" id="stats-bar"></div>
 
+<div id="view-dlc" class="view-container">
 <!-- Barre de recherche rapide -->
 <div class="main" style="padding-bottom:0;margin-bottom:0">
   <div style="max-width:100%;position:relative">
@@ -417,11 +447,40 @@
   <div id="product-list"></div>
 </div>
 
+</div><!-- /view-dlc -->
+
+<!-- v2.9 : Vue Produits -->
+<div id="view-produits" class="view-container" style="display:none;padding:20px 24px 80px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">📋 Base produits</div>
+    <button onclick="openAddProductToBase()" style="padding:8px 14px;background:var(--amber);border:none;border-radius:8px;font-family:'Fraunces',serif;font-size:14px;font-weight:600;color:#000;cursor:pointer">＋ Nouveau</button>
+  </div>
+  <input id="produits-search" type="text" placeholder="🔍 Rechercher dans la base…" oninput="renderProduitsBase()" autocomplete="off"
+    style="width:100%;box-sizing:border-box;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;margin-bottom:12px;transition:border-color .15s">
+  <div id="produits-stats" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
+  <div id="produits-list"></div>
+</div>
+
+<!-- v2.9 : Vue Historique -->
+<div id="view-historique" class="view-container" style="display:none;padding:20px 24px 80px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">🕓 Historique des retraits</div>
+    <button onclick="loadHistorique()" style="padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">↻ Actualiser</button>
+  </div>
+  <div id="histo-filters" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button onclick="setHistoFilter('today',this)" class="filter-btn">Aujourd'hui</button>
+    <button onclick="setHistoFilter('semaine',this)" class="filter-btn active">Cette semaine</button>
+    <button onclick="setHistoFilter('mois',this)" class="filter-btn">Ce mois</button>
+    <button onclick="setHistoFilter('tout',this)" class="filter-btn">Tout</button>
+  </div>
+  <div id="historique-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px"></div>
+  <div id="historique-list"></div>
+</div>
 <!-- v2.8: FAB (Floating Action Button) mobile -->
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.8 · 13/03/2026
+  v2.9 · 13/03/2026
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -885,6 +944,8 @@ async function verifyProduct(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
   products = products.filter(x => x.id !== id);
+  // v2.9 : log silencieux du retrait
+  api({ action: 'logRetrait', brand: p.brand, name: p.name, dlc: p.dlc, barcode: p.barcode || '' }).catch(() => {});
   render();
   updateNoDlcBadge();
   if (p.eventId) {
@@ -922,12 +983,13 @@ function closeControleRapide() {
 
 // v2.8: FAB visibility logic
 function updateFabVisibility() {
-  const cr = document.getElementById('controle-rapide');
+  const cr  = document.getElementById('controle-rapide');
   const fab = document.getElementById('fab-add');
-  if (cr && cr.style.display !== 'none') {
+  const crOpen = cr && cr.style.display !== 'none';
+  // v2.9 : FAB seulement sur onglet DLC
+  if (crOpen || currentTab !== 'dlc') {
     fab.style.display = 'none';
   } else {
-    // Only show on mobile via CSS, but remove inline hide
     fab.style.display = '';
   }
 }
@@ -1094,6 +1156,8 @@ function crVerify(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
   products = products.filter(x => x.id !== id);
+  // v2.9 : log silencieux du retrait
+  api({ action: 'logRetrait', brand: p.brand, name: p.name, dlc: p.dlc, barcode: p.barcode || '' }).catch(() => {});
   render(); updateCrStats(); updateCrToday(); updateNoDlcBadge();
   document.getElementById('cr-result-inner').innerHTML =
     `<div style="text-align:center;padding:20px;color:var(--green);font-family:'Fraunces',serif;font-size:18px">✓ "${p.name}" retiré !</div>`;
@@ -1659,6 +1723,9 @@ function renderStats() {
     <div class="stat"><span class="stat-icon">🟡</span><span class="stat-count" style="color:var(--yellow)">${c.yellow}</span><span class="stat-label">Bientôt</span></div>
     <div class="stat"><span class="stat-icon">🟢</span><span class="stat-count" style="color:var(--green)">${c.green}</span><span class="stat-label">OK</span></div>
     <div class="stat"><span class="stat-icon">📦</span><span class="stat-count" style="color:var(--muted)">${active.length}</span><span class="stat-label">Total actifs</span></div>`;
+  // v2.9 : bouton morning visible si urgents
+  const morningBtn = document.getElementById('morning-btn');
+  if (morningBtn) morningBtn.style.display = c.red > 0 ? 'inline-flex' : 'none';
 }
 
 function renderProducts() {
@@ -1759,10 +1826,301 @@ function toast(msg, warn=false) {
   setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 3000);
 }
 
+
+// ══════════════════════════════════════════════════════════════════
+// APPS SCRIPT — Actions à ajouter côté Google Apps Script pour v2.9
+//
+// action: 'logRetrait'   params: brand, name, dlc, barcode
+//   → Ajoute une ligne dans l'onglet "Historique" de Sheets
+//     Colonnes: Date_retrait | Marque | Nom | DLC | Code_barres
+//
+// action: 'getHistorique'
+//   → { success:true, historique:[{brand,name,dlc,barcode,retiréLe:'YYYY-MM-DD'}] }
+//
+// action: 'deleteProduct'  params: name, brand
+//   → Supprime la ligne correspondante dans l'onglet "Produits"
+// ══════════════════════════════════════════════════════════════════
+
+// ── v2.9 : Navigation par onglets ──
+let currentTab = 'dlc';
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('view-dlc').style.display        = tab === 'dlc'        ? '' : 'none';
+  document.getElementById('view-produits').style.display   = tab === 'produits'   ? '' : 'none';
+  document.getElementById('view-historique').style.display = tab === 'historique' ? '' : 'none';
+  updateFabVisibility();
+  if (tab === 'produits')   renderProduitsBase();
+  if (tab === 'historique' && historiqueData.length === 0) loadHistorique();
+}
+
+// ── v2.9 : Base produits ──
+function renderProduitsBase() {
+  const q = (document.getElementById('produits-search')?.value || '').toLowerCase().trim();
+  const items = q
+    ? sheetProducts.filter(p =>
+        (p.nom_article || '').toLowerCase().includes(q) ||
+        (p.patissier   || '').toLowerCase().includes(q) ||
+        String(p.code_barres || '').includes(q))
+    : sheetProducts;
+
+  const statsEl = document.getElementById('produits-stats');
+  if (statsEl) statsEl.textContent =
+    `${sheetProducts.length} produit${sheetProducts.length > 1 ? 's' : ''} dans la base${q ? ` · ${items.length} résultat${items.length !== 1 ? 's' : ''}` : ''}`;
+
+  const list = document.getElementById('produits-list');
+  if (!list) return;
+  if (!items.length) {
+    list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:36px;margin-bottom:12px">📋</div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">${q ? 'Aucun résultat' : 'Base vide'}</div>
+      <div style="font-size:12px">${q ? 'Essaie un autre terme' : 'Clique sur ＋ Nouveau pour ajouter'}</div>
+    </div>`;
+    return;
+  }
+  list.innerHTML = items.map(p => {
+    const nom    = p.nom_article || p.nom || '';
+    const marque = p.patissier   || p.marque || '';
+    const barcode= p.code_barres || '';
+    const safeN  = nom.replace(/'/g, "\'");
+    const safeM  = marque.replace(/'/g, "\'");
+    const safeB  = barcode.replace(/'/g, "\'");
+    const hasDlc = products.some(x => x.name.toLowerCase().trim() === nom.toLowerCase().trim());
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom}</div>
+          ${hasDlc ? '<span style="font-size:9px;padding:2px 7px;border-radius:4px;background:rgba(76,219,138,.15);color:var(--green);flex-shrink:0;letter-spacing:.5px">DLC ✓</span>' : ''}
+        </div>
+        <div style="font-size:11px;color:var(--muted)">${marque}${barcode ? ' · ' + barcode : ''}</div>
+      </div>
+      <button onclick="addDlcFromBase('${safeN}','${safeM}','${safeB}')"
+        style="flex-shrink:0;padding:7px 10px;background:var(--amber);border:none;border-radius:7px;font-size:12px;font-weight:700;color:#000;cursor:pointer;white-space:nowrap">📅 DLC</button>
+      <button onclick="deleteProductFromBase('${safeN}','${safeM}')"
+        style="flex-shrink:0;padding:7px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:7px;font-size:14px;color:var(--red);cursor:pointer">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+function addDlcFromBase(nom, marque, barcode) {
+  addDlcFromNodlc(nom, marque, barcode);
+  switchTab('dlc');
+}
+
+async function deleteProductFromBase(nom, marque) {
+  askConfirm(`Supprimer "${nom}" de la base produits ?`, async () => {
+    toast(`⏳ Suppression de "${nom}"…`);
+    try {
+      const data = await api({ action: 'deleteProduct', name: nom, brand: marque });
+      if (data && data.success) {
+        sheetProducts = sheetProducts.filter(p =>
+          !((p.nom_article || p.nom || '').toLowerCase() === nom.toLowerCase() &&
+            (p.patissier || p.marque || '').toLowerCase() === marque.toLowerCase()));
+        renderProduitsBase();
+        updateNoDlcBadge();
+        toast(`✓ "${nom}" supprimé de la base`);
+      } else {
+        toast(`⚠ ${(data && data.error) || 'Mets à jour le Apps Script (action deleteProduct)'}`, true);
+      }
+    } catch(e) { toast('⚠ Erreur réseau', true); }
+  });
+}
+
+function openAddProductToBase() {
+  document.getElementById('f-name').value    = '';
+  document.getElementById('f-brand').value   = '';
+  document.getElementById('f-barcode').value = '';
+  document.getElementById('f-search').value  = '';
+  document.getElementById('modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('f-name').focus(), 200);
+}
+
+// ── v2.9 : Historique des retraits ──
+let historiqueData   = [];
+let historiqueFilter = 'semaine';
+
+function setHistoFilter(f, btn) {
+  historiqueFilter = f;
+  document.querySelectorAll('#histo-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderHistorique();
+}
+
+async function loadHistorique() {
+  const list = document.getElementById('historique-list');
+  if (list) list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
+  try {
+    const data = await api({ action: 'getHistorique' });
+    historiqueData = (data.success && data.historique) ? data.historique : [];
+    renderHistorique();
+  } catch(e) {
+    if (list) list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur — vérifie le Apps Script</div>';
+  }
+}
+
+function renderHistorique() {
+  const now = new Date(); now.setHours(0,0,0,0);
+  const filtered = historiqueData.filter(h => {
+    if (!h.retiréLe) return true;
+    const d = new Date(h.retiréLe + 'T00:00:00');
+    if (historiqueFilter === 'today')   return d.getTime() === now.getTime();
+    if (historiqueFilter === 'semaine') { const w = new Date(now); w.setDate(now.getDate()-7);  return d >= w; }
+    if (historiqueFilter === 'mois')    { const m = new Date(now); m.setDate(now.getDate()-30); return m >= m; }
+    return true;
+  }).sort((a, b) => (b.retiréLe || '').localeCompare(a.retiréLe || ''));
+
+  const statsEl = document.getElementById('historique-stats');
+  const noms = new Set(filtered.map(h => h.name));
+  if (statsEl) statsEl.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--amber)">${filtered.length}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Retraits</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--text)">${noms.size}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Produits distincts</div>
+    </div>`;
+
+  const list = document.getElementById('historique-list');
+  if (!list) return;
+  if (!filtered.length) {
+    list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:36px;margin-bottom:12px">🕓</div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">Aucun retrait enregistré</div>
+      <div style="font-size:12px">Les retraits apparaîtront ici une fois le Apps Script mis à jour.</div>
+    </div>`;
+    return;
+  }
+  // Grouper par date
+  const byDate = {};
+  filtered.forEach(h => { const k = h.retiréLe || 'Inconnu'; if (!byDate[k]) byDate[k] = []; byDate[k].push(h); });
+  let html = '';
+  for (const [dateKey, items] of Object.entries(byDate)) {
+    const label = dateKey === 'Inconnu' ? 'Date inconnue' : fmtDate(dateKey);
+    html += `<div class="histo-section-title">${label}
+      <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1px 8px;font-size:10px">${items.length}</span>
+    </div>`;
+    html += items.map(h => {
+      const dlcD = h.dlc ? daysUntil(h.dlc) : null;
+      const wasExp = dlcD !== null && dlcD <= 0;
+      const borderC = wasExp ? 'rgba(255,64,64,.3)' : 'rgba(76,219,138,.2)';
+      const bgC     = wasExp ? 'var(--red-bg)'      : 'var(--green-bg)';
+      const tag     = wasExp
+        ? `<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(255,64,64,.2);color:var(--red);white-space:nowrap">Périmé</span>`
+        : `<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(76,219,138,.15);color:var(--green);white-space:nowrap">Retiré OK</span>`;
+      return `<div style="background:${bgC};border:1px solid ${borderC};border-radius:10px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${h.brand || ''}${h.dlc ? ' · DLC ' + fmtDate(h.dlc) : ''}</div>
+        </div>
+        ${tag}
+      </div>`;
+    }).join('');
+  }
+  list.innerHTML = html;
+}
+
+// ── v2.9 : Mode ouverture de rayon ──
+function openMorningMode() {
+  const urgents = products.filter(p => !p.archived && daysUntil(p.dlc) <= 0);
+  const now = new Date();
+  document.getElementById('morning-date').textContent =
+    now.toLocaleDateString('fr-BE',{weekday:'long',day:'numeric',month:'long'}) + ' · ' +
+    now.toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('morning-urgent-count').innerHTML = urgents.length > 0
+    ? `<div style="font-family:'Fraunces',serif;font-size:72px;font-weight:900;color:var(--red);line-height:1">${urgents.length}</div>
+       <div style="font-size:13px;color:var(--red);letter-spacing:2px;text-transform:uppercase;margin-top:6px">produit${urgents.length>1?'s':''} à retirer</div>`
+    : `<div style="font-size:56px;margin-bottom:10px">✅</div>
+       <div style="font-family:'Fraunces',serif;font-size:24px;color:var(--green)">Tout est OK !</div>
+       <div style="font-size:13px;color:var(--muted);margin-top:6px">Aucun produit périmé aujourd'hui.</div>`;
+  document.getElementById('morning-tout-btn').style.display = urgents.length > 0 ? 'block' : 'none';
+  document.getElementById('morning-list').innerHTML = urgents.map(p => `
+    <div style="display:flex;align-items:center;gap:10px;background:var(--red-bg);border:1px solid rgba(255,64,64,.3);border-radius:12px;padding:14px 16px">
+      <div style="flex:1;min-width:0">
+        <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+        <div style="font-size:12px;color:var(--muted)">${p.brand} · DLC ${fmtDate(p.dlc)}</div>
+      </div>
+      <button onclick="morningVerify(${p.id})"
+        style="flex-shrink:0;padding:10px 16px;background:var(--green);border:none;border-radius:8px;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:#000;cursor:pointer">✓</button>
+    </div>`).join('');
+  document.getElementById('morning-mode').style.display = 'flex';
+}
+
+function closeMorningMode() {
+  document.getElementById('morning-mode').style.display = 'none';
+}
+
+function morningVerify(id) {
+  verifyProduct(id);
+  const remaining = products.filter(p => !p.archived && daysUntil(p.dlc) <= 0);
+  if (remaining.length === 0) {
+    document.getElementById('morning-urgent-count').innerHTML =
+      `<div style="font-size:56px;margin-bottom:10px">✅</div>
+       <div style="font-family:'Fraunces',serif;font-size:24px;color:var(--green)">Tout est retiré !</div>`;
+    document.getElementById('morning-list').innerHTML = '';
+    document.getElementById('morning-tout-btn').style.display = 'none';
+    setTimeout(closeMorningMode, 2000);
+  } else {
+    openMorningMode();
+  }
+}
+
+async function toutRetirerMorning() {
+  const urgents = products.filter(p => !p.archived && daysUntil(p.dlc) <= 0);
+  if (!urgents.length) return;
+  for (const p of urgents) {
+    products = products.filter(x => x.id !== p.id);
+    api({ action: 'logRetrait', brand: p.brand, name: p.name, dlc: p.dlc, barcode: p.barcode || '' }).catch(() => {});
+    if (p.eventId) { try { await api({ action: 'deleteEvent', eventId: p.eventId }); } catch(e) {} }
+  }
+  render(); updateCrStats(); updateCrToday(); updateNoDlcBadge();
+  document.getElementById('morning-urgent-count').innerHTML =
+    `<div style="font-size:56px;margin-bottom:10px">✅</div>
+     <div style="font-family:'Fraunces',serif;font-size:24px;color:var(--green)">${urgents.length} produit${urgents.length>1?'s retirés':' retiré'} !</div>`;
+  document.getElementById('morning-list').innerHTML = '';
+  document.getElementById('morning-tout-btn').style.display = 'none';
+  toast(`✓ ${urgents.length} produit${urgents.length>1?'s retirés':' retiré'}`);
+  setTimeout(closeMorningMode, 2000);
+}
+
 // ── Init ──
 render();
 preloadZXing();
 setTimeout(fullSync, 500);
 </script>
+
+<!-- v2.9 : Tab Bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="dlc" onclick="switchTab('dlc')">
+    <span class="tab-icon">📦</span>Suivi DLC
+  </button>
+  <button class="tab-btn" data-tab="produits" onclick="switchTab('produits')">
+    <span class="tab-icon">📋</span>Produits
+  </button>
+  <button class="tab-btn" data-tab="historique" onclick="switchTab('historique')">
+    <span class="tab-icon">🕓</span>Historique
+  </button>
+</div>
+
+<!-- v2.9 : Morning Mode -->
+<div id="morning-mode" style="display:none;position:fixed;inset:0;z-index:400;background:var(--bg);flex-direction:column;overflow-y:auto;">
+  <div style="padding:32px 24px;text-align:center;border-bottom:1px solid var(--border)">
+    <div style="font-size:40px;margin-bottom:8px">🌅</div>
+    <div style="font-family:'Fraunces',serif;font-size:26px;font-weight:900;color:var(--amber);margin-bottom:4px">Ouverture du rayon</div>
+    <div id="morning-date" style="font-size:13px;color:var(--muted)"></div>
+  </div>
+  <div style="padding:24px;flex:1">
+    <div id="morning-urgent-count" style="text-align:center;margin-bottom:24px"></div>
+    <div id="morning-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:24px"></div>
+    <button onclick="toutRetirerMorning()" id="morning-tout-btn"
+      style="width:100%;padding:16px;background:var(--red);border:none;border-radius:12px;font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:12px">
+      ✓✓ Tout retirer
+    </button>
+    <button onclick="closeMorningMode()"
+      style="width:100%;padding:14px;background:transparent;border:1px solid var(--border);border-radius:12px;font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);cursor:pointer">
+      → Accéder à l'app
+    </button>
+  </div>
+</div>
 </body>
 </html>
