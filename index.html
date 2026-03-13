@@ -1911,33 +1911,67 @@ function switchTab(tab) {
 }
 
 // ── v2.9 : Base produits ──
+// ── Détecte automatiquement les clés nom/marque/barcode quel que soit le nom de colonne ──
+function getProduitFields(p) {
+  const keys = Object.keys(p);
+  // Nom : cherche nom_article, nom, name, article, designation, libelle…
+  const nomKey = keys.find(k => /nom_article|^nom$|^name$|article|designation|libelle/i.test(k));
+  // Marque : cherche patissier, marque, brand, fournisseur, fabricant…
+  const marqueKey = keys.find(k => /patissier|marque|brand|fournisseur|fabricant/i.test(k));
+  // Barcode : cherche code_barres, barcode, ean, upc, code…
+  const barcodeKey = keys.find(k => /code_barres|barcode|ean|upc|^code$/i.test(k));
+  return {
+    nom:     (nomKey    ? String(p[nomKey]    || '') : '').trim(),
+    marque:  (marqueKey ? String(p[marqueKey] || '') : '').trim(),
+    barcode: (barcodeKey? String(p[barcodeKey]|| '') : '').trim(),
+  };
+}
+
 function renderProduitsBase() {
   const q = (document.getElementById('produits-search')?.value || '').toLowerCase().trim();
+
+  // Filtrage robuste : utilise getProduitFields pour matcher quelle que soit la structure
   const items = q
-    ? sheetProducts.filter(p =>
-        (p.nom_article || '').toLowerCase().includes(q) ||
-        (p.patissier   || '').toLowerCase().includes(q) ||
-        String(p.code_barres || '').includes(q))
+    ? sheetProducts.filter(p => {
+        const f = getProduitFields(p);
+        return f.nom.toLowerCase().includes(q) ||
+               f.marque.toLowerCase().includes(q) ||
+               f.barcode.includes(q);
+      })
     : sheetProducts;
 
   const statsEl = document.getElementById('produits-stats');
-  if (statsEl) statsEl.textContent =
-    `${sheetProducts.length} produit${sheetProducts.length > 1 ? 's' : ''} dans la base${q ? ` · ${items.length} résultat${items.length !== 1 ? 's' : ''}` : ''}`;
+
+  // Debug : affiche les clés du 1er produit si la base est chargée mais vide visuellement
+  if (sheetProducts.length > 0 && statsEl) {
+    const sample = getProduitFields(sheetProducts[0]);
+    const allEmpty = !sample.nom && !sample.marque;
+    if (allEmpty) {
+      // Les clés ne matchent pas — affiche un message d'aide avec les vraies clés
+      const realKeys = Object.keys(sheetProducts[0]).join(', ');
+      statsEl.innerHTML = `<span style="color:var(--yellow)">⚠ Colonnes Sheets non reconnues : <b>${realKeys}</b> — signale ça à Esteban</span>`;
+    } else {
+      statsEl.textContent =
+        `${sheetProducts.length} produit${sheetProducts.length > 1 ? 's' : ''} dans la base${q ? ` · ${items.length} résultat${items.length !== 1 ? 's' : ''}` : ''}`;
+    }
+  } else if (statsEl) {
+    statsEl.textContent = sheetProducts.length === 0
+      ? 'Base non chargée — synchronise d\'abord'
+      : `${sheetProducts.length} produit${sheetProducts.length > 1 ? 's' : ''} dans la base${q ? ` · ${items.length} résultat${items.length !== 1 ? 's' : ''}` : ''}`;
+  }
 
   const list = document.getElementById('produits-list');
   if (!list) return;
   if (!items.length) {
     list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
       <div style="font-size:36px;margin-bottom:12px">📋</div>
-      <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">${q ? 'Aucun résultat' : 'Base vide'}</div>
-      <div style="font-size:12px">${q ? 'Essaie un autre terme' : 'Clique sur ＋ Nouveau pour ajouter'}</div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">${q ? 'Aucun résultat' : sheetProducts.length === 0 ? 'Base non chargée' : 'Base vide'}</div>
+      <div style="font-size:12px">${q ? 'Essaie un autre terme' : sheetProducts.length === 0 ? 'Clique sur le bouton Sync en haut' : 'Clique sur ＋ Nouveau pour ajouter'}</div>
     </div>`;
     return;
   }
   list.innerHTML = items.map(p => {
-    const nom    = p.nom_article || p.nom || '';
-    const marque = p.patissier   || p.marque || '';
-    const barcode= p.code_barres || '';
+    const { nom, marque, barcode } = getProduitFields(p);
     const safeN  = nom.replace(/'/g, "\'");
     const safeM  = marque.replace(/'/g, "\'");
     const safeB  = barcode.replace(/'/g, "\'");
@@ -1945,7 +1979,7 @@ function renderProduitsBase() {
     return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
-          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom}</div>
+          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom || '<span style="color:var(--muted);font-style:italic">Sans nom</span>'}</div>
           ${hasDlc ? '<span style="font-size:9px;padding:2px 7px;border-radius:4px;background:rgba(76,219,138,.15);color:var(--green);flex-shrink:0;letter-spacing:.5px">DLC ✓</span>' : ''}
         </div>
         <div style="font-size:11px;color:var(--muted)">${marque}${barcode ? ' · ' + barcode : ''}</div>
