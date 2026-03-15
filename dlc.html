@@ -359,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const headerRight = document.querySelector('.header-right');
   if (headerRight) {
     const btn = document.createElement('a');
-    btn.href = 'hub.html';
+    btn.href = 'index.html';
     btn.style.cssText = 'padding:7px 14px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:"DM Mono",monospace;font-size:11px;text-decoration:none;display:flex;align-items:center;gap:6px;transition:all .15s';
     btn.innerHTML = '← Hub';
     btn.onmouseover = () => { btn.style.borderColor='var(--amber)'; btn.style.color='var(--text)'; };
@@ -435,70 +435,11 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 </div><!-- /view-dlc -->
-
-  </div>
-
-  <!-- Zone de recherche / scan -->
-  <div style="position:relative;margin-bottom:12px">
-    <div class="barcode-row">
-      <input id="pertes-search" type="text" placeholder="🔍  Rechercher un produit…"
-        oninput="onPertesInput()" onkeydown="if(event.key==='Enter'){hidePertesDropdown();searchPertesProduct()}"
-        autocomplete="off" aria-label="Rechercher un produit pour perte"
-        style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;transition:border-color .15s">
-      <button onclick="openPertesScanner()" title="Scanner" aria-label="Scanner un code-barres"
-        style="flex-shrink:0;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:20px;cursor:pointer;transition:all .15s">📷</button>
-    </div>
-    <div id="pertes-suggestions" style="display:none;position:absolute;left:0;right:0;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:4px"></div>
-  </div>
-
-  <!-- Div scanner pertes (injecté dynamiquement) -->
-  <div id="pertes-scanner-wrap" style="display:none;margin-bottom:12px"></div>
-
-  <!-- Carte produit sélectionné + saisie quantité -->
-  <div id="pertes-selected" style="display:none;background:var(--surface);border:1px solid var(--amber);border-radius:12px;padding:16px;margin-bottom:16px">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
-      <div style="flex:1;min-width:0">
-        <div id="ps-nom" style="font-family:'Fraunces',serif;font-size:17px;font-weight:700;margin-bottom:3px"></div>
-        <div id="ps-meta" style="font-size:12px;color:var(--muted)"></div>
-      </div>
-      <button onclick="clearPertesSelection()" style="flex-shrink:0;padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted);cursor:pointer;margin-left:8px">✕ Changer</button>
-    </div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-      <label style="font-size:12px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">Quantité perdue</label>
-      <div style="display:flex;align-items:center;gap:6px">
-        <button onclick="adjustQty(-1)" style="width:36px;height:36px;background:var(--border);border:none;border-radius:8px;font-size:18px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700">−</button>
-        <input id="pertes-qty" type="number" min="1" max="999" value="1"
-          style="width:64px;text-align:center;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:18px;font-weight:700;outline:none">
-        <button onclick="adjustQty(1)" style="width:36px;height:36px;background:var(--border);border:none;border-radius:8px;font-size:18px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700">＋</button>
-      </div>
-    </div>
-    <button onclick="enregistrerPerte()" aria-label="Enregistrer la perte"
-      style="width:100%;padding:14px;background:var(--red);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:#fff;cursor:pointer;transition:all .15s">
-      📉 Enregistrer la perte
-    </button>
-  </div>
-
-  <!-- Séparateur + Historique des pertes -->
-  <div style="display:flex;align-items:center;gap:12px;margin:24px 0 16px">
-    <div style="font-size:12px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;white-space:nowrap">Historique des pertes</div>
-    <div style="flex:1;height:1px;background:var(--border)"></div>
-    <button onclick="loadPertes()" style="padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">↻</button>
-  </div>
-
-  <div id="pertes-histo-filters" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-    <button onclick="setPertesFilter('today',this)" class="filter-btn">Aujourd'hui</button>
-    <button onclick="setPertesFilter('semaine',this)" class="filter-btn active">Cette semaine</button>
-    <button onclick="setPertesFilter('mois',this)" class="filter-btn">Ce mois</button>
-    <button onclick="setPertesFilter('tout',this)" class="filter-btn">Tout</button>
-  </div>
-  <div id="pertes-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px"></div>
-  <div id="pertes-list"></div>
-</div>
 <!-- v2.8: FAB (Floating Action Button) mobile -->
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.10 · 15/03/2026 14:30
+  v2.10 · 15/03/2026 16:04
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -2201,18 +2142,6 @@ preloadZXing();
 setTimeout(fullSync, 500);
 </script>
 
-<!-- v2.9 : Tab Bar -->
-<div class="tab-bar">
-  <button class="tab-btn active" data-tab="dlc" onclick="switchTab('dlc')">
-    <span class="tab-icon">📦</span>Suivi DLC
-  </button>
-  <a class="tab-btn" href="produits.html" style="text-decoration:none">
-    <span class="tab-icon">📋</span>Produits
-  </a>
-  <a class="tab-btn" href="pertes.html" style="text-decoration:none">
-    <span class="tab-icon">📉</span>Pertes
-  </a>
-</div>
 
 
 </body>
