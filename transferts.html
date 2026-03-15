@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transferts – Pâtisserie Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:      #0f0f0d;
+    --surface: #1a1a16;
+    --border:  #2e2e28;
+    --text:    #f0ede4;
+    --muted:   #7a7a6e;
+    --amber:   #e8a045;
+    --amber2:  #f5c060;
+    --red:     #ff4040;
+    --red-bg:  rgba(255,64,64,.10);
+    --green:   #4cdb8a;
+    --green-bg:rgba(76,219,138,.10);
+    --blue:    #4db8ff;
+    --blue-bg: rgba(77,184,255,.10);
+  }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
+  button { transition:all .15s; cursor:pointer; }
+  button:active { transform:scale(0.97); }
+
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 24px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--bg); z-index:100;
+  }
+  .logo-title { font-family:'Fraunces',serif; font-weight:900; font-size:20px; color:var(--amber); }
+  .logo-sub   { font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+  .back-btn {
+    padding:7px 14px; background:transparent; border:1px solid var(--border);
+    border-radius:8px; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:11px; text-decoration:none; display:flex; align-items:center; gap:6px;
+  }
+  .back-btn:hover { border-color:var(--amber); color:var(--text); }
+
+  .tabs {
+    display:flex; border-bottom:1px solid var(--border);
+    padding:0 24px; position:sticky; top:57px; background:var(--bg); z-index:99;
+  }
+  .tab {
+    padding:14px 18px; font-size:12px; letter-spacing:1px; text-transform:uppercase;
+    color:var(--muted); border-bottom:2px solid transparent; cursor:pointer;
+    transition:all .15s; background:none; border-top:none; border-left:none; border-right:none;
+  }
+  .tab.active { color:var(--amber); border-bottom-color:var(--amber); }
+  .tab:hover { color:var(--text); }
+
+  .main { padding:20px 24px 100px; max-width:700px; margin:0 auto; }
+  .view { display:none; }
+  .view.active { display:block; }
+
+  .form-label { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; display:block; }
+  .form-input {
+    width:100%; padding:12px 16px; background:var(--surface);
+    border:1px solid var(--border); border-radius:10px;
+    color:var(--text); font-family:'DM Mono',monospace; font-size:14px;
+    outline:none; transition:border-color .15s;
+  }
+  .form-input:focus { border-color:var(--amber); }
+  select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a7a6e' stroke-width='1.5' fill='none'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center; padding-right:36px; }
+
+  /* Panier en cours */
+  .panier-header {
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:16px; flex-wrap:wrap; gap:8px;
+  }
+  .rayon-badge {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 14px; border-radius:20px;
+    background:var(--blue-bg); border:1px solid rgba(77,184,255,.3);
+    font-size:12px; color:var(--blue); font-weight:600;
+  }
+
+  .article-row {
+    display:flex; align-items:center; gap:10px;
+    padding:12px 14px; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; margin-bottom:8px;
+  }
+  .article-row .art-nom { font-size:14px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .article-row .art-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+  .art-qty {
+    flex-shrink:0; width:36px; height:36px; border-radius:8px;
+    background:var(--amber); color:#000; font-family:'Fraunces',serif;
+    font-size:16px; font-weight:900; display:flex; align-items:center; justify-content:center;
+  }
+
+  /* Total */
+  .total-bar {
+    position:fixed; bottom:0; left:0; right:0;
+    background:var(--surface); border-top:1px solid var(--border);
+    padding:14px 24px; display:flex; align-items:center; justify-content:space-between;
+    z-index:50; gap:12px;
+  }
+  .total-amount {
+    font-family:'Fraunces',serif; font-size:26px; font-weight:900; color:var(--amber);
+  }
+  .total-label { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; }
+
+  /* Bon imprimable */
+  .bon-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; margin-bottom:12px; overflow:hidden;
+  }
+  .bon-header {
+    padding:14px 16px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border); cursor:pointer;
+  }
+  .bon-header:hover { background:rgba(255,255,255,.02); }
+
+  .section-sep {
+    display:flex; align-items:center; gap:10px;
+    font-size:11px; color:var(--muted); letter-spacing:2px;
+    text-transform:uppercase; margin:24px 0 14px;
+  }
+  .section-sep::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  /* Suggestions dropdown */
+  .suggestions-box {
+    display:none; position:absolute; left:0; right:0; z-index:200;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; overflow:hidden; margin-top:4px;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);
+  }
+  .sugg-item {
+    padding:10px 14px; cursor:pointer; border-bottom:1px solid var(--border); font-size:13px;
+  }
+  .sugg-item:last-child { border-bottom:none; }
+  .sugg-item:hover { background:var(--border); }
+
+  /* Modal */
+  .modal-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.75);
+    backdrop-filter:blur(4px); z-index:600;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .modal {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:16px; padding:28px; width:100%; max-width:440px;
+  }
+  .modal-title { font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--amber); margin-bottom:18px; }
+
+  /* Scanner */
+  #modal-scanner { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:700; align-items:center; justify-content:center; padding:20px; }
+
+  /* Print */
+  @media print {
+    header, .tabs, .total-bar, .back-btn, .no-print { display:none !important; }
+    body { background:#fff; color:#000; }
+    .bon-print { display:block !important; }
+  }
+
+  .toast-container { position:fixed; bottom:80px; right:24px; z-index:800; display:flex; flex-direction:column; gap:8px; }
+  .toast { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 18px; font-size:13px; animation:slideIn .2s ease; max-width:300px; }
+  @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:none;opacity:1} }
+
+  .filter-btn {
+    padding:7px 14px; border-radius:8px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:11px; letter-spacing:1px; text-transform:uppercase;
+  }
+  .filter-btn.active { background:var(--amber); color:#000; border-color:var(--amber); }
+  .filter-btn:hover { border-color:var(--amber); color:var(--text); }
+
+  .version-tag { position:fixed; bottom:66px; left:14px; font-size:10px; color:var(--border); letter-spacing:1px; z-index:50; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo-title">🔄 Transferts</div>
+    <div class="logo-sub">Pâtisserie Manager</div>
+  </div>
+  <a class="back-btn" href="index.html">← Hub</a>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('nouveau',this)">＋ Nouveau</button>
+  <button class="tab" onclick="switchTab('historique',this)">📋 Historique</button>
+</div>
+
+<div class="main">
+
+  <!-- ══════════ NOUVEAU TRANSFERT ══════════ -->
+  <div class="view active" id="view-nouveau">
+
+    <!-- Rayon destinataire -->
+    <div style="margin-bottom:20px">
+      <label class="form-label">Rayon destinataire</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="rayon-select" class="form-input" style="flex:1" onchange="onRayonChange()">
+          <option value="">— Choisir un rayon —</option>
+        </select>
+        <button onclick="openRayonModal()" style="padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:16px;color:var(--muted);" title="Gérer les rayons">⚙</button>
+      </div>
+    </div>
+
+    <!-- Ajouter un article -->
+    <div style="margin-bottom:20px">
+      <label class="form-label">Ajouter un article</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <div style="position:relative;flex:1">
+          <input id="art-search" class="form-input" type="text" placeholder="🔍 Nom ou code-barres…"
+            oninput="onArtInput()" onkeydown="if(event.key==='Enter'){hideArtSugg();addArticleFromSearch()}"
+            autocomplete="off">
+          <div id="art-suggestions" class="suggestions-box"></div>
+        </div>
+        <button onclick="openArtScanner()" style="padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:20px;" title="Scanner">📷</button>
+      </div>
+      <!-- Saisie quantité + ajout -->
+      <div id="art-selected" style="display:none;background:var(--surface);border:1px solid var(--amber);border-radius:12px;padding:14px;margin-top:4px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div id="art-sel-nom" style="font-family:'Fraunces',serif;font-size:15px;font-weight:700"></div>
+            <div id="art-sel-meta" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
+          </div>
+          <button onclick="clearArtSelected()" style="padding:4px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted);">✕</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <label style="font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">Qté</label>
+          <button onclick="adjArtQty(-1)" style="width:34px;height:34px;background:var(--border);border:none;border-radius:8px;font-size:18px;color:var(--text);font-weight:700;display:flex;align-items:center;justify-content:center;">−</button>
+          <input id="art-qty" type="number" min="1" max="999" value="1"
+            style="width:60px;text-align:center;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:18px;font-weight:700;outline:none">
+          <button onclick="adjArtQty(1)" style="width:34px;height:34px;background:var(--border);border:none;border-radius:8px;font-size:18px;color:var(--text);font-weight:700;display:flex;align-items:center;justify-content:center;">＋</button>
+          <button onclick="addArticle()" style="flex:1;padding:10px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">＋ Ajouter</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Liste articles du bon -->
+    <div class="panier-header">
+      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--amber)">Articles du bon</div>
+      <div id="rayon-badge-display"></div>
+    </div>
+
+    <div id="panier-list">
+      <div style="text-align:center;padding:40px 20px;color:var(--muted)">
+        <div style="font-size:32px;margin-bottom:10px">🔄</div>
+        <div style="font-family:'Fraunces',serif;font-size:16px;margin-bottom:6px">Bon vide</div>
+        <div style="font-size:12px">Choisis un rayon et ajoute des articles</div>
+      </div>
+    </div>
+
+  </div><!-- /view-nouveau -->
+
+  <!-- ══════════ HISTORIQUE ══════════ -->
+  <div class="view" id="view-historique">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--amber)">Historique des transferts</div>
+      <button onclick="loadHistorique()" style="padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;">↻</button>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="histo-filters">
+      <button onclick="setHistoFilter('semaine',this)" class="filter-btn active">Cette semaine</button>
+      <button onclick="setHistoFilter('mois',this)" class="filter-btn">Ce mois</button>
+      <button onclick="setHistoFilter('tout',this)" class="filter-btn">Tout</button>
+    </div>
+
+    <div id="histo-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px"></div>
+    <div id="histo-list"></div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- Barre total fixe en bas -->
+<div class="total-bar" id="total-bar" style="display:none">
+  <div>
+    <div class="total-label">Total transfert</div>
+    <div class="total-amount" id="total-display">0,00 €</div>
+  </div>
+  <div style="display:flex;gap:10px">
+    <button onclick="clearPanier()" style="padding:12px 16px;background:transparent;border:1px solid var(--border);border-radius:10px;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">🗑 Vider</button>
+    <button onclick="validerTransfert()" style="padding:12px 20px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:#000;">✓ Valider</button>
+  </div>
+</div>
+
+<!-- Modal gestion rayons -->
+<div class="modal-overlay" id="modal-rayons" onclick="if(event.target.id==='modal-rayons')closeRayonModal()">
+  <div class="modal">
+    <div class="modal-title">⚙ Rayons destinataires</div>
+    <div id="rayons-list-manage" style="margin-bottom:16px"></div>
+    <div style="font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">AJOUTER</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <input id="new-rayon-input" class="form-input" type="text" placeholder="Ex : Fromagerie" style="flex:1">
+      <button onclick="addRayon()" style="padding:12px 14px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">＋</button>
+    </div>
+    <button onclick="closeRayonModal()" style="width:100%;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);">Fermer</button>
+  </div>
+</div>
+
+<!-- Modal confirmation valider -->
+<div class="modal-overlay" id="modal-valider" onclick="">
+  <div class="modal">
+    <div class="modal-title">✓ Valider le transfert</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:16px" id="valider-resume"></div>
+    <label class="form-label" style="margin-bottom:6px">Prix total (€)</label>
+    <input id="prix-total-input" class="form-input" type="number" step="0.01" min="0" placeholder="Ex : 12.50" style="margin-bottom:16px">
+    <label class="form-label" style="margin-bottom:6px">Note (optionnel)</label>
+    <input id="note-transfert" class="form-input" type="text" placeholder="Ex : Urgent pour service midi" style="margin-bottom:20px">
+    <div style="display:flex;gap:10px">
+      <button onclick="closeValiderModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);">Annuler</button>
+      <button onclick="confirmerTransfert()" style="flex:1;padding:12px;background:var(--green);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal bon imprimable -->
+<div class="modal-overlay" id="modal-bon" onclick="">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-title">🖨 Bon de transfert</div>
+    <div id="bon-content" style="background:var(--bg);border-radius:10px;padding:16px;margin-bottom:16px;font-size:13px;line-height:1.8"></div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeBonModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);">Fermer</button>
+      <button onclick="imprimerBon()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">🖨 Imprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scanner Modal -->
+<div id="modal-scanner" onclick="if(event.target.id==='modal-scanner')closeScanner()">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;width:100%;max-width:420px">
+    <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--amber);margin-bottom:16px">📷 Scanner un article</div>
+    <div id="scanner-inner" style="width:100%;border-radius:10px;overflow:hidden;background:#000;min-height:200px"></div>
+    <div id="scan-status" style="text-align:center;font-size:13px;color:var(--muted);margin-top:12px">⏳ Chargement…</div>
+    <button onclick="closeScanner()" style="width:100%;margin-top:16px;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">✕ Fermer</button>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<div class="version-tag">transferts v1.0 · 15/03/2026 15:30</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+
+// ── Stockage local ──
+function lsGet(k, def) { try { const v = localStorage.getItem('pm_tr_'+k); return v ? JSON.parse(v) : def; } catch(e) { return def; } }
+function lsSet(k, v)   { try { localStorage.setItem('pm_tr_'+k, JSON.stringify(v)); } catch(e) {} }
+
+// ── État ──
+let sheetProducts = [];
+let panier        = [];   // [{nom, marque, barcode, qty}]
+let rayonActuel   = '';
+let rayons        = lsGet('rayons', ['Traiteur','Boulangerie','Fromagerie','Poissonnerie','Cave / Vins']);
+let histoData     = [];
+let histoFilter   = 'semaine';
+let _apiCallId    = 0;
+let html5Scanner  = null;
+let currentBon    = null; // bon en cours pour impression
+
+// ── API ──
+function api(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'dlcCb_' + (++_apiCallId);
+    const script = document.createElement('script');
+    const timer  = setTimeout(() => { cleanup(); reject(new Error('Timeout')); }, 20000);
+    window[cbName] = (data) => { cleanup(); resolve(data); };
+    function cleanup() { clearTimeout(timer); delete window[cbName]; if (script.parentNode) script.remove(); }
+    script.onerror = () => { cleanup(); reject(new Error('Erreur réseau')); };
+    const p = new URLSearchParams({ ...params, callback: cbName });
+    script.src = API_URL + '?' + p.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function toast(msg, isError=false) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function fmtDate(str) {
+  return new Date(str+'T00:00:00').toLocaleDateString('fr-BE', {weekday:'short',day:'numeric',month:'short'});
+}
+function fmtEur(v) { return parseFloat(v||0).toFixed(2).replace('.',',') + ' €'; }
+
+// ── Navigation ──
+function switchTab(tab, btn) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-'+tab).classList.add('active');
+  btn.classList.add('active');
+  if (tab === 'historique') loadHistorique();
+}
+
+// ══════════════════════════════════════
+// RAYONS
+// ══════════════════════════════════════
+function buildRayonSelect() {
+  const sel = document.getElementById('rayon-select');
+  sel.innerHTML = '<option value="">— Choisir un rayon —</option>' +
+    rayons.map(r => `<option value="${r}" ${r===rayonActuel?'selected':''}>${r}</option>`).join('');
+}
+
+function onRayonChange() {
+  rayonActuel = document.getElementById('rayon-select').value;
+  renderBadge();
+}
+
+function renderBadge() {
+  const el = document.getElementById('rayon-badge-display');
+  el.innerHTML = rayonActuel
+    ? `<div class="rayon-badge">→ ${rayonActuel}</div>`
+    : '';
+}
+
+function openRayonModal() {
+  renderRayonManage();
+  document.getElementById('modal-rayons').style.display = 'flex';
+  setTimeout(() => document.getElementById('new-rayon-input').focus(), 100);
+}
+function closeRayonModal() { document.getElementById('modal-rayons').style.display = 'none'; }
+
+function renderRayonManage() {
+  document.getElementById('rayons-list-manage').innerHTML = rayons.length
+    ? rayons.map(r => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:6px">
+        <span style="font-size:13px">${r}</span>
+        <button onclick="deleteRayon('${r}')" style="padding:4px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);">🗑</button>
+      </div>`).join('')
+    : '<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Aucun rayon configuré.</div>';
+}
+
+function addRayon() {
+  const nom = document.getElementById('new-rayon-input').value.trim();
+  if (!nom || rayons.includes(nom)) return;
+  rayons.push(nom);
+  lsSet('rayons', rayons);
+  buildRayonSelect();
+  renderRayonManage();
+  document.getElementById('new-rayon-input').value = '';
+  toast(`✓ "${nom}" ajouté`);
+}
+
+function deleteRayon(nom) {
+  rayons = rayons.filter(r => r !== nom);
+  lsSet('rayons', rayons);
+  if (rayonActuel === nom) { rayonActuel = ''; document.getElementById('rayon-select').value = ''; renderBadge(); }
+  buildRayonSelect();
+  renderRayonManage();
+}
+
+// ══════════════════════════════════════
+// ARTICLES
+// ══════════════════════════════════════
+function getProduitFields(p) {
+  const keys = Object.keys(p);
+  const nomKey    = keys.find(k => /nom_article|^nom$|^name$|article|designation|libelle/i.test(k));
+  const marqueKey = keys.find(k => /patissier|marque|brand|fournisseur/i.test(k));
+  const barcodeKey= keys.find(k => /code_barres|barcode|ean|upc|^code$/i.test(k));
+  return {
+    nom:     (nomKey     ? String(p[nomKey]     || '') : '').trim(),
+    marque:  (marqueKey  ? String(p[marqueKey]  || '') : '').trim(),
+    barcode: (barcodeKey ? String(p[barcodeKey] || '') : '').trim(),
+  };
+}
+
+let artSearchTimer = null;
+function onArtInput() {
+  clearTimeout(artSearchTimer);
+  artSearchTimer = setTimeout(showArtSugg, 200);
+}
+
+function showArtSugg() {
+  const q = document.getElementById('art-search').value.toLowerCase().trim();
+  const dd = document.getElementById('art-suggestions');
+  if (q.length < 2) { dd.style.display='none'; return; }
+  const hits = sheetProducts.filter(p => {
+    const f = getProduitFields(p);
+    return f.nom.toLowerCase().includes(q) || f.marque.toLowerCase().includes(q) || f.barcode.includes(q);
+  }).slice(0,6);
+  if (!hits.length) { dd.style.display='none'; return; }
+  dd.innerHTML = hits.map(p => {
+    const {nom, marque, barcode} = getProduitFields(p);
+    return `<div class="sugg-item" onclick="selectArt('${nom.replace(/'/g,"\\'")}','${marque.replace(/'/g,"\\'")}','${barcode}')">
+      <span style="font-weight:600">${nom}</span>
+      <span style="color:var(--muted);font-size:11px;margin-left:8px">${marque}${barcode?' · '+barcode:''}</span>
+    </div>`;
+  }).join('');
+  dd.style.display = 'block';
+}
+
+function hideArtSugg() { document.getElementById('art-suggestions').style.display='none'; }
+
+function addArticleFromSearch() {
+  const q = document.getElementById('art-search').value.trim();
+  if (!q) return;
+  const hit = sheetProducts.find(p => { const f=getProduitFields(p); return f.nom.toLowerCase()===q.toLowerCase()||f.barcode===q; });
+  if (hit) { const f=getProduitFields(hit); selectArt(f.nom,f.marque,f.barcode); }
+  else {
+    // Article libre (pas dans la base)
+    selectArt(q, '', '');
+  }
+}
+
+let artSelected = null;
+function selectArt(nom, marque, barcode) {
+  hideArtSugg();
+  artSelected = {nom, marque, barcode};
+  document.getElementById('art-sel-nom').textContent = nom;
+  document.getElementById('art-sel-meta').textContent = (marque||'')+(barcode?' · '+barcode:'');
+  document.getElementById('art-qty').value = 1;
+  document.getElementById('art-selected').style.display = 'block';
+  document.getElementById('art-search').value = '';
+}
+
+function clearArtSelected() {
+  artSelected = null;
+  document.getElementById('art-selected').style.display = 'none';
+  document.getElementById('art-search').value = '';
+  document.getElementById('art-search').focus();
+}
+
+function adjArtQty(d) {
+  const inp = document.getElementById('art-qty');
+  inp.value = Math.max(1, Math.min(999, (parseInt(inp.value)||1)+d));
+}
+
+function addArticle() {
+  if (!artSelected) return;
+  const qty = parseInt(document.getElementById('art-qty').value) || 1;
+  // Si article déjà dans le panier, incrémenter
+  const existing = panier.find(a => a.nom === artSelected.nom && a.barcode === artSelected.barcode);
+  if (existing) {
+    existing.qty += qty;
+    toast(`✓ ${artSelected.nom} — qty mise à jour (${existing.qty})`);
+  } else {
+    panier.push({ ...artSelected, qty });
+    toast(`✓ ${artSelected.nom} ajouté`);
+  }
+  clearArtSelected();
+  renderPanier();
+}
+
+// ══════════════════════════════════════
+// PANIER
+// ══════════════════════════════════════
+function renderPanier() {
+  const list = document.getElementById('panier-list');
+  const totalBar = document.getElementById('total-bar');
+
+  if (!panier.length) {
+    list.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:10px">🔄</div>
+      <div style="font-family:'Fraunces',serif;font-size:16px;margin-bottom:6px">Bon vide</div>
+      <div style="font-size:12px">Choisis un rayon et ajoute des articles</div></div>`;
+    totalBar.style.display = 'none';
+    return;
+  }
+
+  list.innerHTML = panier.map((a, i) => `
+    <div class="article-row">
+      <div class="art-qty">${a.qty}</div>
+      <div style="flex:1;min-width:0">
+        <div class="art-nom">${a.nom}</div>
+        <div class="art-meta">${a.marque||''}${a.barcode?' · <span style="font-family:monospace;font-size:10px">'+a.barcode+'</span>':''}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button onclick="editQty(${i})" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--muted);">✏️</button>
+        <button onclick="removeArticle(${i})" style="padding:6px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:13px;color:var(--red);">🗑</button>
+      </div>
+    </div>`).join('');
+
+  // Stats résumé
+  const totalQty = panier.reduce((s,a) => s+a.qty, 0);
+  list.innerHTML += `<div style="text-align:center;padding:12px;font-size:12px;color:var(--muted);margin-top:4px">${panier.length} article${panier.length>1?'s':''} · ${totalQty} unité${totalQty>1?'s':''}</div>`;
+
+  totalBar.style.display = 'flex';
+  document.getElementById('total-display').textContent = '? €';
+}
+
+function removeArticle(i) {
+  panier.splice(i, 1);
+  renderPanier();
+}
+
+function editQty(i) {
+  const a = panier[i];
+  const v = prompt(`Quantité pour "${a.nom}" :`, a.qty);
+  if (v === null) return;
+  const n = parseInt(v);
+  if (n > 0) { a.qty = n; renderPanier(); }
+  else { removeArticle(i); }
+}
+
+function clearPanier() {
+  if (!confirm('Vider le bon en cours ?')) return;
+  panier = [];
+  renderPanier();
+}
+
+// ══════════════════════════════════════
+// VALIDER TRANSFERT
+// ══════════════════════════════════════
+function validerTransfert() {
+  if (!rayonActuel) { toast('⚠ Choisis un rayon destinataire', true); return; }
+  if (!panier.length) { toast('⚠ Ajoute au moins un article', true); return; }
+  const totalQty = panier.reduce((s,a) => s+a.qty, 0);
+  document.getElementById('valider-resume').innerHTML =
+    `<strong style="color:var(--text)">${panier.length} article${panier.length>1?'s':''}</strong> · ${totalQty} unité${totalQty>1?'s':''} → <span style="color:var(--blue)">${rayonActuel}</span>`;
+  document.getElementById('prix-total-input').value = '';
+  document.getElementById('note-transfert').value = '';
+  document.getElementById('modal-valider').style.display = 'flex';
+  setTimeout(() => document.getElementById('prix-total-input').focus(), 100);
+}
+
+function closeValiderModal() { document.getElementById('modal-valider').style.display = 'none'; }
+
+async function confirmerTransfert() {
+  const prix = parseFloat(document.getElementById('prix-total-input').value) || 0;
+  const note = document.getElementById('note-transfert').value.trim();
+  const today = new Date().toISOString().split('T')[0];
+  const heure = new Date().toLocaleTimeString('fr-BE', {hour:'2-digit',minute:'2-digit'});
+
+  const bon = {
+    id:      'tr_' + Date.now(),
+    date:    today,
+    heure,
+    rayon:   rayonActuel,
+    articles: [...panier],
+    prix,
+    note,
+    totalQty: panier.reduce((s,a) => s+a.qty, 0),
+  };
+
+  closeValiderModal();
+  toast('⏳ Enregistrement…');
+
+  try {
+    const data = await api({
+      action:   'saveTransfert',
+      date:     today,
+      heure,
+      rayon:    rayonActuel,
+      articles: JSON.stringify(panier),
+      prix:     String(prix),
+      note,
+    });
+
+    if (data && data.success) {
+      toast(`✓ Transfert enregistré — ${fmtEur(prix)}`);
+    } else {
+      toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action saveTransfert)'}`, true);
+    }
+  } catch(e) {
+    toast('⚠ Erreur réseau — bon non enregistré', true);
+  }
+
+  // Afficher le bon imprimable
+  currentBon = bon;
+  showBon(bon);
+
+  // Vider le panier
+  panier = [];
+  renderPanier();
+}
+
+// ══════════════════════════════════════
+// BON IMPRIMABLE
+// ══════════════════════════════════════
+function showBon(bon) {
+  const lignes = bon.articles.map(a =>
+    `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 0">${a.nom}</td>
+      <td style="padding:6px 8px;text-align:center;font-weight:700">${a.qty}</td>
+      <td style="padding:6px 0;font-family:monospace;font-size:11px;color:var(--muted)">${a.barcode||'—'}</td>
+    </tr>`
+  ).join('');
+
+  document.getElementById('bon-content').innerHTML = `
+    <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:var(--amber);margin-bottom:4px">Bon de transfert</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">Rob The Market · Pâtisserie</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;font-size:12px">
+      <div><span style="color:var(--muted)">Date : </span><strong>${fmtDate(bon.date)} ${bon.heure}</strong></div>
+      <div><span style="color:var(--muted)">Rayon : </span><strong style="color:var(--blue)">${bon.rayon}</strong></div>
+      <div><span style="color:var(--muted)">Articles : </span><strong>${bon.articles.length}</strong></div>
+      <div><span style="color:var(--muted)">Unités : </span><strong>${bon.totalQty}</strong></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+      <thead>
+        <tr style="border-bottom:2px solid var(--amber)">
+          <th style="text-align:left;padding:4px 0;font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Article</th>
+          <th style="text-align:center;padding:4px 8px;font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Qté</th>
+          <th style="text-align:left;padding:4px 0;font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Code-barres</th>
+        </tr>
+      </thead>
+      <tbody>${lignes}</tbody>
+    </table>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:rgba(232,160,69,.08);border:1px solid rgba(232,160,69,.25);border-radius:8px">
+      <span style="font-size:13px;color:var(--muted)">Prix total</span>
+      <span style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:var(--amber)">${fmtEur(bon.prix)}</span>
+    </div>
+    ${bon.note ? `<div style="margin-top:10px;font-size:12px;color:var(--muted)">📝 ${bon.note}</div>` : ''}
+  `;
+
+  document.getElementById('modal-bon').style.display = 'flex';
+}
+
+function closeBonModal() { document.getElementById('modal-bon').style.display = 'none'; }
+
+function imprimerBon() {
+  window.print();
+}
+
+// ══════════════════════════════════════
+// HISTORIQUE
+// ══════════════════════════════════════
+function setHistoFilter(f, btn) {
+  histoFilter = f;
+  document.querySelectorAll('#histo-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderHistorique();
+}
+
+async function loadHistorique() {
+  const list = document.getElementById('histo-list');
+  list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
+  try {
+    const data = await api({ action:'getTransferts' });
+    histoData = (data.success && data.transferts) ? data.transferts : [];
+    renderHistorique();
+  } catch(e) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur réseau</div>';
+  }
+}
+
+function renderHistorique() {
+  const now = new Date(); now.setHours(0,0,0,0);
+  const filtered = histoData.filter(t => {
+    if (!t.date) return true;
+    const d = new Date(t.date+'T00:00:00');
+    if (histoFilter==='semaine') { const w=new Date(now); w.setDate(now.getDate()-7); return d>=w; }
+    if (histoFilter==='mois')    { const m=new Date(now); m.setDate(now.getDate()-30); return d>=m; }
+    return true;
+  }).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+
+  // Stats
+  const totalEur = filtered.reduce((s,t) => s+parseFloat(t.prix||0), 0);
+  const rayonSet = new Set(filtered.map(t => t.rayon));
+  document.getElementById('histo-stats').innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-family:'Fraunces',serif;font-size:26px;font-weight:900;color:var(--amber)">${fmtEur(totalEur)}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Total transféré</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-family:'Fraunces',serif;font-size:26px;font-weight:900;color:var(--text)">${filtered.length}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Transfert${filtered.length>1?'s':''}</div>
+    </div>`;
+
+  const list = document.getElementById('histo-list');
+  if (!filtered.length) {
+    list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:10px">🔄</div>
+      <div style="font-family:'Fraunces',serif;font-size:16px;margin-bottom:6px">Aucun transfert</div>
+      <div style="font-size:12px">sur cette période</div></div>`;
+    return;
+  }
+
+  // Grouper par date
+  const byDate = {};
+  filtered.forEach(t => { const k=t.date||'?'; if(!byDate[k]) byDate[k]=[]; byDate[k].push(t); });
+  let html = '';
+  for (const [dateKey, items] of Object.entries(byDate)) {
+    const label = dateKey==='?' ? 'Date inconnue' : fmtDate(dateKey);
+    const dayTotal = items.reduce((s,t) => s+parseFloat(t.prix||0), 0);
+    html += `<div style="font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin:20px 0 10px;display:flex;align-items:center;gap:8px">
+      ${label}
+      <span style="color:var(--amber);font-size:11px">${fmtEur(dayTotal)}</span>
+      <span style="flex:1;height:1px;background:var(--border)"></span>
+    </div>`;
+    html += items.map(t => {
+      let arts = [];
+      try { arts = typeof t.articles==='string' ? JSON.parse(t.articles) : (t.articles||[]); } catch(e) {}
+      return `<div class="bon-card">
+        <div class="bon-header" onclick="toggleBonDetail('bon_${t.id||Math.random()}')">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-family:'Fraunces',serif;font-size:15px;font-weight:700">→ ${t.rayon||'?'}</span>
+              <span style="font-size:10px;color:var(--muted)">${t.heure||''}</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted)">${arts.length} article${arts.length>1?'s':''} · ${arts.reduce((s,a)=>s+(parseInt(a.qty)||1),0)} unités</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:var(--amber)">${fmtEur(t.prix)}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">▼ détails</div>
+          </div>
+        </div>
+        <div id="bon_${t.id||''}" style="display:none;padding:0 16px 14px">
+          ${arts.map(a => `
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border)">
+              <div style="width:28px;height:28px;background:var(--amber);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:13px;font-weight:900;color:#000;flex-shrink:0">${a.qty}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.nom}</div>
+                ${a.barcode?`<div style="font-family:monospace;font-size:10px;color:var(--muted)">${a.barcode}</div>`:''}
+              </div>
+            </div>`).join('')}
+          ${t.note?`<div style="margin-top:8px;font-size:11px;color:var(--muted);padding-top:8px;border-top:1px solid var(--border)">📝 ${t.note}</div>`:''}
+          <button onclick="reopenBon(${JSON.stringify(t).replace(/"/g,'&quot;')})" style="margin-top:10px;padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);width:100%">🖨 Voir le bon</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  list.innerHTML = html;
+}
+
+function toggleBonDetail(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function reopenBon(t) {
+  let arts = [];
+  try { arts = typeof t.articles==='string' ? JSON.parse(t.articles) : (t.articles||[]); } catch(e) {}
+  showBon({ ...t, articles:arts, totalQty:arts.reduce((s,a)=>s+(parseInt(a.qty)||1),0) });
+}
+
+// ══════════════════════════════════════
+// SCANNER
+// ══════════════════════════════════════
+function preloadScanner() {
+  if (document.getElementById('html5qr-script')) return;
+  const s = document.createElement('script');
+  s.id  = 'html5qr-script';
+  s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+  document.head.appendChild(s);
+}
+
+async function openArtScanner() {
+  const modal = document.getElementById('modal-scanner');
+  modal.style.display = 'flex';
+  document.getElementById('scan-status').textContent = '⏳ Chargement…';
+  document.getElementById('scanner-inner').innerHTML = '';
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  for (let i = 0; i < 20; i++) {
+    if (window.Html5Qrcode) break;
+    await new Promise(r => setTimeout(r, 300));
+  }
+  if (!window.Html5Qrcode) { document.getElementById('scan-status').textContent = '⚠ Scanner non disponible'; return; }
+  try {
+    html5Scanner = new Html5Qrcode('scanner-inner');
+    await html5Scanner.start(
+      { facingMode:'environment' },
+      { fps:15, qrbox:{width:250,height:150}, aspectRatio:1.5,
+        formatsToSupport:[
+          Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+        ]
+      },
+      onArtScan, () => {}
+    );
+    document.getElementById('scan-status').textContent = '🔍 Centrez le code dans le cadre…';
+  } catch(e) { document.getElementById('scan-status').textContent = '⚠ ' + e; }
+}
+
+function onArtScan(code) {
+  closeScanner();
+  if (window.navigator.vibrate) navigator.vibrate(80);
+  const hit = sheetProducts.find(p => { const f=getProduitFields(p); return f.barcode===code; });
+  if (hit) {
+    const f = getProduitFields(hit);
+    selectArt(f.nom, f.marque, f.barcode);
+    toast(`📷 ${f.nom}`);
+  } else {
+    // Code non trouvé → créer article libre avec le barcode
+    selectArt('Article ' + code, '', code);
+    toast(`📷 Code: ${code} — Nom à renseigner`);
+  }
+}
+
+async function closeScanner() {
+  if (html5Scanner) {
+    try { if (html5Scanner.isScanning) await html5Scanner.stop(); html5Scanner.clear(); } catch(e) {}
+    html5Scanner = null;
+  }
+  document.getElementById('scanner-inner').innerHTML = '';
+  document.getElementById('modal-scanner').style.display = 'none';
+}
+
+// ══════════════════════════════════════
+// INIT
+// ══════════════════════════════════════
+async function init() {
+  preloadScanner();
+  buildRayonSelect();
+  try {
+    const d = await api({ action:'getProducts' });
+    if (d.success) sheetProducts = d.products;
+  } catch(e) {}
+}
+
+init();
+</script>
+</body>
+</html>
