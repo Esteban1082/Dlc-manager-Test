@@ -67,6 +67,13 @@ document.addEventListener('DOMContentLoaded', () => {
   @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:none;opacity:1} }
 
   .version-tag { position:fixed; bottom:10px; left:14px; font-size:10px; color:var(--border); letter-spacing:1px; z-index:50; }
+  .filter-btn {
+    padding:6px 14px; border-radius:20px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:11px; cursor:pointer; transition:all .15s; white-space:nowrap;
+  }
+  .filter-btn.active { background:var(--amber); color:#000; border-color:var(--amber); font-weight:600; }
+  .filter-btn:hover { border-color:var(--amber); color:var(--text); }
 </style>
 </head>
 <body>
@@ -91,6 +98,11 @@ document.addEventListener('DOMContentLoaded', () => {
   <input id="produits-search" type="text" placeholder="🔍 Rechercher par nom, marque ou code-barres…"
     oninput="renderList()" autocomplete="off"
     style="width:100%;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;margin-bottom:10px;transition:border-color .15s">
+
+  <!-- Filtres par marque -->
+  <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch" id="marque-filters">
+    <button class="filter-btn active" onclick="setMarqueFilter('',this)">Tous</button>
+  </div>
 
   <div id="produits-stats" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
   <div id="produits-list"></div>
@@ -126,12 +138,13 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">produits v1.0 · 15/03/2026 16:55</div>
+<div class="version-tag">produits v1.1 · 15/03/2026 17:45</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
 let sheetProducts = [];
 let _apiCallId = 0;
+let filtreMarque = '';
 
 function api(params) {
   return new Promise((resolve, reject) => {
@@ -169,14 +182,29 @@ function getProduitFields(p) {
   };
 }
 
+function setMarqueFilter(marque, btn) {
+  filtreMarque = marque;
+  document.querySelectorAll('#marque-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderList();
+}
+
+function buildMarqueFilters() {
+  const marques = [...new Set(sheetProducts.map(p => getProduitFields(p).marque).filter(Boolean))].sort();
+  const container = document.getElementById('marque-filters');
+  container.innerHTML = `<button class="filter-btn ${filtreMarque===''?'active':''}" onclick="setMarqueFilter('',this)">Tous</button>` +
+    marques.map(m => `<button class="filter-btn ${filtreMarque===m?'active':''}" onclick="setMarqueFilter('${m.replace(/'/g,"\'")}',this)">${m}</button>`).join('');
+}
+
 function renderList() {
   const q = (document.getElementById('produits-search').value || '').toLowerCase().trim();
-  const items = q
-    ? sheetProducts.filter(p => { const f = getProduitFields(p); return f.nom.toLowerCase().includes(q) || f.marque.toLowerCase().includes(q) || f.barcode.includes(q); })
-    : sheetProducts;
+  let items = sheetProducts;
+  if (filtreMarque) items = items.filter(p => getProduitFields(p).marque === filtreMarque);
+  if (q) items = items.filter(p => { const f = getProduitFields(p); return f.nom.toLowerCase().includes(q) || f.marque.toLowerCase().includes(q) || f.barcode.includes(q); });
 
   const statsEl = document.getElementById('produits-stats');
-  statsEl.textContent = `${sheetProducts.length} produit${sheetProducts.length !== 1 ? 's' : ''} dans la base${q ? ` · ${items.length} résultat${items.length !== 1 ? 's' : ''}` : ''}`;
+  const filterInfo = filtreMarque ? ` · ${filtreMarque}` : '';
+  statsEl.textContent = `${items.length} / ${sheetProducts.length} produit${sheetProducts.length !== 1 ? 's' : ''}${filterInfo}`;
 
   const list = document.getElementById('produits-list');
   if (!items.length) {
@@ -261,7 +289,7 @@ async function init() {
   document.getElementById('produits-list').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
   try {
     const d = await api({ action:'getProducts' });
-    if (d.success) { sheetProducts = d.products; renderList(); }
+    if (d.success) { sheetProducts = d.products; buildMarqueFilters(); renderList(); }
     else { document.getElementById('produits-list').innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur de chargement</div>'; }
   } catch(e) {
     document.getElementById('produits-list').innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Hors ligne</div>';

@@ -109,14 +109,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
     <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">Relevé du jour</div>
-    <button onclick="openAddAppliance()"
+    <button onclick="openZoneModal()"
       style="padding:7px 14px;background:transparent;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);">
-      ⚙ Appareils
+      ⚙ Zones
     </button>
   </div>
   <div id="today-label" style="font-size:12px;color:var(--muted);margin-bottom:20px"></div>
 
-  <div id="appareils-list"></div>
+  <div id="zones-list"></div>
 
   <button onclick="saveAllTemps()"
     style="width:100%;padding:14px;background:var(--amber);border:none;border-radius:12px;font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:#000;margin-top:8px">
@@ -138,31 +138,31 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <!-- Modal gestion appareils -->
-<div class="modal-overlay" id="modal-appareils" onclick="if(event.target.id==='modal-appareils')closeApplianceModal()">
+<div class="modal-overlay" id="modal-zones" onclick="if(event.target.id==='modal-zones')closeZoneModal()">
   <div class="modal">
-    <div class="modal-title">⚙ Gestion des appareils</div>
-    <div id="appareils-manage-list" style="margin-bottom:16px"></div>
-    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">AJOUTER UN APPAREIL</div>
+    <div class="modal-title">⚙ Zones de relevé</div>
+    <div id="zones-manage-list" style="margin-bottom:16px"></div>
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">AJOUTER UNE ZONE</div>
     <div style="display:flex;gap:8px;margin-bottom:16px">
-      <input id="new-appliance-name" class="form-input" type="text" placeholder="Ex : Frigo vitrine" style="margin-bottom:0;flex:1">
-      <input id="new-appliance-min" class="form-input" type="number" placeholder="Min" style="margin-bottom:0;width:70px">
-      <input id="new-appliance-max" class="form-input" type="number" placeholder="Max" style="margin-bottom:0;width:70px">
+      <input id="new-zone-name" class="form-input" type="text" placeholder="Ex : Labo froid" style="margin-bottom:0;flex:1">
+      <input id="new-zone-min" class="form-input" type="number" placeholder="Min" style="margin-bottom:0;width:70px">
+      <input id="new-zone-max" class="form-input" type="number" placeholder="Max" style="margin-bottom:0;width:70px">
     </div>
     <div style="font-size:10px;color:var(--muted);margin-bottom:14px">Plage normale (ex: 0 à 4°C pour un frigo)</div>
     <div style="display:flex;gap:10px">
-      <button onclick="closeApplianceModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Fermer</button>
-      <button onclick="addAppliance()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">＋ Ajouter</button>
+      <button onclick="closeZoneModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Fermer</button>
+      <button onclick="addZone()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">＋ Ajouter</button>
     </div>
   </div>
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">temperatures v1.0 · 15/03/2026 16:55</div>
+<div class="version-tag">temperatures v1.1 · 15/03/2026 17:45</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
 let _apiCallId = 0;
-let appareils = [
+let zones = [
   { id:'frigo1',    nom:'Frigo vitrine',    min:0,   max:4   },
   { id:'congel1',   nom:'Congélateur labo', min:-22, max:-18 },
   { id:'frigo2',    nom:'Frigo labo',       min:0,   max:4   },
@@ -204,10 +204,10 @@ function init() {
 }
 
 function renderAppareils() {
-  const list = document.getElementById('appareils-list');
-  if (!appareils.length) {
+  const list = document.getElementById('zones-list');
+  if (!zones.length) {
     list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">
-      Aucun appareil configuré.<br>Clique sur ⚙ Appareils pour en ajouter.
+      Aucune zone configurée.<br>Clique sur ⚙ Zones pour en ajouter.
     </div>`;
     return;
   }
@@ -230,7 +230,7 @@ function renderAppareils() {
 }
 
 function checkTemp(id) {
-  const a = appareils.find(x => x.id === id);
+  const a = zones.find(x => x.id === id);
   if (!a) return;
   const val = parseFloat(document.getElementById('temp-' + id).value);
   const card   = document.getElementById('card-' + id);
@@ -256,7 +256,7 @@ async function saveAllTemps() {
     if (data && data.success) {
       toast(`✓ Relevé enregistré — ${entries.length} appareil${entries.length > 1 ? 's' : ''}`);
       // Reset champs
-      appareils.forEach(a => {
+      zones.forEach(a => {
         const inp = document.getElementById('temp-' + a.id);
         if (inp) inp.value = '';
         document.getElementById('card-' + a.id).className = 'appliance-card';
@@ -309,7 +309,7 @@ function renderHisto() {
   for (const [dateKey, items] of Object.entries(byDate)) {
     const label = dateKey === '?' ? 'Date inconnue' : new Date(dateKey+'T00:00:00').toLocaleDateString('fr-BE', {weekday:'short', day:'numeric', month:'short'});
     const hasWarn = items.some(h => {
-      const a = appareils.find(x => x.id === h.id || x.nom === h.nom);
+      const a = zones.find(x => x.id === h.id || x.nom === h.nom);
       if (!a) return false;
       const v = parseFloat(h.temp);
       return !isNaN(v) && (v < a.min || v > a.max);
@@ -319,7 +319,7 @@ function renderHisto() {
       <span style="flex:1;height:1px;background:var(--border);display:block"></span>
     </div>`;
     html += items.map(h => {
-      const a = appareils.find(x => x.id === h.id || x.nom === h.nom);
+      const a = zones.find(x => x.id === h.id || x.nom === h.nom);
       const v = parseFloat(h.temp);
       const ok = !a || isNaN(v) || (v >= a.min && v <= a.max);
       return `<div class="histo-row" style="border-color:${ok?'var(--border)':'rgba(255,64,64,.3)'}">
@@ -338,17 +338,17 @@ function renderHisto() {
 }
 
 // ── Gestion appareils ──
-function openAddAppliance() {
-  renderManageList();
-  document.getElementById('new-appliance-name').value = '';
-  document.getElementById('new-appliance-min').value = '';
-  document.getElementById('new-appliance-max').value = '';
-  document.getElementById('modal-appareils').style.display = 'flex';
+function openZoneModal() {
+  renderZonesManage();
+  document.getElementById('new-zone-name').value = '';
+  document.getElementById('new-zone-min').value = '';
+  document.getElementById('new-zone-max').value = '';
+  document.getElementById('modal-zones').style.display = 'flex';
 }
-function closeApplianceModal() { document.getElementById('modal-appareils').style.display = 'none'; }
+function closeZoneModal() { document.getElementById('modal-zones').style.display = 'none'; }
 
-function renderManageList() {
-  document.getElementById('appareils-manage-list').innerHTML = appareils.length
+function renderZonesManage() {
+  document.getElementById('zones-manage-list').innerHTML = zones.length
     ? appareils.map(a => `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:6px">
         <div>
@@ -357,41 +357,43 @@ function renderManageList() {
         </div>
         <button onclick="removeAppliance('${a.id}')" style="padding:4px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:12px;color:var(--red);">🗑</button>
       </div>`).join('')
-    : '<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Aucun appareil configuré.</div>';
+    : '<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Aucune zone configurée.</div>';
 }
 
-function addAppliance() {
-  const nom = document.getElementById('new-appliance-name').value.trim();
-  const min = parseFloat(document.getElementById('new-appliance-min').value);
-  const max = parseFloat(document.getElementById('new-appliance-max').value);
+function addZone() {
+  const nom = document.getElementById('new-zone-name').value.trim();
+  const min = parseFloat(document.getElementById('new-zone-min').value);
+  const max = parseFloat(document.getElementById('new-zone-max').value);
   if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
   const id = 'app_' + Date.now();
-  appareils.push({ id, nom, min: isNaN(min) ? -99 : min, max: isNaN(max) ? 99 : max });
-  saveAppareilsLocal();
+  const newZone = { id, nom, min: isNaN(min) ? -99 : min, max: isNaN(max) ? 99 : max };
+  zones.push(newZone);
+  saveZonesLocal();
+  saveZoneToSheets(newZone);
   renderAppareils();
-  renderManageList();
-  document.getElementById('new-appliance-name').value = '';
+  renderZonesManage();
+  document.getElementById('new-zone-name').value = '';
   toast(`✓ "${nom}" ajouté`);
 }
 
-function removeAppliance(id) {
-  appareils = appareils.filter(a => a.id !== id);
-  saveAppareilsLocal();
+function removeZone(id) {
+  appareils = zones.filter(a => a.id !== id);
+  saveZonesLocal();
   renderAppareils();
-  renderManageList();
+  renderZonesManage();
 }
 
-function saveAppareilsLocal() {
-  try { localStorage.setItem('pm_appareils', JSON.stringify(appareils)); } catch(e) {}
+function saveZonesLocal() {
+  try { localStorage.setItem('pm_zones', JSON.stringify(appareils)); } catch(e) {}
 }
-function loadAppareilsLocal() {
+function loadZonesLocal() {
   try {
-    const saved = localStorage.getItem('pm_appareils');
+    const saved = localStorage.getItem('pm_zones');
     if (saved) appareils = JSON.parse(saved);
   } catch(e) {}
 }
 
-loadAppareilsLocal();
+loadZonesLocal();
 init();
 </script>
 </body>

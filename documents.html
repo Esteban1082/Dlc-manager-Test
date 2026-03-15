@@ -2,7 +2,6 @@
 <html lang="fr">
 <head>
 <script>
-// Vérification auth — affiche écran de blocage si non connecté
 document.addEventListener('DOMContentLoaded', () => {
   if (localStorage.getItem('pm_auth') !== '1') {
     document.body.innerHTML = '<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:DM Mono,monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🔒</div><div style="font-family:Fraunces,serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">Accès restreint</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">Connecte-toi depuis le hub</div><a href="index.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:Fraunces,serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>';
@@ -39,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   .back-btn:hover { border-color:var(--amber); color:var(--text); }
 
   .tabs {
-    display:flex; gap:0; border-bottom:1px solid var(--border);
+    display:flex; border-bottom:1px solid var(--border);
     padding:0 24px; position:sticky; top:57px; background:var(--bg); z-index:99;
   }
   .tab {
@@ -48,68 +47,43 @@ document.addEventListener('DOMContentLoaded', () => {
     transition:all .15s; background:none; border-top:none; border-left:none; border-right:none;
   }
   .tab.active { color:var(--amber); border-bottom-color:var(--amber); }
-  .tab:hover { color:var(--text); }
 
   .main { padding:20px 24px 80px; max-width:700px; margin:0 auto; }
   .view { display:none; }
   .view.active { display:block; }
 
   /* Checklists */
-  .checklist-card {
-    background:var(--surface); border:1px solid var(--border);
-    border-radius:14px; margin-bottom:16px; overflow:hidden;
-  }
-  .checklist-header {
-    padding:16px 18px; display:flex; align-items:center; justify-content:space-between;
-    cursor:pointer;
-  }
+  .checklist-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; margin-bottom:12px; overflow:hidden; }
+  .checklist-header { padding:14px 16px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
   .checklist-header:hover { background:rgba(255,255,255,.02); }
-  .check-item {
-    display:flex; align-items:center; gap:12px;
-    padding:11px 18px; border-top:1px solid var(--border);
-    cursor:pointer; transition:background .15s;
-  }
+  .check-item { display:flex; align-items:center; gap:12px; padding:11px 16px; border-top:1px solid var(--border); cursor:pointer; transition:background .15s; }
   .check-item:hover { background:rgba(255,255,255,.02); }
   .check-item.done .check-label { text-decoration:line-through; color:var(--muted); }
-  .checkbox {
-    width:22px; height:22px; border-radius:6px; border:2px solid var(--border);
-    display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all .2s;
-  }
+  .checkbox { width:22px; height:22px; border-radius:6px; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all .2s; }
   .check-item.done .checkbox { background:var(--green); border-color:var(--green); }
+  .progress-ring { width:36px; height:36px; border-radius:50%; flex-shrink:0; }
 
-  /* PDFs / Liens */
-  .doc-row {
-    display:flex; align-items:center; gap:14px;
-    padding:14px 16px; background:var(--surface); border:1px solid var(--border);
-    border-radius:10px; margin-bottom:8px; text-decoration:none; color:var(--text);
-    transition:all .2s;
-  }
+  /* Docs */
+  .doc-row { display:flex; align-items:center; gap:14px; padding:14px 16px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; text-decoration:none; color:var(--text); transition:all .2s; }
   .doc-row:hover { border-color:var(--amber); }
 
   /* Contacts */
-  .contact-card {
-    background:var(--surface); border:1px solid var(--border);
-    border-radius:12px; padding:16px; margin-bottom:10px;
-  }
+  .contact-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px; }
 
-  .modal-overlay {
-    display:none; position:fixed; inset:0; background:rgba(0,0,0,.75);
-    backdrop-filter:blur(4px); z-index:600;
-    align-items:center; justify-content:center; padding:20px;
-  }
-  .modal { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px; width:100%; max-width:440px; }
-  .modal-title { font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--amber); margin-bottom:18px; }
-  .form-input {
-    width:100%; padding:12px 16px; background:var(--bg);
-    border:1px solid var(--border); border-radius:10px;
-    color:var(--text); font-family:'DM Mono',monospace; font-size:14px;
-    outline:none; margin-bottom:10px; transition:border-color .15s;
-  }
+  /* Modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.75); backdrop-filter:blur(4px); z-index:600; align-items:center; justify-content:center; padding:20px; }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:24px; width:100%; max-width:440px; max-height:85vh; overflow-y:auto; }
+  .modal-title { font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--amber); margin-bottom:16px; }
+  .form-input { width:100%; padding:11px 14px; background:var(--bg); border:1px solid var(--border); border-radius:10px; color:var(--text); font-family:'DM Mono',monospace; font-size:13px; outline:none; margin-bottom:10px; transition:border-color .15s; }
   .form-input:focus { border-color:var(--amber); }
   .form-label { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:5px; display:block; }
 
+  .sync-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:10px; border:1px solid var(--border); color:var(--muted); }
+  .sync-badge.ok { border-color:rgba(76,219,138,.3); color:var(--green); }
+  .sync-badge.loading { border-color:rgba(245,200,66,.3); color:var(--yellow); }
+
   .toast-container { position:fixed; bottom:24px; right:24px; z-index:700; display:flex; flex-direction:column; gap:8px; }
-  .toast { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 18px; font-size:13px; animation:slideIn .2s ease; max-width:320px; }
+  .toast { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 18px; font-size:13px; animation:slideIn .2s ease; max-width:300px; }
   @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:none;opacity:1} }
   .version-tag { position:fixed; bottom:10px; left:14px; font-size:10px; color:var(--border); letter-spacing:1px; z-index:50; }
 </style>
@@ -121,13 +95,15 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="logo-title">📁 Documents</div>
     <div class="logo-sub">Pâtisserie Manager</div>
   </div>
-  <a class="back-btn" href="index.html">← Hub</a>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="sync-badge" id="sync-badge">⟳ Sync</div>
+    <a class="back-btn" href="index.html">← Hub</a>
+  </div>
 </header>
 
-<!-- Tabs -->
 <div class="tabs">
   <button class="tab active" onclick="switchTab('checklists',this)">✅ Checklists</button>
-  <button class="tab" onclick="switchTab('pdfs',this)">📄 Documents</button>
+  <button class="tab" onclick="switchTab('docs',this)">📄 Documents</button>
   <button class="tab" onclick="switchTab('contacts',this)">📞 Contacts</button>
 </div>
 
@@ -135,28 +111,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   <!-- ══ CHECKLISTS ══ -->
   <div class="view active" id="view-checklists">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--amber)">Checklists</div>
       <div style="display:flex;gap:8px">
         <button onclick="resetAllChecklists()" style="padding:7px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);">↺ Reset</button>
         <button onclick="openAddChecklist()" style="padding:7px 12px;background:var(--amber);border:none;border-radius:8px;font-family:'Fraunces',serif;font-size:13px;font-weight:700;color:#000;">＋ Liste</button>
       </div>
     </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">L'état des cases se remet à zéro chaque jour. Les listes sont partagées entre tous les appareils.</div>
     <div id="checklists-container"></div>
   </div>
 
-  <!-- ══ PDFS / LIENS ══ -->
-  <div class="view" id="view-pdfs">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+  <!-- ══ DOCS ══ -->
+  <div class="view" id="view-docs">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--amber)">Documents & Fiches</div>
       <button onclick="openAddDoc()" style="padding:7px 12px;background:var(--amber);border:none;border-radius:8px;font-family:'Fraunces',serif;font-size:13px;font-weight:700;color:#000;">＋ Ajouter</button>
     </div>
-    <div id="pdfs-container"></div>
+    <div id="docs-container"></div>
   </div>
 
   <!-- ══ CONTACTS ══ -->
   <div class="view" id="view-contacts">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--amber)">Contacts utiles</div>
       <button onclick="openAddContact()" style="padding:7px 12px;background:var(--amber);border:none;border-radius:8px;font-family:'Fraunces',serif;font-size:13px;font-weight:700;color:#000;">＋ Ajouter</button>
     </div>
@@ -165,29 +142,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </div>
 
-<!-- Modal ajout checklist -->
+<!-- Modal checklist -->
 <div class="modal-overlay" id="modal-checklist" onclick="if(event.target.id==='modal-checklist')closeChecklistModal()">
   <div class="modal">
     <div class="modal-title">＋ Nouvelle checklist</div>
     <label class="form-label">Nom de la liste</label>
     <input id="cl-nom" class="form-input" placeholder="Ex : Ouverture matin">
     <label class="form-label">Tâches (une par ligne)</label>
-    <textarea id="cl-tasks" style="width:100%;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;resize:vertical;min-height:120px;margin-bottom:14px;" placeholder="Nettoyer le plan de travail&#10;Vérifier le frigo&#10;Mettre à jour les DLC"></textarea>
+    <textarea id="cl-tasks" style="width:100%;padding:11px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;resize:vertical;min-height:120px;margin-bottom:14px;" placeholder="Nettoyer le plan de travail&#10;Vérifier les températures&#10;Contrôler les DLC"></textarea>
     <div style="display:flex;gap:10px">
-      <button onclick="closeChecklistModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
-      <button onclick="saveChecklist()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Créer</button>
+      <button onclick="closeChecklistModal()" style="flex:1;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
+      <button onclick="saveChecklist()" style="flex:1;padding:11px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Créer</button>
     </div>
   </div>
 </div>
 
-<!-- Modal ajout document -->
+<!-- Modal doc -->
 <div class="modal-overlay" id="modal-doc" onclick="if(event.target.id==='modal-doc')closeDocModal()">
   <div class="modal">
     <div class="modal-title">＋ Nouveau document</div>
     <label class="form-label">Titre *</label>
     <input id="doc-titre" class="form-input" placeholder="Ex : Procédure nettoyage">
-    <label class="form-label">URL du document (Google Drive, PDF en ligne…)</label>
-    <input id="doc-url" class="form-input" type="url" placeholder="https://...">
+    <label class="form-label">URL du document</label>
+    <input id="doc-url" class="form-input" type="url" placeholder="https://drive.google.com/...">
     <label class="form-label">Catégorie</label>
     <select id="doc-categorie" class="form-input" style="appearance:none">
       <option value="hygiene">🧼 Hygiène HACCP</option>
@@ -196,13 +173,13 @@ document.addEventListener('DOMContentLoaded', () => {
       <option value="autre">📁 Autre</option>
     </select>
     <div style="display:flex;gap:10px">
-      <button onclick="closeDocModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
-      <button onclick="saveDoc()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Ajouter</button>
+      <button onclick="closeDocModal()" style="flex:1;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
+      <button onclick="saveDoc()" style="flex:1;padding:11px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Ajouter</button>
     </div>
   </div>
 </div>
 
-<!-- Modal ajout contact -->
+<!-- Modal contact -->
 <div class="modal-overlay" id="modal-contact" onclick="if(event.target.id==='modal-contact')closeContactModal()">
   <div class="modal">
     <div class="modal-title">＋ Nouveau contact</div>
@@ -212,47 +189,43 @@ document.addEventListener('DOMContentLoaded', () => {
     <input id="contact-tel" class="form-input" type="tel" placeholder="+32 ...">
     <label class="form-label">Email</label>
     <input id="contact-email" class="form-input" type="email" placeholder="...@robthemarket.be">
-    <label class="form-label">Note (optionnel)</label>
+    <label class="form-label">Note</label>
     <input id="contact-note" class="form-input" placeholder="Ex : Disponible lun-ven 9h-17h">
     <div style="display:flex;gap:10px">
-      <button onclick="closeContactModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
-      <button onclick="saveContact()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Ajouter</button>
+      <button onclick="closeContactModal()" style="flex:1;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
+      <button onclick="saveContact()" style="flex:1;padding:11px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Ajouter</button>
     </div>
   </div>
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">documents v1.0 · 15/03/2026 16:55</div>
+<div class="version-tag">documents v2.0 · 15/03/2026 18:30</div>
 
 <script>
-// ── Données stockées en localStorage ──
-function load(key, def) {
-  try { const v = localStorage.getItem('pm_' + key); return v ? JSON.parse(v) : def; } catch(e) { return def; }
-}
-function save(key, val) { try { localStorage.setItem('pm_' + key, JSON.stringify(val)); } catch(e) {} }
+const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+let _apiCallId = 0;
 
-let checklists = load('checklists', [
-  { id:'ouverture', nom:'Ouverture matin', tasks:[
-    { id:'t1', label:'Vérifier les températures frigos', done:false },
-    { id:'t2', label:'Contrôler les DLC du jour', done:false },
-    { id:'t3', label:'Nettoyer le plan de travail', done:false },
-    { id:'t4', label:'Vérifier les stocks', done:false },
-  ]},
-  { id:'fermeture', nom:'Fermeture soir', tasks:[
-    { id:'t5', label:'Ranger et filmer tous les produits', done:false },
-    { id:'t6', label:'Nettoyer et désinfecter les surfaces', done:false },
-    { id:'t7', label:'Vider les poubelles', done:false },
-    { id:'t8', label:'Noter les pertes de la journée', done:false },
-    { id:'t9', label:'Vérifier que les frigos sont fermés', done:false },
-  ]},
-]);
-let docs = load('docs', [
-  { id:'d1', titre:'Plan de nettoyage HACCP', url:'', categorie:'hygiene' },
-  { id:'d2', titre:'Fiche traçabilité produits', url:'', categorie:'procedure' },
-]);
-let contacts = load('contacts', [
-  { id:'c1', nom:'Responsable pâtisserie', tel:'', email:'', note:'' },
-]);
+// Données en mémoire
+let checklists = [];
+let docs = [];
+let contacts = [];
+// États des cases (reset chaque jour) — stockés localement avec date
+let checkStates = {}; // { 'cl_id:task_id': true/false }
+const todayKey = new Date().toISOString().split('T')[0];
+
+function api(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'dlcCb_' + (++_apiCallId);
+    const script = document.createElement('script');
+    const timer = setTimeout(() => { cleanup(); reject(new Error('Timeout')); }, 20000);
+    window[cbName] = (data) => { cleanup(); resolve(data); };
+    function cleanup() { clearTimeout(timer); delete window[cbName]; if (script.parentNode) script.remove(); }
+    script.onerror = () => { cleanup(); reject(new Error('Erreur réseau')); };
+    const p = new URLSearchParams({ ...params, callback: cbName });
+    script.src = API_URL + '?' + p.toString();
+    document.head.appendChild(script);
+  });
+}
 
 function toast(msg, isError=false) {
   const c = document.getElementById('toast-container');
@@ -261,81 +234,108 @@ function toast(msg, isError=false) {
   t.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
   t.textContent = msg;
   c.appendChild(t);
-  setTimeout(() => t.remove(), 3000);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function setSyncBadge(state) {
+  const b = document.getElementById('sync-badge');
+  if (state === 'ok') { b.className = 'sync-badge ok'; b.textContent = '✓ Sync'; }
+  else if (state === 'loading') { b.className = 'sync-badge loading'; b.textContent = '⟳ Sync…'; }
+  else { b.className = 'sync-badge'; b.textContent = '⟳ Sync'; }
 }
 
 // ── Navigation ──
 function switchTab(tab, btn) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-  document.getElementById('view-' + tab).classList.add('active');
+  document.getElementById('view-'+tab).classList.add('active');
   btn.classList.add('active');
+}
+
+// ── États cases (local, reset quotidien) ──
+function loadCheckStates() {
+  try {
+    const saved = localStorage.getItem('pm_checkstates_' + todayKey);
+    checkStates = saved ? JSON.parse(saved) : {};
+  } catch(e) { checkStates = {}; }
+  // Nettoyer les vieux états
+  try {
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith('pm_checkstates_') && !k.endsWith(todayKey)) localStorage.removeItem(k);
+    });
+  } catch(e) {}
+}
+
+function saveCheckStates() {
+  try { localStorage.setItem('pm_checkstates_' + todayKey, JSON.stringify(checkStates)); } catch(e) {}
 }
 
 // ═══════════════════ CHECKLISTS ═══════════════════
 function renderChecklists() {
   const el = document.getElementById('checklists-container');
   if (!checklists.length) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucune checklist. Clique sur ＋ Liste pour en créer une.</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucune checklist.<br>Clique sur ＋ Liste pour en créer une.</div>';
     return;
   }
   el.innerHTML = checklists.map(cl => {
-    const done = cl.tasks.filter(t => t.done).length;
-    const pct  = cl.tasks.length ? Math.round(done / cl.tasks.length * 100) : 0;
+    const tasks = cl.tasks || [];
+    const done = tasks.filter(t => checkStates[cl.id+':'+t.id]).length;
+    const pct  = tasks.length ? Math.round(done / tasks.length * 100) : 0;
     const color = pct === 100 ? 'var(--green)' : pct > 0 ? 'var(--yellow)' : 'var(--muted)';
     return `<div class="checklist-card">
-      <div class="checklist-header" onclick="toggleChecklist('${cl.id}')">
+      <div class="checklist-header">
         <div>
-          <div style="font-family:'Fraunces',serif;font-size:17px;font-weight:700">${cl.nom}</div>
-          <div style="font-size:11px;color:${color};margin-top:4px">${done}/${cl.tasks.length} tâche${cl.tasks.length !== 1 ? 's' : ''} ${pct === 100 ? '✓ Terminé' : pct > 0 ? 'en cours' : ''}</div>
+          <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700">${cl.nom}</div>
+          <div style="font-size:11px;color:${color};margin-top:3px">${done}/${tasks.length} · ${pct === 100 ? '✓ Terminé !' : pct > 0 ? 'En cours' : 'À faire'}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:40px;height:40px;border-radius:50%;background:conic-gradient(${color} ${pct}%, var(--border) 0);display:flex;align-items:center;justify-content:center">
-            <div style="width:30px;height:30px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${color}">${pct}%</div>
-          </div>
+          <svg class="progress-ring" viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" stroke-width="3"/>
+            <circle cx="18" cy="18" r="15" fill="none" stroke="${color}" stroke-width="3"
+              stroke-dasharray="${pct * 0.942} 94.2" stroke-dashoffset="23.55" stroke-linecap="round" transform="rotate(-90 18 18)"/>
+            <text x="18" y="22" text-anchor="middle" fill="${color}" font-size="9" font-family="DM Mono,monospace">${pct}%</text>
+          </svg>
           <button onclick="deleteChecklist('${cl.id}',event)" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);">🗑</button>
         </div>
       </div>
-      <div id="cl-tasks-${cl.id}">
-        ${cl.tasks.map(t => `
-          <div class="check-item ${t.done ? 'done' : ''}" onclick="toggleTask('${cl.id}','${t.id}')">
-            <div class="checkbox">${t.done ? '<span style="color:#000;font-size:14px;font-weight:900">✓</span>' : ''}</div>
-            <span class="check-label" style="font-size:14px">${t.label}</span>
-          </div>`).join('')}
-        <div style="padding:10px 18px;border-top:1px solid var(--border)">
-          <button onclick="openAddTask('${cl.id}')"
-            style="width:100%;padding:8px;background:transparent;border:1px dashed var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">
-            ＋ Ajouter une tâche
-          </button>
-        </div>
+      ${tasks.map(t => {
+        const isDone = !!checkStates[cl.id+':'+t.id];
+        return `<div class="check-item ${isDone?'done':''}" onclick="toggleTask('${cl.id}','${t.id}')">
+          <div class="checkbox">${isDone?'<span style="color:#000;font-size:14px;font-weight:900">✓</span>':''}</div>
+          <span class="check-label" style="font-size:14px">${t.label}</span>
+        </div>`;
+      }).join('')}
+      <div style="padding:8px 16px;border-top:1px solid var(--border)">
+        <button onclick="openAddTask('${cl.id}')"
+          style="width:100%;padding:7px;background:transparent;border:1px dashed var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);">
+          ＋ Ajouter une tâche
+        </button>
       </div>
     </div>`;
   }).join('');
 }
 
-function toggleChecklist(id) { /* expandable - already visible */ }
-
 function toggleTask(clId, taskId) {
-  const cl = checklists.find(c => c.id === clId);
-  if (!cl) return;
-  const t = cl.tasks.find(x => x.id === taskId);
-  if (t) { t.done = !t.done; save('checklists', checklists); renderChecklists(); }
+  const key = clId + ':' + taskId;
+  checkStates[key] = !checkStates[key];
+  saveCheckStates();
+  renderChecklists();
 }
 
-function deleteChecklist(id, e) {
+async function deleteChecklist(id, e) {
   e.stopPropagation();
   if (!confirm('Supprimer cette checklist ?')) return;
   checklists = checklists.filter(c => c.id !== id);
-  save('checklists', checklists);
   renderChecklists();
+  try { await api({ action:'deleteChecklist', id }); } catch(e) {}
 }
 
 function resetAllChecklists() {
   if (!confirm('Remettre toutes les tâches à zéro ?')) return;
-  checklists.forEach(cl => cl.tasks.forEach(t => t.done = false));
-  save('checklists', checklists);
+  checkStates = {};
+  saveCheckStates();
   renderChecklists();
-  toast('✓ Toutes les checklists remises à zéro');
+  toast('✓ Checklists remises à zéro');
 }
 
 function openAddTask(clId) {
@@ -343,12 +343,14 @@ function openAddTask(clId) {
   if (!label || !label.trim()) return;
   const cl = checklists.find(c => c.id === clId);
   if (!cl) return;
-  cl.tasks.push({ id:'t_' + Date.now(), label:label.trim(), done:false });
-  save('checklists', checklists);
+  if (!cl.tasks) cl.tasks = [];
+  const task = { id:'t_'+Date.now(), label:label.trim() };
+  cl.tasks.push(task);
   renderChecklists();
+  // Sauver dans Sheets
+  api({ action:'saveChecklist', id:cl.id, nom:cl.nom, tasks:JSON.stringify(cl.tasks) }).catch(()=>{});
 }
 
-// Checklist modal
 function openAddChecklist() {
   document.getElementById('cl-nom').value = '';
   document.getElementById('cl-tasks').value = '';
@@ -356,24 +358,27 @@ function openAddChecklist() {
   setTimeout(() => document.getElementById('cl-nom').focus(), 100);
 }
 function closeChecklistModal() { document.getElementById('modal-checklist').style.display = 'none'; }
-function saveChecklist() {
+
+async function saveChecklist() {
   const nom = document.getElementById('cl-nom').value.trim();
   if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
-  const lines = document.getElementById('cl-tasks').value.split('\n').map(l => l.trim()).filter(Boolean);
-  const tasks = lines.map((l, i) => ({ id:'t_' + Date.now() + i, label:l, done:false }));
-  checklists.push({ id:'cl_' + Date.now(), nom, tasks });
-  save('checklists', checklists);
+  const lines = document.getElementById('cl-tasks').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  const tasks = lines.map((l,i) => ({ id:'t_'+Date.now()+i, label:l }));
+  const id = 'cl_' + Date.now();
+  checklists.push({ id, nom, tasks });
   renderChecklists();
   closeChecklistModal();
   toast(`✓ Checklist "${nom}" créée`);
+  try { await api({ action:'saveChecklist', id, nom, tasks:JSON.stringify(tasks) }); }
+  catch(e) { toast('⚠ Erreur sauvegarde Sheets', true); }
 }
 
 // ═══════════════════ DOCUMENTS ═══════════════════
-const DOC_ICONS = { hygiene:'🧼', procedure:'📋', fiche:'📄', autre:'📁' };
+const DOC_ICONS  = { hygiene:'🧼', procedure:'📋', fiche:'📄', autre:'📁' };
 const DOC_LABELS = { hygiene:'Hygiène HACCP', procedure:'Procédure', fiche:'Fiche produit', autre:'Autre' };
 
 function renderDocs() {
-  const el = document.getElementById('pdfs-container');
+  const el = document.getElementById('docs-container');
   if (!docs.length) {
     el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucun document. Clique sur ＋ Ajouter.</div>';
     return;
@@ -382,22 +387,19 @@ function renderDocs() {
   docs.forEach(d => { if (!byCategorie[d.categorie]) byCategorie[d.categorie]=[]; byCategorie[d.categorie].push(d); });
   let html = '';
   for (const [cat, items] of Object.entries(byCategorie)) {
-    html += `<div style="font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin:20px 0 10px;display:flex;align-items:center;gap:8px">
+    html += `<div style="font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px;display:flex;align-items:center;gap:8px">
       ${DOC_ICONS[cat]||'📁'} ${DOC_LABELS[cat]||cat}
       <span style="flex:1;height:1px;background:var(--border)"></span>
     </div>`;
-    html += items.map(d => {
-      const tag = d.url ? 'a' : 'div';
-      const linkAttr = d.url ? `href="${d.url}" target="_blank" rel="noopener"` : '';
-      return `<${tag} ${linkAttr} class="doc-row">
-        <div style="font-size:24px;flex-shrink:0">${DOC_ICONS[d.categorie]||'📄'}</div>
+    html += items.map(d => `
+      <div class="doc-row" ${d.url?`onclick="window.open('${d.url}','_blank')" style="cursor:pointer"`:''}>
+        <div style="font-size:22px;flex-shrink:0">${DOC_ICONS[d.categorie]||'📄'}</div>
         <div style="flex:1">
           <div style="font-size:14px;font-weight:600">${d.titre}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${d.url ? '🔗 Lien disponible' : '⚠ Pas de lien configuré'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${d.url?'🔗 Lien disponible':'⚠ Pas de lien'}</div>
         </div>
-        <button onclick="deleteDoc('${d.id}',event)" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);flex-shrink:0">🗑</button>
-      </${tag}>`;
-    }).join('');
+        <button onclick="event.stopPropagation();deleteDoc('${d.id}')" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);flex-shrink:0">🗑</button>
+      </div>`).join('');
   }
   el.innerHTML = html;
 }
@@ -408,16 +410,24 @@ function openAddDoc() {
   setTimeout(() => document.getElementById('doc-titre').focus(), 100);
 }
 function closeDocModal() { document.getElementById('modal-doc').style.display='none'; }
-function saveDoc() {
+
+async function saveDoc() {
   const titre = document.getElementById('doc-titre').value.trim();
   if (!titre) { toast('⚠ Le titre est obligatoire', true); return; }
-  docs.push({ id:'d_'+Date.now(), titre, url:document.getElementById('doc-url').value.trim(), categorie:document.getElementById('doc-categorie').value });
-  save('docs', docs); renderDocs(); closeDocModal(); toast(`✓ "${titre}" ajouté`);
+  const doc = { id:'d_'+Date.now(), titre, url:document.getElementById('doc-url').value.trim(), categorie:document.getElementById('doc-categorie').value };
+  docs.push(doc);
+  renderDocs();
+  closeDocModal();
+  toast(`✓ "${titre}" ajouté`);
+  try { await api({ action:'saveDocument', ...doc }); }
+  catch(e) { toast('⚠ Erreur sauvegarde Sheets', true); }
 }
-function deleteDoc(id, e) {
-  e.preventDefault(); e.stopPropagation();
+
+async function deleteDoc(id) {
   if (!confirm('Supprimer ce document ?')) return;
-  docs = docs.filter(d => d.id !== id); save('docs', docs); renderDocs();
+  docs = docs.filter(d => d.id !== id);
+  renderDocs();
+  try { await api({ action:'deleteDocument', id }); } catch(e) {}
 }
 
 // ═══════════════════ CONTACTS ═══════════════════
@@ -434,7 +444,7 @@ function renderContacts() {
           <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700;margin-bottom:8px">${c.nom}</div>
           ${c.tel   ? `<a href="tel:${c.tel}" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--blue);text-decoration:none;margin-bottom:4px">📞 ${c.tel}</a>` : ''}
           ${c.email ? `<a href="mailto:${c.email}" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--amber);text-decoration:none;margin-bottom:4px">✉️ ${c.email}</a>` : ''}
-          ${c.note  ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ ${c.note}</div>` : ''}
+          ${c.note  ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">ℹ️ ${c.note}</div>` : ''}
         </div>
         <button onclick="deleteContact('${c.id}')" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);flex-shrink:0;margin-left:10px">🗑</button>
       </div>
@@ -447,19 +457,48 @@ function openAddContact() {
   setTimeout(() => document.getElementById('contact-nom').focus(), 100);
 }
 function closeContactModal() { document.getElementById('modal-contact').style.display='none'; }
-function saveContact() {
+
+async function saveContact() {
   const nom = document.getElementById('contact-nom').value.trim();
   if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
-  contacts.push({ id:'c_'+Date.now(), nom, tel:document.getElementById('contact-tel').value.trim(), email:document.getElementById('contact-email').value.trim(), note:document.getElementById('contact-note').value.trim() });
-  save('contacts', contacts); renderContacts(); closeContactModal(); toast(`✓ "${nom}" ajouté`);
-}
-function deleteContact(id) {
-  if (!confirm('Supprimer ce contact ?')) return;
-  contacts = contacts.filter(c => c.id !== id); save('contacts', contacts); renderContacts();
+  const contact = { id:'c_'+Date.now(), nom, tel:document.getElementById('contact-tel').value.trim(), email:document.getElementById('contact-email').value.trim(), note:document.getElementById('contact-note').value.trim() };
+  contacts.push(contact);
+  renderContacts();
+  closeContactModal();
+  toast(`✓ "${nom}" ajouté`);
+  try { await api({ action:'saveContact', ...contact }); }
+  catch(e) { toast('⚠ Erreur sauvegarde Sheets', true); }
 }
 
-// ── Init ──
-renderChecklists(); renderDocs(); renderContacts();
+async function deleteContact(id) {
+  if (!confirm('Supprimer ce contact ?')) return;
+  contacts = contacts.filter(c => c.id !== id);
+  renderContacts();
+  try { await api({ action:'deleteContact', id }); } catch(e) {}
+}
+
+// ═══════════════════ INIT & SYNC ═══════════════════
+async function loadFromSheets() {
+  setSyncBadge('loading');
+  try {
+    const data = await api({ action:'getDocuments' });
+    if (data.success) {
+      checklists = data.checklists || [];
+      docs       = data.docs       || [];
+      contacts   = data.contacts   || [];
+    }
+    setSyncBadge('ok');
+  } catch(e) {
+    setSyncBadge('error');
+    toast('⚠ Impossible de charger depuis Sheets', true);
+  }
+  renderChecklists();
+  renderDocs();
+  renderContacts();
+}
+
+loadCheckStates();
+loadFromSheets();
 </script>
 </body>
 </html>
