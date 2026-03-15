@@ -41,6 +41,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   .main { padding:20px 24px 80px; max-width:800px; margin:0 auto; }
 
+  .filter-chip {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:7px 14px; border-radius:20px; font-size:12px;
+    border:2px solid var(--border); background:var(--surface);
+    color:var(--muted); cursor:pointer; transition:all .15s; user-select:none;
+  }
+  .filter-chip:hover { border-color:var(--green); color:var(--text); }
+  .filter-chip.active {
+    background:rgba(76,219,138,.12); border-color:var(--green);
+    color:var(--green); font-weight:600;
+  }
+  .mode-btn {
+    padding:8px 16px; border-radius:8px; font-size:12px; letter-spacing:1px;
+    text-transform:uppercase; border:1px solid var(--border);
+    background:transparent; color:var(--muted); cursor:pointer; transition:all .15s;
+  }
+  .mode-btn.active { background:var(--amber); color:#000; border-color:var(--amber); font-weight:600; }
   .allergen-chip {
     display:inline-flex; align-items:center; gap:6px;
     padding:6px 12px; border-radius:8px;
@@ -113,8 +130,22 @@ document.addEventListener('DOMContentLoaded', () => {
     ⚠️ <strong>Réglementation EU 1169/2011</strong> — 14 allergènes à déclaration obligatoire pour les produits vendus en vrac ou préparés sur place.
   </div>
 
+  <!-- Barre de recherche -->
   <input id="search" type="text" placeholder="🔍 Rechercher un produit…" oninput="renderList()" autocomplete="off"
-    style="width:100%;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;margin-bottom:16px">
+    style="width:100%;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;margin-bottom:14px">
+
+  <!-- Sélecteur de mode -->
+  <div style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="mode-btn active" onclick="setMode('tous',this)">Tous</button>
+    <button class="mode-btn" onclick="setMode('sans',this)">🙅 Sans allergènes</button>
+    <button class="mode-btn" onclick="setMode('avec',this)">⚠️ Avec allergènes</button>
+  </div>
+
+  <!-- Chips filtre allergènes (visibles en mode sans/avec) -->
+  <div id="filter-chips-wrap" style="display:none;margin-bottom:14px">
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px" id="filter-label">Sélectionner les allergènes à exclure :</div>
+    <div id="filter-chips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+  </div>
 
   <div id="stats" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
   <div id="list"></div>
@@ -142,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">allergenes v1.1 · 15/03/2026 16:55</div>
+<div class="version-tag">allergenes v1.2 · 15/03/2026 17:09</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -161,6 +192,8 @@ let _apiCallId = 0;
 let fiches = []; // [{id, nom, allergenes:[]}]
 let editingId = null;
 let editSelected = new Set();
+let filterMode = 'tous';      // 'tous' | 'sans' | 'avec'
+let filterSelected = new Set(); // allergènes sélectionnés pour le filtre
 
 function api(params) {
   return new Promise((resolve, reject) => {
@@ -186,10 +219,58 @@ function toast(msg, isError=false) {
   setTimeout(() => t.remove(), 3500);
 }
 
+function buildFilterChips() {
+  const wrap = document.getElementById('filter-chips-wrap');
+  const label = document.getElementById('filter-label');
+  const chips = document.getElementById('filter-chips');
+  if (filterMode === 'tous') {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+  label.textContent = filterMode === 'sans'
+    ? 'Sélectionne les allergènes à exclure (affiche les produits sans) :'
+    : 'Sélectionne les allergènes à inclure (affiche les produits avec) :';
+
+  chips.innerHTML = ALLERGENS.map(a => {
+    const on = filterSelected.has(a.id);
+    return `<div class="filter-chip ${on ? 'active' : ''}" onclick="toggleFilter('${a.id}',this)">
+      ${a.emoji} ${a.label}
+    </div>`;
+  }).join('');
+}
+
+function toggleFilter(id, el) {
+  if (filterSelected.has(id)) { filterSelected.delete(id); el.classList.remove('active'); }
+  else { filterSelected.add(id); el.classList.add('active'); }
+  renderList();
+}
+
+function setMode(mode, btn) {
+  filterMode = mode;
+  filterSelected = new Set();
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  buildFilterChips();
+  renderList();
+}
+
 function renderList() {
   const q = (document.getElementById('search').value || '').toLowerCase().trim();
-  const items = q ? fiches.filter(f => f.nom.toLowerCase().includes(q)) : fiches;
-  document.getElementById('stats').textContent = `${fiches.length} fiche${fiches.length !== 1 ? 's' : ''}${q ? ` · ${items.length} résultat${items.length !== 1 ? 's' : ''}` : ''}`;
+  let items = q ? fiches.filter(f => f.nom.toLowerCase().includes(q)) : [...fiches];
+
+  // Appliquer filtre allergènes
+  if (filterMode === 'sans' && filterSelected.size > 0) {
+    // Produits qui NE contiennent PAS les allergènes sélectionnés
+    items = items.filter(f => ![...filterSelected].some(id => f.allergenes.includes(id)));
+  } else if (filterMode === 'avec' && filterSelected.size > 0) {
+    // Produits qui contiennent AU MOINS UN des allergènes sélectionnés
+    items = items.filter(f => [...filterSelected].some(id => f.allergenes.includes(id)));
+  }
+
+  const filterInfo = filterSelected.size > 0 && filterMode !== 'tous'
+    ? ` · filtre actif` : '';
+  document.getElementById('stats').textContent = `${items.length} / ${fiches.length} fiche${fiches.length !== 1 ? 's' : ''}${filterInfo}`;
   const list = document.getElementById('list');
   if (!items.length) {
     list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">

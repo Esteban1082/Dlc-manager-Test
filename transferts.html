@@ -347,7 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">transferts v1.1 · 15/03/2026 16:55</div>
+<div class="version-tag">transferts v1.2 · 15/03/2026 17:09</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -717,7 +717,15 @@ function showBon(bon) {
       <span style="font-size:13px;color:var(--muted)">Prix total</span>
       <span style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:var(--amber)">${fmtEur(bon.prix)}</span>
     </div>
-    ${bon.note ? `<div style="margin-top:10px;font-size:12px;color:var(--muted)">📝 ${bon.note}</div>` : ''}
+    ${bon.bonBarcode ? `
+    <div style="margin-top:12px;display:flex;align-items:center;gap:12px;padding:12px;background:rgba(232,160,69,.08);border:1px solid rgba(232,160,69,.3);border-radius:10px">
+      <span style="font-size:22px;flex-shrink:0">🔖</span>
+      <div>
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:3px">Code-barres du bon</div>
+        <div style="font-family:monospace;font-size:20px;font-weight:700;letter-spacing:3px;color:var(--amber)">${bon.bonBarcode}</div>
+      </div>
+    </div>` : ''}
+    ${bon.note ? `<div style="margin-top:10px;font-size:12px;color:var(--muted);padding:8px 10px;background:var(--bg);border-radius:6px">📝 ${bon.note}</div>` : ''}
   `;
 
   document.getElementById('modal-bon').style.display = 'flex';
