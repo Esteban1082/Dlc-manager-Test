@@ -2,12 +2,12 @@
 <html lang="fr">
 <head>
 <script>
-// Vérification session — redirige vers le hub si non connecté
-(function() {
+// Vérification auth — affiche écran de blocage si non connecté
+document.addEventListener('DOMContentLoaded', () => {
   if (localStorage.getItem('pm_auth') !== '1') {
-    window.location.replace('index.html');
+    document.body.innerHTML = '<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:DM Mono,monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🔒</div><div style="font-family:Fraunces,serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">Accès restreint</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">Connecte-toi depuis le hub</div><a href="index.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:Fraunces,serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>';
   }
-})();
+});
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -222,7 +222,7 @@
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">documents v1.0 · 15/03/2026 16:36</div>
+<div class="version-tag">documents v1.0 · 15/03/2026 16:55</div>
 
 <script>
 // ── Données stockées en localStorage ──
