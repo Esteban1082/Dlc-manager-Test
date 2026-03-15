@@ -3,7 +3,7 @@
 <head>
 <script>
 (function() {
-  if (sessionStorage.getItem('pm_auth') !== '1') {
+  if (localStorage.getItem('pm_auth') !== '1') {
     window.location.replace('index.html');
   }
 })();

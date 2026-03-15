@@ -4,7 +4,7 @@
 <script>
 // Vérification session — redirige vers le hub si non connecté
 (function() {
-  if (sessionStorage.getItem('pm_auth') !== '1') {
+  if (localStorage.getItem('pm_auth') !== '1') {
     window.location.replace('index.html');
   }
 })();
