@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Températures – Pâtisserie Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#0f0f0d; --surface:#1a1a16; --border:#2e2e28;
+    --text:#f0ede4; --muted:#7a7a6e; --amber:#e8a045;
+    --red:#ff4040; --red-bg:rgba(255,64,64,.10);
+    --green:#4cdb8a; --green-bg:rgba(76,219,138,.10);
+    --yellow:#f5c842; --blue:#4db8ff;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
+  button { transition:all .15s; cursor:pointer; }
+  button:active { transform:scale(0.97); }
+
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 24px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--bg); z-index:100;
+  }
+  .logo-title { font-family:'Fraunces',serif; font-weight:900; font-size:20px; color:var(--amber); }
+  .logo-sub   { font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+  .back-btn {
+    padding:7px 14px; background:transparent; border:1px solid var(--border);
+    border-radius:8px; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:11px; text-decoration:none; display:flex; align-items:center; gap:6px;
+  }
+  .back-btn:hover { border-color:var(--amber); color:var(--text); }
+
+  .main { padding:20px 24px 80px; max-width:700px; margin:0 auto; }
+
+  .section-title {
+    display:flex; align-items:center; gap:10px;
+    font-size:11px; color:var(--muted); letter-spacing:2px;
+    text-transform:uppercase; margin:28px 0 14px;
+  }
+  .section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  .appliance-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; padding:18px; margin-bottom:12px;
+  }
+  .appliance-card.ok    { border-color:rgba(76,219,138,.3); }
+  .appliance-card.warn  { border-color:rgba(255,64,64,.4); }
+
+  .temp-input {
+    background:var(--bg); border:1px solid var(--border);
+    border-radius:10px; color:var(--text); font-family:'Fraunces',serif;
+    font-size:28px; font-weight:700; width:110px; text-align:center;
+    padding:10px 8px; outline:none; transition:border-color .15s;
+  }
+  .temp-input:focus { border-color:var(--amber); }
+
+  .histo-row {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 14px; background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; margin-bottom:6px; font-size:13px;
+  }
+
+  .toast-container { position:fixed; bottom:24px; right:24px; z-index:700; display:flex; flex-direction:column; gap:8px; }
+  .toast {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px 18px; font-size:13px; animation:slideIn .2s ease; max-width:320px;
+  }
+  @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:none;opacity:1} }
+  .version-tag { position:fixed; bottom:10px; left:14px; font-size:10px; color:var(--border); letter-spacing:1px; z-index:50; }
+
+  /* Modal appareils */
+  .modal-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.75);
+    backdrop-filter:blur(4px); z-index:600;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px; width:100%; max-width:420px; }
+  .modal-title { font-family:'Fraunces',serif; font-size:20px; font-weight:700; color:var(--amber); margin-bottom:20px; }
+  .form-input {
+    width:100%; padding:12px 16px; background:var(--bg);
+    border:1px solid var(--border); border-radius:10px;
+    color:var(--text); font-family:'DM Mono',monospace; font-size:14px;
+    outline:none; margin-bottom:12px; transition:border-color .15s;
+  }
+  .form-input:focus { border-color:var(--amber); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo-title">🌡️ Températures</div>
+    <div class="logo-sub">Pâtisserie Manager</div>
+  </div>
+  <a class="back-btn" href="hub.html">← Hub</a>
+</header>
+
+<div class="main">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">Relevé du jour</div>
+    <button onclick="openAddAppliance()"
+      style="padding:7px 14px;background:transparent;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);">
+      ⚙ Appareils
+    </button>
+  </div>
+  <div id="today-label" style="font-size:12px;color:var(--muted);margin-bottom:20px"></div>
+
+  <div id="appareils-list"></div>
+
+  <button onclick="saveAllTemps()"
+    style="width:100%;padding:14px;background:var(--amber);border:none;border-radius:12px;font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:#000;margin-top:8px">
+    ✓ Enregistrer le relevé
+  </button>
+
+  <div class="section-title" style="margin-top:36px">Historique</div>
+
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button onclick="setHistoFilter('semaine',this)" class="filter-btn active"
+      style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--amber);color:#000;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;">Cette semaine</button>
+    <button onclick="setHistoFilter('mois',this)" class="filter-btn"
+      style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;">Ce mois</button>
+    <button onclick="setHistoFilter('tout',this)" class="filter-btn"
+      style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;">Tout</button>
+  </div>
+
+  <div id="histo-list"></div>
+</div>
+
+<!-- Modal gestion appareils -->
+<div class="modal-overlay" id="modal-appareils" onclick="if(event.target.id==='modal-appareils')closeApplianceModal()">
+  <div class="modal">
+    <div class="modal-title">⚙ Gestion des appareils</div>
+    <div id="appareils-manage-list" style="margin-bottom:16px"></div>
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">AJOUTER UN APPAREIL</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <input id="new-appliance-name" class="form-input" type="text" placeholder="Ex : Frigo vitrine" style="margin-bottom:0;flex:1">
+      <input id="new-appliance-min" class="form-input" type="number" placeholder="Min" style="margin-bottom:0;width:70px">
+      <input id="new-appliance-max" class="form-input" type="number" placeholder="Max" style="margin-bottom:0;width:70px">
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:14px">Plage normale (ex: 0 à 4°C pour un frigo)</div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeApplianceModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Fermer</button>
+      <button onclick="addAppliance()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">＋ Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<div class="version-tag">temperatures v1.0 · 15/03/2026 14:00</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+let _apiCallId = 0;
+let appareils = [
+  { id:'frigo1',    nom:'Frigo vitrine',    min:0,   max:4   },
+  { id:'congel1',   nom:'Congélateur labo', min:-22, max:-18 },
+  { id:'frigo2',    nom:'Frigo labo',       min:0,   max:4   },
+];
+let histoData = [];
+let histoFilter = 'semaine';
+
+function api(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'dlcCb_' + (++_apiCallId);
+    const script = document.createElement('script');
+    const timer = setTimeout(() => { cleanup(); reject(new Error('Timeout')); }, 20000);
+    window[cbName] = (data) => { cleanup(); resolve(data); };
+    function cleanup() { clearTimeout(timer); delete window[cbName]; if (script.parentNode) script.remove(); }
+    script.onerror = () => { cleanup(); reject(new Error('Erreur réseau')); };
+    const p = new URLSearchParams({ ...params, callback: cbName });
+    script.src = API_URL + '?' + p.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function toast(msg, isError=false) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+const todayStr = new Date().toISOString().split('T')[0];
+
+function init() {
+  document.getElementById('today-label').textContent =
+    new Date().toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  renderAppareils();
+  loadHisto();
+}
+
+function renderAppareils() {
+  const list = document.getElementById('appareils-list');
+  if (!appareils.length) {
+    list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">
+      Aucun appareil configuré.<br>Clique sur ⚙ Appareils pour en ajouter.
+    </div>`;
+    return;
+  }
+  list.innerHTML = appareils.map(a => {
+    return `<div class="appliance-card" id="card-${a.id}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-size:17px;font-weight:700">${a.nom}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">Plage normale : ${a.min}°C → ${a.max}°C</div>
+        </div>
+        <div id="status-${a.id}" style="font-size:11px;color:var(--muted)"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <input class="temp-input" id="temp-${a.id}" type="number" step="0.1" placeholder="°C"
+          oninput="checkTemp('${a.id}')">
+        <div style="font-size:13px;color:var(--muted)">°C</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function checkTemp(id) {
+  const a = appareils.find(x => x.id === id);
+  if (!a) return;
+  const val = parseFloat(document.getElementById('temp-' + id).value);
+  const card   = document.getElementById('card-' + id);
+  const status = document.getElementById('status-' + id);
+  if (isNaN(val)) { card.className = 'appliance-card'; status.textContent = ''; return; }
+  const ok = val >= a.min && val <= a.max;
+  card.className = 'appliance-card ' + (ok ? 'ok' : 'warn');
+  status.style.color = ok ? 'var(--green)' : 'var(--red)';
+  status.textContent = ok ? '✓ Normal' : '⚠ Hors norme!';
+}
+
+async function saveAllTemps() {
+  const entries = appareils.map(a => {
+    const val = document.getElementById('temp-' + a.id)?.value;
+    return { id:a.id, nom:a.nom, temp:val, date:todayStr };
+  }).filter(e => e.temp !== '' && e.temp !== undefined);
+
+  if (!entries.length) { toast('⚠ Entre au moins une température', true); return; }
+
+  toast('⏳ Enregistrement…');
+  try {
+    const data = await api({ action:'saveTemperatures', entries:JSON.stringify(entries) });
+    if (data && data.success) {
+      toast(`✓ Relevé enregistré — ${entries.length} appareil${entries.length > 1 ? 's' : ''}`);
+      // Reset champs
+      appareils.forEach(a => {
+        const inp = document.getElementById('temp-' + a.id);
+        if (inp) inp.value = '';
+        document.getElementById('card-' + a.id).className = 'appliance-card';
+        document.getElementById('status-' + a.id).textContent = '';
+      });
+      loadHisto();
+    } else {
+      toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action saveTemperatures)'}`, true);
+    }
+  } catch(e) { toast('⚠ Erreur réseau', true); }
+}
+
+// ── Historique ──
+function setHistoFilter(f, btn) {
+  histoFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.style.background = 'transparent'; b.style.color = 'var(--muted)'; b.style.borderColor = 'var(--border)';
+  });
+  btn.style.background = 'var(--amber)'; btn.style.color = '#000'; btn.style.borderColor = 'var(--amber)';
+  renderHisto();
+}
+
+async function loadHisto() {
+  try {
+    const data = await api({ action:'getTemperatures' });
+    histoData = (data.success && data.temperatures) ? data.temperatures : [];
+    renderHisto();
+  } catch(e) {}
+}
+
+function renderHisto() {
+  const now = new Date(); now.setHours(0,0,0,0);
+  const filtered = histoData.filter(h => {
+    if (!h.date) return true;
+    const d = new Date(h.date + 'T00:00:00');
+    if (histoFilter === 'semaine') { const w = new Date(now); w.setDate(now.getDate()-7); return d >= w; }
+    if (histoFilter === 'mois')    { const m = new Date(now); m.setDate(now.getDate()-30); return d >= m; }
+    return true;
+  }).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+
+  const list = document.getElementById('histo-list');
+  if (!filtered.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucun relevé dans cette période</div>';
+    return;
+  }
+
+  const byDate = {};
+  filtered.forEach(h => { const k = h.date||'?'; if (!byDate[k]) byDate[k]=[]; byDate[k].push(h); });
+  let html = '';
+  for (const [dateKey, items] of Object.entries(byDate)) {
+    const label = dateKey === '?' ? 'Date inconnue' : new Date(dateKey+'T00:00:00').toLocaleDateString('fr-BE', {weekday:'short', day:'numeric', month:'short'});
+    const hasWarn = items.some(h => {
+      const a = appareils.find(x => x.id === h.id || x.nom === h.nom);
+      if (!a) return false;
+      const v = parseFloat(h.temp);
+      return !isNaN(v) && (v < a.min || v > a.max);
+    });
+    html += `<div style="font-size:11px;color:${hasWarn?'var(--red)':'var(--muted)'};letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px;display:flex;align-items:center;gap:8px">
+      ${hasWarn ? '⚠' : '✓'} ${label}
+      <span style="flex:1;height:1px;background:var(--border);display:block"></span>
+    </div>`;
+    html += items.map(h => {
+      const a = appareils.find(x => x.id === h.id || x.nom === h.nom);
+      const v = parseFloat(h.temp);
+      const ok = !a || isNaN(v) || (v >= a.min && v <= a.max);
+      return `<div class="histo-row" style="border-color:${ok?'var(--border)':'rgba(255,64,64,.3)'}">
+        <div>
+          <span style="font-weight:600">${h.nom || h.id}</span>
+          ${a ? `<span style="font-size:10px;color:var(--muted);margin-left:8px">${a.min}→${a.max}°C</span>` : ''}
+        </div>
+        <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:${ok?'var(--text)':'var(--red)'}">
+          ${isNaN(v) ? '—' : v + '°C'}
+          <span style="font-size:11px;margin-left:6px">${ok ? '' : '⚠'}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  list.innerHTML = html;
+}
+
+// ── Gestion appareils ──
+function openAddAppliance() {
+  renderManageList();
+  document.getElementById('new-appliance-name').value = '';
+  document.getElementById('new-appliance-min').value = '';
+  document.getElementById('new-appliance-max').value = '';
+  document.getElementById('modal-appareils').style.display = 'flex';
+}
+function closeApplianceModal() { document.getElementById('modal-appareils').style.display = 'none'; }
+
+function renderManageList() {
+  document.getElementById('appareils-manage-list').innerHTML = appareils.length
+    ? appareils.map(a => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:6px">
+        <div>
+          <span style="font-size:13px;font-weight:600">${a.nom}</span>
+          <span style="font-size:11px;color:var(--muted);margin-left:8px">${a.min}°C → ${a.max}°C</span>
+        </div>
+        <button onclick="removeAppliance('${a.id}')" style="padding:4px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:12px;color:var(--red);">🗑</button>
+      </div>`).join('')
+    : '<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Aucun appareil configuré.</div>';
+}
+
+function addAppliance() {
+  const nom = document.getElementById('new-appliance-name').value.trim();
+  const min = parseFloat(document.getElementById('new-appliance-min').value);
+  const max = parseFloat(document.getElementById('new-appliance-max').value);
+  if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
+  const id = 'app_' + Date.now();
+  appareils.push({ id, nom, min: isNaN(min) ? -99 : min, max: isNaN(max) ? 99 : max });
+  saveAppareilsLocal();
+  renderAppareils();
+  renderManageList();
+  document.getElementById('new-appliance-name').value = '';
+  toast(`✓ "${nom}" ajouté`);
+}
+
+function removeAppliance(id) {
+  appareils = appareils.filter(a => a.id !== id);
+  saveAppareilsLocal();
+  renderAppareils();
+  renderManageList();
+}
+
+function saveAppareilsLocal() {
+  try { localStorage.setItem('pm_appareils', JSON.stringify(appareils)); } catch(e) {}
+}
+function loadAppareilsLocal() {
+  try {
+    const saved = localStorage.getItem('pm_appareils');
+    if (saved) appareils = JSON.parse(saved);
+  } catch(e) {}
+}
+
+loadAppareilsLocal();
+init();
+</script>
+</body>
+</html>

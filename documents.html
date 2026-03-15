@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Documents – Pâtisserie Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#0f0f0d; --surface:#1a1a16; --border:#2e2e28;
+    --text:#f0ede4; --muted:#7a7a6e; --amber:#e8a045;
+    --red:#ff4040; --green:#4cdb8a; --yellow:#f5c842; --blue:#4db8ff;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
+  button { transition:all .15s; cursor:pointer; }
+  button:active { transform:scale(0.97); }
+
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 24px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--bg); z-index:100;
+  }
+  .logo-title { font-family:'Fraunces',serif; font-weight:900; font-size:20px; color:var(--amber); }
+  .logo-sub   { font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+  .back-btn {
+    padding:7px 14px; background:transparent; border:1px solid var(--border);
+    border-radius:8px; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:11px; text-decoration:none; display:flex; align-items:center; gap:6px;
+  }
+  .back-btn:hover { border-color:var(--amber); color:var(--text); }
+
+  .tabs {
+    display:flex; gap:0; border-bottom:1px solid var(--border);
+    padding:0 24px; position:sticky; top:57px; background:var(--bg); z-index:99;
+  }
+  .tab {
+    padding:14px 18px; font-size:12px; letter-spacing:1px; text-transform:uppercase;
+    color:var(--muted); border-bottom:2px solid transparent; cursor:pointer;
+    transition:all .15s; background:none; border-top:none; border-left:none; border-right:none;
+  }
+  .tab.active { color:var(--amber); border-bottom-color:var(--amber); }
+  .tab:hover { color:var(--text); }
+
+  .main { padding:20px 24px 80px; max-width:700px; margin:0 auto; }
+  .view { display:none; }
+  .view.active { display:block; }
+
+  /* Checklists */
+  .checklist-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; margin-bottom:16px; overflow:hidden;
+  }
+  .checklist-header {
+    padding:16px 18px; display:flex; align-items:center; justify-content:space-between;
+    cursor:pointer;
+  }
+  .checklist-header:hover { background:rgba(255,255,255,.02); }
+  .check-item {
+    display:flex; align-items:center; gap:12px;
+    padding:11px 18px; border-top:1px solid var(--border);
+    cursor:pointer; transition:background .15s;
+  }
+  .check-item:hover { background:rgba(255,255,255,.02); }
+  .check-item.done .check-label { text-decoration:line-through; color:var(--muted); }
+  .checkbox {
+    width:22px; height:22px; border-radius:6px; border:2px solid var(--border);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all .2s;
+  }
+  .check-item.done .checkbox { background:var(--green); border-color:var(--green); }
+
+  /* PDFs / Liens */
+  .doc-row {
+    display:flex; align-items:center; gap:14px;
+    padding:14px 16px; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; margin-bottom:8px; text-decoration:none; color:var(--text);
+    transition:all .2s;
+  }
+  .doc-row:hover { border-color:var(--amber); }
+
+  /* Contacts */
+  .contact-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:16px; margin-bottom:10px;
+  }
+
+  .modal-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.75);
+    backdrop-filter:blur(4px); z-index:600;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px; width:100%; max-width:440px; }
+  .modal-title { font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--amber); margin-bottom:18px; }
+  .form-input {
+    width:100%; padding:12px 16px; background:var(--bg);
+    border:1px solid var(--border); border-radius:10px;
+    color:var(--text); font-family:'DM Mono',monospace; font-size:14px;
+    outline:none; margin-bottom:10px; transition:border-color .15s;
+  }
+  .form-input:focus { border-color:var(--amber); }
+  .form-label { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:5px; display:block; }
+
+  .toast-container { position:fixed; bottom:24px; right:24px; z-index:700; display:flex; flex-direction:column; gap:8px; }
+  .toast { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 18px; font-size:13px; animation:slideIn .2s ease; max-width:320px; }
+  @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:none;opacity:1} }
+  .version-tag { position:fixed; bottom:10px; left:14px; font-size:10px; color:var(--border); letter-spacing:1px; z-index:50; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo-title">📁 Documents</div>
+    <div class="logo-sub">Pâtisserie Manager</div>
+  </div>
+  <a class="back-btn" href="hub.html">← Hub</a>
+</header>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('checklists',this)">✅ Checklists</button>
+  <button class="tab" onclick="switchTab('pdfs',this)">📄 Documents</button>
+  <button class="tab" onclick="switchTab('contacts',this)">📞 Contacts</button>
+</div>
+
+<div class="main">
+
+  <!-- ══ CHECKLISTS ══ -->
+  <div class="view active" id="view-checklists">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--amber)">Checklists</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="resetAllChecklists()" style="padding:7px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);">↺ Reset</button>
+        <button onclick="openAddChecklist()" style="padding:7px 12px;background:var(--amber);border:none;border-radius:8px;font-family:'Fraunces',serif;font-size:13px;font-weight:700;color:#000;">＋ Liste</button>
+      </div>
+    </div>
+    <div id="checklists-container"></div>
+  </div>
+
+  <!-- ══ PDFS / LIENS ══ -->
+  <div class="view" id="view-pdfs">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--amber)">Documents & Fiches</div>
+      <button onclick="openAddDoc()" style="padding:7px 12px;background:var(--amber);border:none;border-radius:8px;font-family:'Fraunces',serif;font-size:13px;font-weight:700;color:#000;">＋ Ajouter</button>
+    </div>
+    <div id="pdfs-container"></div>
+  </div>
+
+  <!-- ══ CONTACTS ══ -->
+  <div class="view" id="view-contacts">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--amber)">Contacts utiles</div>
+      <button onclick="openAddContact()" style="padding:7px 12px;background:var(--amber);border:none;border-radius:8px;font-family:'Fraunces',serif;font-size:13px;font-weight:700;color:#000;">＋ Ajouter</button>
+    </div>
+    <div id="contacts-container"></div>
+  </div>
+
+</div>
+
+<!-- Modal ajout checklist -->
+<div class="modal-overlay" id="modal-checklist" onclick="if(event.target.id==='modal-checklist')closeChecklistModal()">
+  <div class="modal">
+    <div class="modal-title">＋ Nouvelle checklist</div>
+    <label class="form-label">Nom de la liste</label>
+    <input id="cl-nom" class="form-input" placeholder="Ex : Ouverture matin">
+    <label class="form-label">Tâches (une par ligne)</label>
+    <textarea id="cl-tasks" style="width:100%;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;resize:vertical;min-height:120px;margin-bottom:14px;" placeholder="Nettoyer le plan de travail&#10;Vérifier le frigo&#10;Mettre à jour les DLC"></textarea>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeChecklistModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
+      <button onclick="saveChecklist()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Créer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal ajout document -->
+<div class="modal-overlay" id="modal-doc" onclick="if(event.target.id==='modal-doc')closeDocModal()">
+  <div class="modal">
+    <div class="modal-title">＋ Nouveau document</div>
+    <label class="form-label">Titre *</label>
+    <input id="doc-titre" class="form-input" placeholder="Ex : Procédure nettoyage">
+    <label class="form-label">URL du document (Google Drive, PDF en ligne…)</label>
+    <input id="doc-url" class="form-input" type="url" placeholder="https://...">
+    <label class="form-label">Catégorie</label>
+    <select id="doc-categorie" class="form-input" style="appearance:none">
+      <option value="hygiene">🧼 Hygiène HACCP</option>
+      <option value="procedure">📋 Procédure</option>
+      <option value="fiche">📄 Fiche produit</option>
+      <option value="autre">📁 Autre</option>
+    </select>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeDocModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
+      <button onclick="saveDoc()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal ajout contact -->
+<div class="modal-overlay" id="modal-contact" onclick="if(event.target.id==='modal-contact')closeContactModal()">
+  <div class="modal">
+    <div class="modal-title">＋ Nouveau contact</div>
+    <label class="form-label">Nom / Fonction *</label>
+    <input id="contact-nom" class="form-input" placeholder="Ex : Responsable hygiène">
+    <label class="form-label">Téléphone</label>
+    <input id="contact-tel" class="form-input" type="tel" placeholder="+32 ...">
+    <label class="form-label">Email</label>
+    <input id="contact-email" class="form-input" type="email" placeholder="...@robthemarket.be">
+    <label class="form-label">Note (optionnel)</label>
+    <input id="contact-note" class="form-input" placeholder="Ex : Disponible lun-ven 9h-17h">
+    <div style="display:flex;gap:10px">
+      <button onclick="closeContactModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
+      <button onclick="saveContact()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<div class="version-tag">documents v1.0 · 15/03/2026 14:00</div>
+
+<script>
+// ── Données stockées en localStorage ──
+function load(key, def) {
+  try { const v = localStorage.getItem('pm_' + key); return v ? JSON.parse(v) : def; } catch(e) { return def; }
+}
+function save(key, val) { try { localStorage.setItem('pm_' + key, JSON.stringify(val)); } catch(e) {} }
+
+let checklists = load('checklists', [
+  { id:'ouverture', nom:'Ouverture matin', tasks:[
+    { id:'t1', label:'Vérifier les températures frigos', done:false },
+    { id:'t2', label:'Contrôler les DLC du jour', done:false },
+    { id:'t3', label:'Nettoyer le plan de travail', done:false },
+    { id:'t4', label:'Vérifier les stocks', done:false },
+  ]},
+  { id:'fermeture', nom:'Fermeture soir', tasks:[
+    { id:'t5', label:'Ranger et filmer tous les produits', done:false },
+    { id:'t6', label:'Nettoyer et désinfecter les surfaces', done:false },
+    { id:'t7', label:'Vider les poubelles', done:false },
+    { id:'t8', label:'Noter les pertes de la journée', done:false },
+    { id:'t9', label:'Vérifier que les frigos sont fermés', done:false },
+  ]},
+]);
+let docs = load('docs', [
+  { id:'d1', titre:'Plan de nettoyage HACCP', url:'', categorie:'hygiene' },
+  { id:'d2', titre:'Fiche traçabilité produits', url:'', categorie:'procedure' },
+]);
+let contacts = load('contacts', [
+  { id:'c1', nom:'Responsable pâtisserie', tel:'', email:'', note:'' },
+]);
+
+function toast(msg, isError=false) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// ── Navigation ──
+function switchTab(tab, btn) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-' + tab).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ═══════════════════ CHECKLISTS ═══════════════════
+function renderChecklists() {
+  const el = document.getElementById('checklists-container');
+  if (!checklists.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucune checklist. Clique sur ＋ Liste pour en créer une.</div>';
+    return;
+  }
+  el.innerHTML = checklists.map(cl => {
+    const done = cl.tasks.filter(t => t.done).length;
+    const pct  = cl.tasks.length ? Math.round(done / cl.tasks.length * 100) : 0;
+    const color = pct === 100 ? 'var(--green)' : pct > 0 ? 'var(--yellow)' : 'var(--muted)';
+    return `<div class="checklist-card">
+      <div class="checklist-header" onclick="toggleChecklist('${cl.id}')">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-size:17px;font-weight:700">${cl.nom}</div>
+          <div style="font-size:11px;color:${color};margin-top:4px">${done}/${cl.tasks.length} tâche${cl.tasks.length !== 1 ? 's' : ''} ${pct === 100 ? '✓ Terminé' : pct > 0 ? 'en cours' : ''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:40px;height:40px;border-radius:50%;background:conic-gradient(${color} ${pct}%, var(--border) 0);display:flex;align-items:center;justify-content:center">
+            <div style="width:30px;height:30px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${color}">${pct}%</div>
+          </div>
+          <button onclick="deleteChecklist('${cl.id}',event)" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);">🗑</button>
+        </div>
+      </div>
+      <div id="cl-tasks-${cl.id}">
+        ${cl.tasks.map(t => `
+          <div class="check-item ${t.done ? 'done' : ''}" onclick="toggleTask('${cl.id}','${t.id}')">
+            <div class="checkbox">${t.done ? '<span style="color:#000;font-size:14px;font-weight:900">✓</span>' : ''}</div>
+            <span class="check-label" style="font-size:14px">${t.label}</span>
+          </div>`).join('')}
+        <div style="padding:10px 18px;border-top:1px solid var(--border)">
+          <button onclick="openAddTask('${cl.id}')"
+            style="width:100%;padding:8px;background:transparent;border:1px dashed var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">
+            ＋ Ajouter une tâche
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleChecklist(id) { /* expandable - already visible */ }
+
+function toggleTask(clId, taskId) {
+  const cl = checklists.find(c => c.id === clId);
+  if (!cl) return;
+  const t = cl.tasks.find(x => x.id === taskId);
+  if (t) { t.done = !t.done; save('checklists', checklists); renderChecklists(); }
+}
+
+function deleteChecklist(id, e) {
+  e.stopPropagation();
+  if (!confirm('Supprimer cette checklist ?')) return;
+  checklists = checklists.filter(c => c.id !== id);
+  save('checklists', checklists);
+  renderChecklists();
+}
+
+function resetAllChecklists() {
+  if (!confirm('Remettre toutes les tâches à zéro ?')) return;
+  checklists.forEach(cl => cl.tasks.forEach(t => t.done = false));
+  save('checklists', checklists);
+  renderChecklists();
+  toast('✓ Toutes les checklists remises à zéro');
+}
+
+function openAddTask(clId) {
+  const label = prompt('Nom de la tâche :');
+  if (!label || !label.trim()) return;
+  const cl = checklists.find(c => c.id === clId);
+  if (!cl) return;
+  cl.tasks.push({ id:'t_' + Date.now(), label:label.trim(), done:false });
+  save('checklists', checklists);
+  renderChecklists();
+}
+
+// Checklist modal
+function openAddChecklist() {
+  document.getElementById('cl-nom').value = '';
+  document.getElementById('cl-tasks').value = '';
+  document.getElementById('modal-checklist').style.display = 'flex';
+  setTimeout(() => document.getElementById('cl-nom').focus(), 100);
+}
+function closeChecklistModal() { document.getElementById('modal-checklist').style.display = 'none'; }
+function saveChecklist() {
+  const nom = document.getElementById('cl-nom').value.trim();
+  if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
+  const lines = document.getElementById('cl-tasks').value.split('\n').map(l => l.trim()).filter(Boolean);
+  const tasks = lines.map((l, i) => ({ id:'t_' + Date.now() + i, label:l, done:false }));
+  checklists.push({ id:'cl_' + Date.now(), nom, tasks });
+  save('checklists', checklists);
+  renderChecklists();
+  closeChecklistModal();
+  toast(`✓ Checklist "${nom}" créée`);
+}
+
+// ═══════════════════ DOCUMENTS ═══════════════════
+const DOC_ICONS = { hygiene:'🧼', procedure:'📋', fiche:'📄', autre:'📁' };
+const DOC_LABELS = { hygiene:'Hygiène HACCP', procedure:'Procédure', fiche:'Fiche produit', autre:'Autre' };
+
+function renderDocs() {
+  const el = document.getElementById('pdfs-container');
+  if (!docs.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucun document. Clique sur ＋ Ajouter.</div>';
+    return;
+  }
+  const byCategorie = {};
+  docs.forEach(d => { if (!byCategorie[d.categorie]) byCategorie[d.categorie]=[]; byCategorie[d.categorie].push(d); });
+  let html = '';
+  for (const [cat, items] of Object.entries(byCategorie)) {
+    html += `<div style="font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin:20px 0 10px;display:flex;align-items:center;gap:8px">
+      ${DOC_ICONS[cat]||'📁'} ${DOC_LABELS[cat]||cat}
+      <span style="flex:1;height:1px;background:var(--border)"></span>
+    </div>`;
+    html += items.map(d => {
+      const tag = d.url ? 'a' : 'div';
+      const linkAttr = d.url ? `href="${d.url}" target="_blank" rel="noopener"` : '';
+      return `<${tag} ${linkAttr} class="doc-row">
+        <div style="font-size:24px;flex-shrink:0">${DOC_ICONS[d.categorie]||'📄'}</div>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:600">${d.titre}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${d.url ? '🔗 Lien disponible' : '⚠ Pas de lien configuré'}</div>
+        </div>
+        <button onclick="deleteDoc('${d.id}',event)" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);flex-shrink:0">🗑</button>
+      </${tag}>`;
+    }).join('');
+  }
+  el.innerHTML = html;
+}
+
+function openAddDoc() {
+  ['doc-titre','doc-url'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('modal-doc').style.display='flex';
+  setTimeout(() => document.getElementById('doc-titre').focus(), 100);
+}
+function closeDocModal() { document.getElementById('modal-doc').style.display='none'; }
+function saveDoc() {
+  const titre = document.getElementById('doc-titre').value.trim();
+  if (!titre) { toast('⚠ Le titre est obligatoire', true); return; }
+  docs.push({ id:'d_'+Date.now(), titre, url:document.getElementById('doc-url').value.trim(), categorie:document.getElementById('doc-categorie').value });
+  save('docs', docs); renderDocs(); closeDocModal(); toast(`✓ "${titre}" ajouté`);
+}
+function deleteDoc(id, e) {
+  e.preventDefault(); e.stopPropagation();
+  if (!confirm('Supprimer ce document ?')) return;
+  docs = docs.filter(d => d.id !== id); save('docs', docs); renderDocs();
+}
+
+// ═══════════════════ CONTACTS ═══════════════════
+function renderContacts() {
+  const el = document.getElementById('contacts-container');
+  if (!contacts.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucun contact. Clique sur ＋ Ajouter.</div>';
+    return;
+  }
+  el.innerHTML = contacts.map(c => `
+    <div class="contact-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700;margin-bottom:8px">${c.nom}</div>
+          ${c.tel   ? `<a href="tel:${c.tel}" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--blue);text-decoration:none;margin-bottom:4px">📞 ${c.tel}</a>` : ''}
+          ${c.email ? `<a href="mailto:${c.email}" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--amber);text-decoration:none;margin-bottom:4px">✉️ ${c.email}</a>` : ''}
+          ${c.note  ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ ${c.note}</div>` : ''}
+        </div>
+        <button onclick="deleteContact('${c.id}')" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);flex-shrink:0;margin-left:10px">🗑</button>
+      </div>
+    </div>`).join('');
+}
+
+function openAddContact() {
+  ['contact-nom','contact-tel','contact-email','contact-note'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('modal-contact').style.display='flex';
+  setTimeout(() => document.getElementById('contact-nom').focus(), 100);
+}
+function closeContactModal() { document.getElementById('modal-contact').style.display='none'; }
+function saveContact() {
+  const nom = document.getElementById('contact-nom').value.trim();
+  if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
+  contacts.push({ id:'c_'+Date.now(), nom, tel:document.getElementById('contact-tel').value.trim(), email:document.getElementById('contact-email').value.trim(), note:document.getElementById('contact-note').value.trim() });
+  save('contacts', contacts); renderContacts(); closeContactModal(); toast(`✓ "${nom}" ajouté`);
+}
+function deleteContact(id) {
+  if (!confirm('Supprimer ce contact ?')) return;
+  contacts = contacts.filter(c => c.id !== id); save('contacts', contacts); renderContacts();
+}
+
+// ── Init ──
+renderChecklists(); renderDocs(); renderContacts();
+</script>
+</body>
+</html>

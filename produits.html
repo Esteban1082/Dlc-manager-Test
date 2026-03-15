@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base produits – Pâtisserie Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#0f0f0d; --surface:#1a1a16; --border:#2e2e28;
+    --text:#f0ede4; --muted:#7a7a6e; --amber:#e8a045;
+    --red:#ff4040; --green:#4cdb8a; --yellow:#f5c842;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
+  button { transition:all .15s; cursor:pointer; }
+  button:active { transform:scale(0.97); }
+
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 24px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--bg); z-index:100;
+  }
+  .logo-title { font-family:'Fraunces',serif; font-weight:900; font-size:20px; color:var(--amber); }
+  .logo-sub   { font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+  .back-btn {
+    padding:7px 14px; background:transparent; border:1px solid var(--border);
+    border-radius:8px; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:11px; text-decoration:none; display:flex; align-items:center; gap:6px;
+  }
+  .back-btn:hover { border-color:var(--amber); color:var(--text); }
+
+  .main { padding:20px 24px 80px; max-width:700px; margin:0 auto; }
+
+  .modal-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.7);
+    backdrop-filter:blur(4px); z-index:600;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .modal {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:16px; padding:28px; width:100%; max-width:420px;
+  }
+  .modal-title { font-family:'Fraunces',serif; font-size:20px; font-weight:700; color:var(--amber); margin-bottom:20px; }
+  .form-input {
+    width:100%; padding:12px 16px; background:var(--bg);
+    border:1px solid var(--border); border-radius:10px;
+    color:var(--text); font-family:'DM Mono',monospace; font-size:14px;
+    outline:none; margin-bottom:12px; transition:border-color .15s;
+  }
+  .form-input:focus { border-color:var(--amber); }
+  .form-label { font-size:11px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; display:block; }
+
+  .toast-container { position:fixed; bottom:24px; right:24px; z-index:700; display:flex; flex-direction:column; gap:8px; }
+  .toast {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px 18px; font-size:13px; animation:slideIn .2s ease; max-width:320px;
+  }
+  @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:none;opacity:1} }
+
+  .version-tag { position:fixed; bottom:10px; left:14px; font-size:10px; color:var(--border); letter-spacing:1px; z-index:50; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo-title">📋 Base produits</div>
+    <div class="logo-sub">Pâtisserie Manager</div>
+  </div>
+  <a class="back-btn" href="hub.html">← Hub</a>
+</header>
+
+<div class="main">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">Catalogue articles</div>
+    <button onclick="openAddModal()"
+      style="padding:8px 16px;background:var(--amber);border:none;border-radius:8px;font-family:'Fraunces',serif;font-size:14px;font-weight:600;color:#000;">
+      ＋ Nouveau
+    </button>
+  </div>
+
+  <input id="produits-search" type="text" placeholder="🔍 Rechercher par nom, marque ou code-barres…"
+    oninput="renderList()" autocomplete="off"
+    style="width:100%;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;margin-bottom:10px;transition:border-color .15s">
+
+  <div id="produits-stats" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
+  <div id="produits-list"></div>
+</div>
+
+<!-- Modal ajout produit -->
+<div class="modal-overlay" id="modal-add" onclick="if(event.target.id==='modal-add')closeAddModal()">
+  <div class="modal">
+    <div class="modal-title">＋ Nouveau produit</div>
+    <label class="form-label">Nom de l'article *</label>
+    <input id="add-nom" class="form-input" type="text" placeholder="Ex : Tarte au citron">
+    <label class="form-label">Patissier / Marque</label>
+    <input id="add-marque" class="form-input" type="text" placeholder="Ex : Maison">
+    <label class="form-label">Code-barres (optionnel)</label>
+    <input id="add-barcode" class="form-input" type="text" placeholder="Ex : 5400141234567">
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button onclick="closeAddModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
+      <button onclick="addProduct()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmation suppression -->
+<div class="modal-overlay" id="modal-confirm" onclick="">
+  <div class="modal">
+    <div class="modal-title" style="color:var(--red)">⚠ Confirmer</div>
+    <div id="confirm-msg" style="font-size:14px;color:var(--muted);margin-bottom:24px"></div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeConfirm()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
+      <button id="confirm-btn" style="flex:1;padding:12px;background:var(--red);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#fff;">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<div class="version-tag">produits v1.0 · 15/03/2026 14:00</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+let sheetProducts = [];
+let _apiCallId = 0;
+
+function api(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'dlcCb_' + (++_apiCallId);
+    const script = document.createElement('script');
+    const timer = setTimeout(() => { cleanup(); reject(new Error('Timeout')); }, 20000);
+    window[cbName] = (data) => { cleanup(); resolve(data); };
+    function cleanup() { clearTimeout(timer); delete window[cbName]; if (script.parentNode) script.remove(); }
+    script.onerror = () => { cleanup(); reject(new Error('Erreur réseau')); };
+    const p = new URLSearchParams({ ...params, callback: cbName });
+    script.src = API_URL + '?' + p.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function toast(msg, isError = false) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function getProduitFields(p) {
+  const keys = Object.keys(p);
+  const nomKey    = keys.find(k => /nom_article|^nom$|^name$|article|designation|libelle/i.test(k));
+  const marqueKey = keys.find(k => /patissier|marque|brand|fournisseur|fabricant/i.test(k));
+  const barcodeKey= keys.find(k => /code_barres|barcode|ean|upc|^code$/i.test(k));
+  return {
+    nom:     (nomKey     ? String(p[nomKey]     || '') : '').trim(),
+    marque:  (marqueKey  ? String(p[marqueKey]  || '') : '').trim(),
+    barcode: (barcodeKey ? String(p[barcodeKey] || '') : '').trim(),
+  };
+}
+
+function renderList() {
+  const q = (document.getElementById('produits-search').value || '').toLowerCase().trim();
+  const items = q
+    ? sheetProducts.filter(p => { const f = getProduitFields(p); return f.nom.toLowerCase().includes(q) || f.marque.toLowerCase().includes(q) || f.barcode.includes(q); })
+    : sheetProducts;
+
+  const statsEl = document.getElementById('produits-stats');
+  statsEl.textContent = `${sheetProducts.length} produit${sheetProducts.length !== 1 ? 's' : ''} dans la base${q ? ` · ${items.length} résultat${items.length !== 1 ? 's' : ''}` : ''}`;
+
+  const list = document.getElementById('produits-list');
+  if (!items.length) {
+    list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:36px;margin-bottom:12px">📋</div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">${q ? 'Aucun résultat' : 'Base vide'}</div>
+      <div style="font-size:12px">${q ? 'Essaie un autre terme' : 'Clique sur ＋ Nouveau pour ajouter'}</div></div>`;
+    return;
+  }
+  list.innerHTML = items.map(p => {
+    const { nom, marque, barcode } = getProduitFields(p);
+    const sN = nom.replace(/'/g, "\\'"), sM = marque.replace(/'/g, "\\'");
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom || '<span style="color:var(--muted);font-style:italic">Sans nom</span>'}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${marque}${barcode ? ' · ' + barcode : ''}</div>
+      </div>
+      <button onclick="deleteProduct('${sN}','${sM}')"
+        style="flex-shrink:0;padding:7px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:7px;font-size:14px;color:var(--red);">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+// ── Ajout ──
+function openAddModal() {
+  ['add-nom','add-marque','add-barcode'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('modal-add').style.display = 'flex';
+  setTimeout(() => document.getElementById('add-nom').focus(), 100);
+}
+function closeAddModal() { document.getElementById('modal-add').style.display = 'none'; }
+
+async function addProduct() {
+  const nom    = document.getElementById('add-nom').value.trim();
+  const marque = document.getElementById('add-marque').value.trim();
+  const barcode= document.getElementById('add-barcode').value.trim();
+  if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
+  toast('⏳ Enregistrement…');
+  closeAddModal();
+  try {
+    const data = await api({ action:'addProduct', name:nom, brand:marque, barcode });
+    if (data && data.success) {
+      toast(`✓ "${nom}" ajouté à la base`);
+      const d2 = await api({ action:'getProducts' });
+      if (d2.success) { sheetProducts = d2.products; renderList(); }
+    } else {
+      toast(`⚠ ${data?.error || 'Erreur Apps Script'}`, true);
+    }
+  } catch(e) { toast('⚠ Erreur réseau', true); }
+}
+
+// ── Suppression ──
+let _confirmCb = null;
+function askConfirm(msg, cb) {
+  _confirmCb = cb;
+  document.getElementById('confirm-msg').textContent = msg;
+  document.getElementById('confirm-btn').onclick = () => { closeConfirm(); cb(); };
+  document.getElementById('modal-confirm').style.display = 'flex';
+}
+function closeConfirm() { document.getElementById('modal-confirm').style.display = 'none'; }
+
+async function deleteProduct(nom, marque) {
+  askConfirm(`Supprimer "${nom}" de la base produits ?`, async () => {
+    toast(`⏳ Suppression de "${nom}"…`);
+    try {
+      const data = await api({ action:'deleteProduct', name:nom, brand:marque });
+      if (data && data.success) {
+        sheetProducts = sheetProducts.filter(p => {
+          const f = getProduitFields(p);
+          return !(f.nom.toLowerCase() === nom.toLowerCase() && f.marque.toLowerCase() === marque.toLowerCase());
+        });
+        renderList();
+        toast(`✓ "${nom}" supprimé`);
+      } else {
+        toast(`⚠ ${data?.error || 'Erreur Apps Script'}`, true);
+      }
+    } catch(e) { toast('⚠ Erreur réseau', true); }
+  });
+}
+
+// ── Init ──
+async function init() {
+  document.getElementById('produits-list').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
+  try {
+    const d = await api({ action:'getProducts' });
+    if (d.success) { sheetProducts = d.products; renderList(); }
+    else { document.getElementById('produits-list').innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur de chargement</div>'; }
+  } catch(e) {
+    document.getElementById('produits-list').innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Hors ligne</div>';
+  }
+}
+init();
+</script>
+</body>
+</html>

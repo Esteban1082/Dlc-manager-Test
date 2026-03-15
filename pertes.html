@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pertes – Pâtisserie Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#0f0f0d; --surface:#1a1a16; --border:#2e2e28;
+    --text:#f0ede4; --muted:#7a7a6e; --amber:#e8a045;
+    --red:#ff4040; --red-bg:rgba(255,64,64,.10);
+    --yellow:#f5c842; --green:#4cdb8a;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
+  button { transition:all .15s; cursor:pointer; }
+  button:active { transform:scale(0.97); }
+
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 24px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--bg); z-index:100;
+  }
+  .logo-title { font-family:'Fraunces',serif; font-weight:900; font-size:20px; color:var(--amber); }
+  .logo-sub   { font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+  .back-btn {
+    padding:7px 14px; background:transparent; border:1px solid var(--border);
+    border-radius:8px; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:11px; text-decoration:none; display:flex; align-items:center; gap:6px;
+  }
+  .back-btn:hover { border-color:var(--amber); color:var(--text); }
+
+  .main { padding:20px 24px 80px; max-width:700px; margin:0 auto; }
+
+  .filter-btn {
+    padding:7px 14px; border-radius:8px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:11px; letter-spacing:1px; text-transform:uppercase;
+  }
+  .filter-btn:hover { border-color:var(--amber); color:var(--text); }
+  .filter-btn.active { background:var(--amber); color:#000; border-color:var(--amber); }
+
+  .barcode-row { display:flex; gap:8px; }
+
+  .histo-section-title {
+    display:flex; align-items:center; gap:10px;
+    font-size:11px; color:var(--muted); letter-spacing:2px;
+    text-transform:uppercase; margin:20px 0 10px;
+  }
+  .histo-section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  .modal-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.7);
+    backdrop-filter:blur(4px); z-index:600;
+    align-items:center; justify-content:center; padding:20px;
+    animation:fadeIn .2s ease;
+  }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  .modal {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:16px; padding:28px; width:100%; max-width:420px;
+  }
+  .modal-title { font-family:'Fraunces',serif; font-size:20px; font-weight:700; color:var(--amber); margin-bottom:20px; }
+
+  .toast-container { position:fixed; bottom:24px; right:24px; z-index:700; display:flex; flex-direction:column; gap:8px; }
+  .toast {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px 18px; font-size:13px; display:flex; align-items:center; gap:10px;
+    animation:slideIn .2s ease; max-width:320px;
+  }
+  @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+
+  .version-tag { position:fixed; bottom:10px; left:14px; font-size:10px; color:var(--border); letter-spacing:1px; z-index:50; }
+
+  /* Scanner modal */
+  #modal-scanner { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:700;
+    align-items:center; justify-content:center; padding:20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo-title">📉 Pertes</div>
+    <div class="logo-sub">Pâtisserie Manager</div>
+  </div>
+  <a class="back-btn" href="hub.html">← Hub</a>
+</header>
+
+<div class="main">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">Enregistrer une perte</div>
+  </div>
+
+  <!-- Recherche produit -->
+  <div style="position:relative;margin-bottom:12px">
+    <div class="barcode-row">
+      <input id="pertes-search" type="text" placeholder="🔍  Rechercher un produit…"
+        oninput="onPertesInput()" onkeydown="if(event.key==='Enter'){hidePertesDropdown();searchPertesProduct()}"
+        autocomplete="off"
+        style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none">
+      <button onclick="openPertesScanner()" title="Scanner"
+        style="flex-shrink:0;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:20px;">📷</button>
+    </div>
+    <div id="pertes-suggestions" style="display:none;position:absolute;left:0;right:0;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:4px"></div>
+  </div>
+
+  <!-- Produit sélectionné -->
+  <div id="pertes-selected" style="display:none;background:var(--surface);border:1px solid var(--amber);border-radius:12px;padding:16px;margin-bottom:16px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div id="ps-nom" style="font-family:'Fraunces',serif;font-size:17px;font-weight:700;margin-bottom:3px"></div>
+        <div id="ps-meta" style="font-size:12px;color:var(--muted)"></div>
+      </div>
+      <button onclick="clearPertesSelection()"
+        style="padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted);">✕ Changer</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      <label style="font-size:12px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">Quantité perdue</label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button onclick="adjustQty(-1)" style="width:36px;height:36px;background:var(--border);border:none;border-radius:8px;font-size:18px;color:var(--text);display:flex;align-items:center;justify-content:center;font-weight:700">−</button>
+        <input id="pertes-qty" type="number" min="1" max="999" value="1"
+          style="width:64px;text-align:center;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:18px;font-weight:700;outline:none">
+        <button onclick="adjustQty(1)" style="width:36px;height:36px;background:var(--border);border:none;border-radius:8px;font-size:18px;color:var(--text);display:flex;align-items:center;justify-content:center;font-weight:700">＋</button>
+      </div>
+    </div>
+    <button onclick="enregistrerPerte()"
+      style="width:100%;padding:14px;background:var(--red);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:#fff;">
+      📉 Enregistrer la perte
+    </button>
+  </div>
+
+  <!-- Historique -->
+  <div style="display:flex;align-items:center;gap:12px;margin:28px 0 16px">
+    <div style="font-size:12px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;white-space:nowrap">Historique des pertes</div>
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+    <button onclick="loadPertes()" style="padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;">↻</button>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button onclick="setPertesFilter('today',this)" class="filter-btn">Aujourd'hui</button>
+    <button onclick="setPertesFilter('semaine',this)" class="filter-btn active">Cette semaine</button>
+    <button onclick="setPertesFilter('mois',this)" class="filter-btn">Ce mois</button>
+    <button onclick="setPertesFilter('tout',this)" class="filter-btn">Tout</button>
+  </div>
+
+  <div id="pertes-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px"></div>
+  <div id="pertes-list"></div>
+</div>
+
+<!-- Scanner Modal -->
+<div id="modal-scanner" onclick="if(event.target.id==='modal-scanner')closeScanner()">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;width:100%;max-width:420px">
+    <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber);margin-bottom:16px">📷 Scanner un code-barres</div>
+    <div id="scanner-inner" style="width:100%;border-radius:10px;overflow:hidden;background:#000;min-height:200px"></div>
+    <div id="scan-status" style="text-align:center;font-size:13px;color:var(--muted);margin-top:12px">⏳ Chargement…</div>
+    <button onclick="closeScanner()" style="width:100%;margin-top:16px;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">✕ Fermer</button>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<div class="version-tag">pertes v1.0 · 15/03/2026 14:00</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+
+let sheetProducts = [];
+let pertesData = [];
+let pertesFilter = 'semaine';
+let selectedPerte = null;
+let _apiCallId = 0;
+let html5Scanner = null;
+
+function api(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'dlcCb_' + (++_apiCallId);
+    const script = document.createElement('script');
+    const timer = setTimeout(() => { cleanup(); reject(new Error('Timeout')); }, 20000);
+    window[cbName] = (data) => { cleanup(); resolve(data); };
+    function cleanup() { clearTimeout(timer); delete window[cbName]; if (script.parentNode) script.remove(); }
+    script.onerror = () => { cleanup(); reject(new Error('Erreur réseau')); };
+    const p = new URLSearchParams({ ...params, callback: cbName });
+    script.src = API_URL + '?' + p.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function toast(msg, isError = false) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function fmtDate(str) {
+  const d = new Date(str + 'T00:00:00');
+  return d.toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' });
+}
+
+function getProduitFields(p) {
+  const keys = Object.keys(p);
+  const nomKey    = keys.find(k => /nom_article|^nom$|^name$|article|designation|libelle/i.test(k));
+  const marqueKey = keys.find(k => /patissier|marque|brand|fournisseur|fabricant/i.test(k));
+  const barcodeKey= keys.find(k => /code_barres|barcode|ean|upc|^code$/i.test(k));
+  return {
+    nom:     (nomKey     ? String(p[nomKey]     || '') : '').trim(),
+    marque:  (marqueKey  ? String(p[marqueKey]  || '') : '').trim(),
+    barcode: (barcodeKey ? String(p[barcodeKey] || '') : '').trim(),
+  };
+}
+
+// ── Recherche produit ──
+let pertesSearchTimer = null;
+function onPertesInput() {
+  clearTimeout(pertesSearchTimer);
+  pertesSearchTimer = setTimeout(showPertesDropdown, 200);
+}
+
+function showPertesDropdown() {
+  const q = document.getElementById('pertes-search').value.toLowerCase().trim();
+  const dd = document.getElementById('pertes-suggestions');
+  if (!q || q.length < 2) { dd.style.display = 'none'; return; }
+  const hits = sheetProducts.filter(p => {
+    const f = getProduitFields(p);
+    return f.nom.toLowerCase().includes(q) || f.marque.toLowerCase().includes(q) || f.barcode.includes(q);
+  }).slice(0, 6);
+  if (!hits.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = hits.map(p => {
+    const { nom, marque, barcode } = getProduitFields(p);
+    return `<div onclick="selectPertesProduct('${nom.replace(/'/g,"\\'")}','${marque.replace(/'/g,"\\'")}','${barcode}')"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;"
+      onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background=''">
+      <span style="font-weight:600">${nom}</span>
+      <span style="color:var(--muted);font-size:11px;margin-left:8px">${marque}${barcode ? ' · ' + barcode : ''}</span>
+    </div>`;
+  }).join('');
+  dd.style.display = 'block';
+}
+
+function hidePertesDropdown() { document.getElementById('pertes-suggestions').style.display = 'none'; }
+
+function searchPertesProduct() {
+  const q = document.getElementById('pertes-search').value.toLowerCase().trim();
+  if (!q) return;
+  const hit = sheetProducts.find(p => {
+    const f = getProduitFields(p);
+    return f.nom.toLowerCase().includes(q) || f.barcode === q;
+  });
+  if (hit) {
+    const f = getProduitFields(hit);
+    selectPertesProduct(f.nom, f.marque, f.barcode);
+  } else {
+    toast('⚠ Produit non trouvé dans la base', true);
+  }
+}
+
+function selectPertesProduct(nom, marque, barcode) {
+  hidePertesDropdown();
+  selectedPerte = { nom, marque, barcode };
+  document.getElementById('ps-nom').textContent = nom;
+  document.getElementById('ps-meta').textContent = marque + (barcode ? ' · ' + barcode : '');
+  document.getElementById('pertes-qty').value = 1;
+  document.getElementById('pertes-selected').style.display = 'block';
+  document.getElementById('pertes-search').value = '';
+}
+
+function clearPertesSelection() {
+  selectedPerte = null;
+  document.getElementById('pertes-selected').style.display = 'none';
+  document.getElementById('pertes-search').value = '';
+  document.getElementById('pertes-search').focus();
+}
+
+function adjustQty(delta) {
+  const inp = document.getElementById('pertes-qty');
+  inp.value = Math.max(1, Math.min(999, (parseInt(inp.value) || 1) + delta));
+}
+
+async function enregistrerPerte() {
+  if (!selectedPerte) return;
+  const qty = parseInt(document.getElementById('pertes-qty').value) || 1;
+  const { nom, marque, barcode } = selectedPerte;
+  toast(`⏳ Enregistrement de ${qty} × ${nom}…`);
+  try {
+    const data = await api({ action:'logPerte', name:nom, brand:marque, barcode, quantity:String(qty) });
+    if (data && data.success) {
+      toast(`✓ Perte enregistrée — ${qty} × ${nom}`);
+      clearPertesSelection();
+      pertesData = [];
+      loadPertes();
+    } else {
+      toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action logPerte)'}`, true);
+    }
+  } catch(e) { toast('⚠ Erreur réseau', true); }
+}
+
+// ── Historique ──
+function setPertesFilter(f, btn) {
+  pertesFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderPertes();
+}
+
+async function loadPertes() {
+  const list = document.getElementById('pertes-list');
+  list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
+  try {
+    const data = await api({ action:'getPertes' });
+    pertesData = (data.success && data.pertes) ? data.pertes : [];
+    renderPertes();
+  } catch(e) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur réseau</div>';
+  }
+}
+
+function renderPertes() {
+  const now = new Date(); now.setHours(0,0,0,0);
+  const filtered = pertesData.filter(h => {
+    if (!h.date) return true;
+    const d = new Date(h.date + 'T00:00:00');
+    if (pertesFilter === 'today')   return d.getTime() === now.getTime();
+    if (pertesFilter === 'semaine') { const w = new Date(now); w.setDate(now.getDate()-7);  return d >= w; }
+    if (pertesFilter === 'mois')    { const m = new Date(now); m.setDate(now.getDate()-30); return d >= m; }
+    return true;
+  }).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+
+  const totalQty = filtered.reduce((acc,h) => acc + (parseInt(h.quantity)||1), 0);
+  const noms     = new Set(filtered.map(h => h.name));
+  document.getElementById('pertes-stats').innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--red)">${totalQty}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Unités perdues</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--text)">${noms.size}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Produits distincts</div>
+    </div>`;
+
+  const list = document.getElementById('pertes-list');
+  if (!filtered.length) {
+    list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:36px;margin-bottom:12px">📉</div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">Aucune perte enregistrée</div>
+      <div style="font-size:12px">Recherche ou scanne un produit pour commencer.</div></div>`;
+    return;
+  }
+  const byDate = {};
+  filtered.forEach(h => { const k = h.date||'Inconnu'; if (!byDate[k]) byDate[k]=[]; byDate[k].push(h); });
+  let html = '';
+  for (const [dateKey, items] of Object.entries(byDate)) {
+    const label  = dateKey === 'Inconnu' ? 'Date inconnue' : fmtDate(dateKey);
+    const dayQty = items.reduce((a,h) => a+(parseInt(h.quantity)||1), 0);
+    html += `<div class="histo-section-title">${label}
+      <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1px 8px;font-size:10px">${dayQty} unité${dayQty>1?'s':''}</span>
+    </div>`;
+    html += items.map(h => {
+      const qty = parseInt(h.quantity)||1;
+      return `<div style="background:var(--red-bg);border:1px solid rgba(255,64,64,.25);border-radius:10px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.name||''}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${h.brand||''}${h.barcode?' · '+h.barcode:''}</div>
+        </div>
+        <div style="flex-shrink:0;text-align:center;min-width:42px">
+          <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:var(--red);line-height:1">${qty}</div>
+          <div style="font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">unité${qty>1?'s':''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  list.innerHTML = html;
+}
+
+// ── Scanner ──
+function preloadScanner() {
+  if (document.getElementById('html5qr-script')) return;
+  const s = document.createElement('script');
+  s.id  = 'html5qr-script';
+  s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+  document.head.appendChild(s);
+}
+
+async function openPertesScanner() {
+  const modal = document.getElementById('modal-scanner');
+  modal.style.display = 'flex';
+  document.getElementById('scan-status').textContent = '⏳ Chargement du scanner…';
+  document.getElementById('scanner-inner').innerHTML = '';
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  for (let i = 0; i < 20; i++) {
+    if (window.Html5Qrcode) break;
+    await new Promise(r => setTimeout(r, 300));
+  }
+  if (!window.Html5Qrcode) {
+    document.getElementById('scan-status').textContent = '⚠ Scanner non disponible';
+    return;
+  }
+  try {
+    html5Scanner = new Html5Qrcode('scanner-inner');
+    await html5Scanner.start(
+      { facingMode:'environment' },
+      { fps:15, qrbox:{width:250,height:150}, aspectRatio:1.5,
+        formatsToSupport:[
+          Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.UPC_A,   Html5QrcodeSupportedFormats.UPC_E,
+        ]
+      },
+      (code) => onPertesScan(code), () => {}
+    );
+    document.getElementById('scan-status').textContent = '🔍 Centrez le code dans le cadre…';
+  } catch(e) {
+    document.getElementById('scan-status').textContent = '⚠ ' + e;
+  }
+}
+
+function onPertesScan(code) {
+  closeScanner();
+  if (window.navigator.vibrate) navigator.vibrate(80);
+  const hit = sheetProducts.find(p => {
+    const f = getProduitFields(p);
+    return f.barcode === code || f.barcode === String(code);
+  });
+  if (hit) {
+    const f = getProduitFields(hit);
+    selectPertesProduct(f.nom, f.marque, f.barcode);
+    toast(`📷 Produit trouvé : ${f.nom}`);
+  } else {
+    toast(`⚠ Code ${code} non trouvé dans la base`, true);
+  }
+}
+
+async function closeScanner() {
+  if (html5Scanner) {
+    try { if (html5Scanner.isScanning) await html5Scanner.stop(); html5Scanner.clear(); } catch(e) {}
+    html5Scanner = null;
+  }
+  document.getElementById('scanner-inner').innerHTML = '';
+  document.getElementById('modal-scanner').style.display = 'none';
+}
+
+// ── Init ──
+async function init() {
+  preloadScanner();
+  try {
+    const d = await api({ action:'getProducts' });
+    if (d.success) sheetProducts = d.products;
+  } catch(e) {}
+  loadPertes();
+}
+init();
+</script>
+</body>
+</html>
