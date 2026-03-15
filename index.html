@@ -178,7 +178,7 @@
 
 </div>
 
-<div class="version-tag">hub v1.2 · 15/03/2026 16:15</div>
+<div class="version-tag">hub v1.3 · 15/03/2026 16:36</div>
 
 <script>
 function updateClock() {
@@ -194,6 +194,7 @@ async function checkPassword() {
   const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
   const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
   if (hash === PWD_HASH) {
+    localStorage.setItem('pm_auth', '1');
     document.getElementById('lock-screen').style.display = 'none';
   } else {
     const err = document.getElementById('pwd-error');
@@ -202,7 +203,13 @@ async function checkPassword() {
     setTimeout(() => err.textContent = '', 2000);
   }
 }
-window.addEventListener('load', () => document.getElementById('pwd-input').focus());
+window.addEventListener('load', () => {
+  if (localStorage.getItem('pm_auth') === '1') {
+    document.getElementById('lock-screen').style.display = 'none';
+  } else {
+    document.getElementById('pwd-input').focus();
+  }
+});
 
 </script>
 </body>
