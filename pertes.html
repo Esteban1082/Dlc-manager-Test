@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<script>
+// Vérification session — redirige vers le hub si non connecté
+(function() {
+  if (sessionStorage.getItem('pm_auth') !== '1') {
+    window.location.replace('index.html');
+  }
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pertes – Pâtisserie Manager</title>
@@ -161,7 +169,7 @@
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">pertes v1.0 · 15/03/2026 14:00</div>
+<div class="version-tag">pertes v1.0 · 15/03/2026 16:36</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";

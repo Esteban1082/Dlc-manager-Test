@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<script>
+// Vérification session — redirige vers le hub si non connecté
+(function() {
+  if (sessionStorage.getItem('pm_auth') !== '1') {
+    window.location.replace('index.html');
+  }
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Suivi DLC – Pâtisserie Manager</title>
@@ -439,7 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.10 · 15/03/2026 16:04
+  v2.10 · 15/03/2026 16:36
 </div>
 
 <!-- Modal Ajout en lot -->
