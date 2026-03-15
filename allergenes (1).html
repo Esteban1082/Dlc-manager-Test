@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<script>
+// Vérification auth — affiche écran de blocage si non connecté
+document.addEventListener('DOMContentLoaded', () => {
+  if (localStorage.getItem('pm_auth') !== '1') {
+    document.body.innerHTML = '<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:DM Mono,monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🔒</div><div style="font-family:Fraunces,serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">Accès restreint</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">Connecte-toi depuis le hub</div><a href="index.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:Fraunces,serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>';
+  }
+});
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Allergènes – Pâtisserie Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#0f0f0d; --surface:#1a1a16; --border:#2e2e28;
+    --text:#f0ede4; --muted:#7a7a6e; --amber:#e8a045;
+    --red:#ff4040; --green:#4cdb8a; --yellow:#f5c842;
+    --orange:#f08030;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
+  button { transition:all .15s; cursor:pointer; }
+  button:active { transform:scale(0.97); }
+
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 24px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--bg); z-index:100;
+  }
+  .logo-title { font-family:'Fraunces',serif; font-weight:900; font-size:20px; color:var(--amber); }
+  .logo-sub   { font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+  .back-btn {
+    padding:7px 14px; background:transparent; border:1px solid var(--border);
+    border-radius:8px; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:11px; text-decoration:none; display:flex; align-items:center; gap:6px;
+  }
+  .back-btn:hover { border-color:var(--amber); color:var(--text); }
+
+  .main { padding:20px 24px 80px; max-width:800px; margin:0 auto; }
+
+  .filter-chip {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:7px 14px; border-radius:20px; font-size:12px;
+    border:2px solid var(--border); background:var(--surface);
+    color:var(--muted); cursor:pointer; transition:all .15s; user-select:none;
+  }
+  .filter-chip:hover { border-color:var(--green); color:var(--text); }
+  .filter-chip.active {
+    background:rgba(76,219,138,.12); border-color:var(--green);
+    color:var(--green); font-weight:600;
+  }
+  .mode-btn {
+    padding:8px 16px; border-radius:8px; font-size:12px; letter-spacing:1px;
+    text-transform:uppercase; border:1px solid var(--border);
+    background:transparent; color:var(--muted); cursor:pointer; transition:all .15s;
+  }
+  .mode-btn.active { background:var(--amber); color:#000; border-color:var(--amber); font-weight:600; }
+  .allergen-chip {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 12px; border-radius:8px;
+    font-size:12px; border:2px solid transparent;
+    cursor:pointer; transition:all .15s; user-select:none;
+    background:var(--surface); border-color:var(--border); color:var(--muted);
+  }
+  .allergen-chip.active {
+    background:rgba(240,128,48,.15); border-color:var(--orange); color:var(--orange);
+    font-weight:600;
+  }
+  .allergen-chip:hover { border-color:var(--amber); }
+
+  .product-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:16px; margin-bottom:10px;
+    cursor:pointer; transition:all .2s;
+  }
+  .product-card:hover { border-color:var(--amber); }
+  .product-card.expanded { border-color:var(--amber); }
+
+  .modal-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.75);
+    backdrop-filter:blur(4px); z-index:600;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .modal {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:16px; padding:28px; width:100%; max-width:500px;
+    max-height:90vh; overflow-y:auto;
+  }
+  .modal-title { font-family:'Fraunces',serif; font-size:20px; font-weight:700; color:var(--amber); margin-bottom:6px; }
+  .form-input {
+    width:100%; padding:12px 16px; background:var(--bg);
+    border:1px solid var(--border); border-radius:10px;
+    color:var(--text); font-family:'DM Mono',monospace; font-size:14px;
+    outline:none; margin-bottom:14px; transition:border-color .15s;
+  }
+  .form-input:focus { border-color:var(--amber); }
+
+  .toast-container { position:fixed; bottom:24px; right:24px; z-index:700; display:flex; flex-direction:column; gap:8px; }
+  .toast {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px 18px; font-size:13px; animation:slideIn .2s ease; max-width:320px;
+  }
+  @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:none;opacity:1} }
+  .version-tag { position:fixed; bottom:10px; left:14px; font-size:10px; color:var(--border); letter-spacing:1px; z-index:50; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo-title">⚠️ Allergènes</div>
+    <div class="logo-sub">Pâtisserie Manager</div>
+  </div>
+  <a class="back-btn" href="index.html">← Hub</a>
+</header>
+
+<div class="main">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">Fiches allergènes</div>
+    <button onclick="openAddModal()"
+      style="padding:8px 16px;background:var(--amber);border:none;border-radius:8px;font-family:'Fraunces',serif;font-size:14px;font-weight:600;color:#000;">
+      ＋ Nouveau
+    </button>
+  </div>
+
+  <div style="background:rgba(240,128,48,.08);border:1px solid rgba(240,128,48,.25);border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:12px;color:#f08030;line-height:1.6">
+    ⚠️ <strong>Réglementation EU 1169/2011</strong> — 14 allergènes à déclaration obligatoire pour les produits vendus en vrac ou préparés sur place.
+  </div>
+
+  <!-- Barre de recherche -->
+  <input id="search" type="text" placeholder="🔍 Rechercher un produit…" oninput="renderList()" autocomplete="off"
+    style="width:100%;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;margin-bottom:14px">
+
+  <!-- Sélecteur de mode -->
+  <div style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="mode-btn active" onclick="setMode('tous',this)">Tous</button>
+    <button class="mode-btn" onclick="setMode('sans',this)">🙅 Sans allergènes</button>
+    <button class="mode-btn" onclick="setMode('avec',this)">⚠️ Avec allergènes</button>
+  </div>
+
+  <!-- Chips filtre allergènes (visibles en mode sans/avec) -->
+  <div id="filter-chips-wrap" style="display:none;margin-bottom:14px">
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px" id="filter-label">Sélectionner les allergènes à exclure :</div>
+    <div id="filter-chips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+  </div>
+
+  <div id="stats" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
+  <div id="list"></div>
+</div>
+
+<!-- Modal ajout/édition -->
+<div class="modal-overlay" id="modal-edit" onclick="if(event.target.id==='modal-edit')closeEditModal()">
+  <div class="modal">
+    <div class="modal-title" id="modal-edit-title">＋ Nouvelle fiche allergènes</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:20px">Sélectionne les allergènes présents dans ce produit</div>
+
+    <input id="edit-nom" class="form-input" type="text" placeholder="Nom du gâteau (ex : Tarte fraises)">
+    <input id="edit-patissier" class="form-input" type="text" placeholder="Nom du pâtissier (optionnel)">
+
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">Allergènes présents</div>
+    <div id="chips-edit" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px"></div>
+
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px" id="edit-summary"></div>
+
+    <div style="display:flex;gap:10px">
+      <button onclick="closeEditModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
+      <button onclick="saveAllergens()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<div class="version-tag">allergenes v1.3 · 15/03/2026 17:15</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+
+// Colonnes Sheets existantes : Fruit a coque | Gelatine | Gluten | Lait | Oeuf | Ingredien
+// ALLERGENS_SHEETS = ceux mappés sur les colonnes du Sheets
+// ALLERGENS_ALL = les 14 réglementaires pour la saisie manuelle
+
+const ALLERGENS_SHEETS = [
+  { id:'fruits_coq', col:'Fruit a coque', label:'Fruits à coque', emoji:'🌰' },
+  { id:'gelatine',   col:'Gelatine',      label:'Gélatine',       emoji:'🧪' },
+  { id:'gluten',     col:'Gluten',        label:'Gluten',         emoji:'🌾' },
+  { id:'lait',       col:'Lait',          label:'Lait',           emoji:'🥛' },
+  { id:'oeufs',      col:'Oeuf',          label:'Œufs',           emoji:'🥚' },
+];
+
+// Les 14 allergènes réglementaires EU 1169/2011
+const ALLERGENS = [
+  { id:'gluten',      label:'Gluten',          emoji:'🌾' },
+  { id:'crustaces',   label:'Crustacés',        emoji:'🦐' },
+  { id:'oeufs',       label:'Œufs',             emoji:'🥚' },
+  { id:'poissons',    label:'Poissons',         emoji:'🐟' },
+  { id:'arachides',   label:'Arachides',        emoji:'🥜' },
+  { id:'soja',        label:'Soja',             emoji:'🫘' },
+  { id:'lait',        label:'Lait',             emoji:'🥛' },
+  { id:'fruits_coq',  label:'Fruits à coque',   emoji:'🌰' },
+  { id:'celeri',      label:'Céleri',           emoji:'🌿' },
+  { id:'moutarde',    label:'Moutarde',         emoji:'🌻' },
+  { id:'sesame',      label:'Sésame',           emoji:'🌱' },
+  { id:'sulfites',    label:'Sulfites',         emoji:'🍷' },
+  { id:'lupin',       label:'Lupin',            emoji:'🌼' },
+  { id:'gelatine',    label:'Gélatine',         emoji:'🧪' },
+];
+// "Ingredien" = ingrédients libres — affiché séparément
+
+let _apiCallId = 0;
+let fiches = []; // [{id, nom, allergenes:[]}]
+let editingId = null;
+let editSelected = new Set();
+let filterMode = 'tous';      // 'tous' | 'sans' | 'avec'
+let filterSelected = new Set(); // allergènes sélectionnés pour le filtre
+
+function api(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'dlcCb_' + (++_apiCallId);
+    const script = document.createElement('script');
+    const timer = setTimeout(() => { cleanup(); reject(new Error('Timeout')); }, 20000);
+    window[cbName] = (data) => { cleanup(); resolve(data); };
+    function cleanup() { clearTimeout(timer); delete window[cbName]; if (script.parentNode) script.remove(); }
+    script.onerror = () => { cleanup(); reject(new Error('Erreur réseau')); };
+    const p = new URLSearchParams({ ...params, callback: cbName });
+    script.src = API_URL + '?' + p.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function toast(msg, isError=false) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function buildFilterChips() {
+  const wrap = document.getElementById('filter-chips-wrap');
+  const label = document.getElementById('filter-label');
+  const chips = document.getElementById('filter-chips');
+  if (filterMode === 'tous') {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+  label.textContent = filterMode === 'sans'
+    ? 'Sélectionne les allergènes à exclure (affiche les produits sans) :'
+    : 'Sélectionne les allergènes à inclure (affiche les produits avec) :';
+
+  chips.innerHTML = ALLERGENS.map(a => {
+    const on = filterSelected.has(a.id);
+    return `<div class="filter-chip ${on ? 'active' : ''}" onclick="toggleFilter('${a.id}',this)">
+      ${a.emoji} ${a.label}
+    </div>`;
+  }).join('');
+}
+
+function toggleFilter(id, el) {
+  if (filterSelected.has(id)) { filterSelected.delete(id); el.classList.remove('active'); }
+  else { filterSelected.add(id); el.classList.add('active'); }
+  renderList();
+}
+
+function setMode(mode, btn) {
+  filterMode = mode;
+  filterSelected = new Set();
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  buildFilterChips();
+  renderList();
+}
+
+function renderList() {
+  const q = (document.getElementById('search').value || '').toLowerCase().trim();
+  let items = q ? fiches.filter(f => f.nom.toLowerCase().includes(q)) : [...fiches];
+
+  // Appliquer filtre allergènes
+  if (filterMode === 'sans' && filterSelected.size > 0) {
+    // Produits qui NE contiennent PAS les allergènes sélectionnés
+    items = items.filter(f => ![...filterSelected].some(id => f.allergenes.includes(id)));
+  } else if (filterMode === 'avec' && filterSelected.size > 0) {
+    // Produits qui contiennent AU MOINS UN des allergènes sélectionnés
+    items = items.filter(f => [...filterSelected].some(id => f.allergenes.includes(id)));
+  }
+
+  const filterInfo = filterSelected.size > 0 && filterMode !== 'tous'
+    ? ` · filtre actif` : '';
+  document.getElementById('stats').textContent = `${items.length} / ${fiches.length} fiche${fiches.length !== 1 ? 's' : ''}${filterInfo}`;
+  const list = document.getElementById('list');
+  if (!items.length) {
+    list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:36px;margin-bottom:12px">⚠️</div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">${q ? 'Aucun résultat' : 'Aucune fiche'}</div>
+      <div style="font-size:12px">${q ? 'Essaie un autre terme' : 'Clique sur ＋ Nouveau pour créer une fiche'}</div></div>`;
+    return;
+  }
+  list.innerHTML = items.map(f => {
+    const present = ALLERGENS.filter(a => f.allergenes.includes(a.id));
+    const chips = present.length
+      ? present.map(a => `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:11px;background:rgba(240,128,48,.12);border:1px solid rgba(240,128,48,.3);color:#f08030;margin:2px">${a.emoji} ${a.label}</span>`).join('')
+      : `<span style="font-size:11px;color:var(--muted);font-style:italic">Aucun allergène déclaré</span>`;
+    return `<div class="product-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-size:17px;font-weight:700">${f.nom}</div>
+          ${f.patissier ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">👨‍🍳 ${f.patissier}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;margin-left:10px">
+          <button onclick="openEditModal('${f.id}')" style="padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted);">✏️</button>
+          <button onclick="deleteFiche('${f.id}')" style="padding:5px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);">🗑</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:${f.ingredients ? '8px' : '0'}">${chips}</div>
+      ${f.ingredients ? `<div style="font-size:11px;color:var(--muted);background:var(--bg);border-radius:6px;padding:6px 10px;margin-top:4px">📝 ${f.ingredients}</div>` : ''}
+      <div style="font-size:10px;color:var(--muted);margin-top:8px">${present.length} allergène${present.length !== 1 ? 's' : ''} déclaré${present.length !== 1 ? 's' : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Modal ──
+function buildChips(selected) {
+  return ALLERGENS.map(a => {
+    const on = selected.has(a.id);
+    return `<div class="allergen-chip ${on ? 'active' : ''}" onclick="toggleChip('${a.id}',this)">
+      ${a.emoji} ${a.label}
+    </div>`;
+  }).join('');
+}
+
+function toggleChip(id, el) {
+  if (editSelected.has(id)) { editSelected.delete(id); el.classList.remove('active'); }
+  else { editSelected.add(id); el.classList.add('active'); }
+  updateEditSummary();
+}
+
+function updateEditSummary() {
+  const present = ALLERGENS.filter(a => editSelected.has(a.id));
+  document.getElementById('edit-summary').textContent = present.length
+    ? `Contient : ${present.map(a => a.label).join(', ')}`
+    : 'Aucun allergène sélectionné';
+}
+
+function openAddModal() {
+  editingId = null;
+  editSelected = new Set();
+  document.getElementById('edit-nom').value = '';
+  document.getElementById('edit-patissier').value = '';
+  document.getElementById('modal-edit-title').textContent = '＋ Nouvelle fiche allergènes';
+  document.getElementById('chips-edit').innerHTML = buildChips(editSelected);
+  updateEditSummary();
+  document.getElementById('modal-edit').style.display = 'flex';
+  setTimeout(() => document.getElementById('edit-nom').focus(), 100);
+}
+
+function openEditModal(id) {
+  const f = fiches.find(x => x.id === id);
+  if (!f) return;
+  editingId = id;
+  editSelected = new Set(f.allergenes);
+  document.getElementById('edit-nom').value = f.nom;
+  document.getElementById('edit-patissier').value = f.patissier || '';
+  document.getElementById('modal-edit-title').textContent = '✏️ Modifier la fiche';
+  document.getElementById('chips-edit').innerHTML = buildChips(editSelected);
+  updateEditSummary();
+  document.getElementById('modal-edit').style.display = 'flex';
+}
+
+function closeEditModal() { document.getElementById('modal-edit').style.display = 'none'; }
+
+async function saveAllergens() {
+  const nom = document.getElementById('edit-nom').value.trim();
+  if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
+  const allergenesList = [...editSelected];
+  toast('⏳ Enregistrement…');
+  closeEditModal();
+  try {
+    const patissier = document.getElementById('edit-patissier').value.trim();
+    const data = await api({
+      action: editingId ? 'updateAllergenes' : 'saveAllergenes',
+      id: editingId || '',
+      nom, patissier, allergenes: JSON.stringify(allergenesList)
+    });
+    if (data && data.success) {
+      toast(`✓ Fiche "${nom}" enregistrée`);
+      await loadFiches();
+    } else {
+      toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action saveAllergenes)'}`, true);
+    }
+  } catch(e) { toast('⚠ Erreur réseau', true); }
+}
+
+async function deleteFiche(id) {
+  const f = fiches.find(x => x.id === id);
+  if (!f || !confirm(`Supprimer la fiche "${f.nom}" ?`)) return;
+  try {
+    const data = await api({ action:'deleteAllergenes', id });
+    if (data && data.success) {
+      fiches = fiches.filter(x => x.id !== id);
+      renderList();
+      toast('✓ Fiche supprimée');
+    } else {
+      toast(`⚠ ${data?.error || 'Erreur Apps Script'}`, true);
+    }
+  } catch(e) { toast('⚠ Erreur réseau', true); }
+}
+
+async function loadFiches() {
+  const list = document.getElementById('list');
+  list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
+  try {
+    const data = await api({ action:'getAllergenes' });
+    if (data.success && data.fiches) {
+      // Données venant du Sheets (nouvelles actions Apps Script)
+      fiches = data.fiches;
+    } else if (data.rows) {
+      // Format brut Sheets : tableau de lignes
+      fiches = data.rows.map((row, i) => ({
+        id: 'row_' + i,
+        nom: row['Nom du gâteau'] || row['nom_gateau'] || '',
+        patissier: row['Nom du pâtissier'] || row['patissier'] || '',
+        allergenes: ALLERGENS_SHEETS.filter(a => {
+          const v = String(row[a.col] || '').toLowerCase().trim();
+          return v === 'oui' || v === 'x' || v === '1' || v === 'true' || v === 'yes';
+        }).map(a => a.id),
+        ingredients: row['Ingredien'] || row['Ingredients'] || '',
+      }));
+    } else {
+      fiches = [];
+    }
+    renderList();
+  } catch(e) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Impossible de charger — vérifie Apps Script</div>';
+  }
+}
+
+loadFiches();
+</script>
+</body>
+</html>
