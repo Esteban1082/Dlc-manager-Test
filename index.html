@@ -60,6 +60,7 @@
     transition:all .2s; position:relative; overflow:hidden;
   }
   .tile:hover { border-color:var(--amber); transform:translateY(-3px); box-shadow:0 8px 32px rgba(232,160,69,.15); }
+  .tile.locked { pointer-events:none; opacity:0.4; }
   .tile:active { transform:translateY(0); }
   .tile-accent { position:absolute; top:0; left:0; right:0; height:3px; background:var(--amber); }
   .tile-icon { font-size:38px; margin-bottom:16px; line-height:1; }
@@ -119,7 +120,7 @@
 
 <div class="grid">
 
-  <a class="tile" href="dlc.html">
+  <a class="tile locked" href="dlc.html">
     <div class="tile-accent"></div>
     <div class="tile-icon">📦</div>
     <div class="tile-name">Suivi DLC</div>
@@ -127,7 +128,7 @@
     <div class="tile-badge">✓ Opérationnel</div>
   </a>
 
-  <a class="tile" href="pertes.html">
+  <a class="tile locked" href="pertes.html">
     <div class="tile-accent"></div>
     <div class="tile-icon">📉</div>
     <div class="tile-name">Pertes</div>
@@ -135,7 +136,7 @@
     <div class="tile-badge">✓ Opérationnel</div>
   </a>
 
-  <a class="tile" href="produits.html">
+  <a class="tile locked" href="produits.html">
     <div class="tile-accent"></div>
     <div class="tile-icon">📋</div>
     <div class="tile-name">Base produits</div>
@@ -143,7 +144,7 @@
     <div class="tile-badge">✓ Opérationnel</div>
   </a>
 
-  <a class="tile" href="allergenes.html">
+  <a class="tile locked" href="allergenes.html">
     <div class="tile-accent"></div>
     <div class="tile-icon">⚠️</div>
     <div class="tile-name">Allergènes</div>
@@ -151,7 +152,7 @@
     <div class="tile-badge">✓ Opérationnel</div>
   </a>
 
-  <a class="tile" href="temperatures.html">
+  <a class="tile locked" href="temperatures.html">
     <div class="tile-accent"></div>
     <div class="tile-icon">🌡️</div>
     <div class="tile-name">Températures</div>
@@ -159,7 +160,7 @@
     <div class="tile-badge">✓ Opérationnel</div>
   </a>
 
-  <a class="tile" href="documents.html">
+  <a class="tile locked" href="documents.html">
     <div class="tile-accent"></div>
     <div class="tile-icon">📁</div>
     <div class="tile-name">Documents</div>
@@ -168,7 +169,7 @@
   </a>
 
 
-  <a class="tile" href="transferts.html">
+  <a class="tile locked" href="transferts.html">
     <div class="tile-accent"></div>
     <div class="tile-icon">🔄</div>
     <div class="tile-name">Transferts</div>
@@ -178,7 +179,7 @@
 
 </div>
 
-<div class="version-tag">hub v1.3 · 15/03/2026 16:36</div>
+<div class="version-tag">hub v1.4 · 15/03/2026 16:51</div>
 
 <script>
 function updateClock() {
@@ -188,6 +189,14 @@ function updateClock() {
 }
 updateClock(); setInterval(updateClock, 1000);
 
+function unlockTiles() {
+  document.querySelectorAll('.tile').forEach(t => t.classList.remove('locked'));
+}
+
+function lockTiles() {
+  document.querySelectorAll('.tile').forEach(t => t.classList.add('locked'));
+}
+
 const PWD_HASH = "15197cf7214b58e67cae565e573ffd9aa44bcb81f8ee5d7185dfe8da0a16ef43";
 async function checkPassword() {
   const val = document.getElementById('pwd-input').value;
@@ -196,6 +205,7 @@ async function checkPassword() {
   if (hash === PWD_HASH) {
     localStorage.setItem('pm_auth', '1');
     document.getElementById('lock-screen').style.display = 'none';
+    unlockTiles();
   } else {
     const err = document.getElementById('pwd-error');
     err.textContent = '⚠ Code incorrect';
@@ -203,14 +213,16 @@ async function checkPassword() {
     setTimeout(() => err.textContent = '', 2000);
   }
 }
+
 window.addEventListener('load', () => {
   if (localStorage.getItem('pm_auth') === '1') {
     document.getElementById('lock-screen').style.display = 'none';
+    unlockTiles();
   } else {
+    lockTiles();
     document.getElementById('pwd-input').focus();
   }
 });
-
 </script>
 </body>
 </html>
