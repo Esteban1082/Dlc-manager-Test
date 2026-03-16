@@ -216,10 +216,31 @@
 
   .loading { text-align:center; padding:40px; color:var(--muted); }
 
-  /* Responsive */
+  /* ── Bottom nav mobile ── */
+  .bottom-nav {
+    display: none;
+    position: fixed; bottom:0; left:0; right:0;
+    background: var(--surface); border-top:1px solid var(--border);
+    z-index: 200; padding: 6px 0 12px;
+  }
+  .bottom-nav-inner {
+    display: flex; justify-content: space-around; align-items: center;
+  }
+  .bnav-item {
+    display: flex; flex-direction:column; align-items:center; gap:3px;
+    padding: 6px 12px; border-radius:10px; cursor:pointer;
+    color: var(--muted); font-size: 10px; letter-spacing:0.5px;
+    text-transform: uppercase; transition: all .15s; user-select:none;
+    background: none; border: none; font-family:'DM Mono',monospace;
+  }
+  .bnav-item.active { color: var(--amber); }
+  .bnav-item .bnav-ico { font-size: 22px; }
+
   @media(max-width:640px) {
     .sidebar { display:none; }
-    .content { padding:16px 16px 80px; }
+    .content { padding:16px 16px 90px; }
+    .bottom-nav { display:block; }
+    .topbar { padding: 14px 16px; }
   }
 </style>
 </head>
@@ -356,6 +377,27 @@
   </main>
 </div>
 
+<!-- Bottom nav mobile -->
+<nav class="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="bnav-item active" id="bnav-dashboard" onclick="showView('dashboard',this); syncBottomNav('dashboard')">
+      <span class="bnav-ico">📊</span>Dashboard
+    </button>
+    <button class="bnav-item" id="bnav-users" onclick="showView('users',this); syncBottomNav('users')">
+      <span class="bnav-ico">👥</span>Users
+    </button>
+    <button class="bnav-item" id="bnav-modules" onclick="showView('modules',this); syncBottomNav('modules')">
+      <span class="bnav-ico">🧩</span>Modules
+    </button>
+    <button class="bnav-item" id="bnav-tenants" onclick="showView('tenants',this); syncBottomNav('tenants')">
+      <span class="bnav-ico">🏪</span>Clients
+    </button>
+    <button class="bnav-item" onclick="logout()">
+      <span class="bnav-ico">↩</span>Quitter
+    </button>
+  </div>
+</nav>
+
 <!-- Modal inviter utilisateur -->
 <div class="modal-overlay" id="modal-invite" onclick="if(event.target.id==='modal-invite')closeModal('modal-invite')">
   <div class="modal">
@@ -462,6 +504,12 @@ const TITLES = {
   tenants:   ['Clients', 'Gérer les commerces sur StoreLine'],
 };
 
+function syncBottomNav(name) {
+  document.querySelectorAll('.bnav-item').forEach(b => b.classList.remove('active'));
+  const target = document.getElementById('bnav-' + name);
+  if (target) target.classList.add('active');
+}
+
 function showView(name, el) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -474,6 +522,7 @@ function showView(name, el) {
   if (name === 'users')   loadUsers();
   if (name === 'tenants') loadTenants();
   if (name === 'modules') renderModulesOverview();
+  syncBottomNav(name);
 }
 
 // ── Auth ──
