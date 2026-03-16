@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StoreLine — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:      #0a0a08;
+    --surface: #141410;
+    --surface2:#1a1a16;
+    --border:  #252520;
+    --border2: #2e2e28;
+    --text:    #f0ede4;
+    --muted:   #6a6a5e;
+    --amber:   #e8a045;
+    --amber2:  #f5c060;
+    --red:     #ff4040;
+    --green:   #4cdb8a;
+    --blue:    #4db8ff;
+    --purple:  #a78bfa;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
+  button { cursor:pointer; transition:all .15s; }
+  button:active { transform:scale(0.97); }
+
+  /* ── Sidebar ── */
+  .layout { display:flex; min-height:100vh; }
+  .sidebar {
+    width: 220px; flex-shrink:0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction:column;
+    position: sticky; top:0; height:100vh;
+  }
+  .sidebar-logo {
+    padding: 24px 20px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-logo-mark {
+    width:36px; height:36px; border-radius:9px;
+    background: linear-gradient(135deg, var(--amber), var(--amber2));
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; margin-bottom:10px;
+    box-shadow: 0 4px 12px rgba(232,160,69,.3);
+  }
+  .sidebar-logo-name { font-family:'Fraunces',serif; font-size:18px; font-weight:900; color:var(--amber); }
+  .sidebar-logo-sub  { font-size:9px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+
+  .nav { flex:1; padding:12px 0; }
+  .nav-item {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 20px; font-size:12px; color:var(--muted);
+    cursor:pointer; border-left:2px solid transparent;
+    transition:all .15s; user-select:none;
+  }
+  .nav-item:hover { color:var(--text); background:rgba(255,255,255,.03); }
+  .nav-item.active { color:var(--amber); border-left-color:var(--amber); background:rgba(232,160,69,.05); }
+  .nav-icon { font-size:16px; flex-shrink:0; }
+
+  .sidebar-footer {
+    padding:16px 20px;
+    border-top:1px solid var(--border);
+    font-size:11px;
+  }
+  .user-info { color:var(--muted); margin-bottom:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .btn-logout {
+    width:100%; padding:8px; background:transparent;
+    border:1px solid var(--border); border-radius:8px;
+    font-family:'DM Mono',monospace; font-size:11px;
+    color:var(--muted);
+  }
+  .btn-logout:hover { border-color:var(--red); color:var(--red); }
+
+  /* ── Main ── */
+  .main { flex:1; overflow-y:auto; }
+  .topbar {
+    padding:20px 28px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+    position:sticky; top:0; background:var(--bg); z-index:50;
+  }
+  .page-title { font-family:'Fraunces',serif; font-size:22px; font-weight:700; color:var(--amber); }
+  .page-sub   { font-size:11px; color:var(--muted); margin-top:3px; }
+
+  .content { padding:24px 28px 80px; }
+
+  /* ── Vues ── */
+  .view { display:none; }
+  .view.active { display:block; }
+
+  /* ── Stats cards ── */
+  .stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin-bottom:28px; }
+  .stat-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:16px;
+  }
+  .stat-val { font-family:'Fraunces',serif; font-size:28px; font-weight:900; color:var(--amber); }
+  .stat-lbl { font-size:10px; color:var(--muted); letter-spacing:1.5px; text-transform:uppercase; margin-top:4px; }
+
+  /* ── Section header ── */
+  .section-header {
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:16px;
+  }
+  .section-title { font-family:'Fraunces',serif; font-size:16px; font-weight:700; }
+  .sep { height:1px; background:var(--border); margin:24px 0; }
+
+  /* ── User cards ── */
+  .user-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; margin-bottom:10px; overflow:hidden;
+    transition:border-color .15s;
+  }
+  .user-card:hover { border-color:var(--border2); }
+  .user-card-header {
+    display:flex; align-items:center; gap:12px;
+    padding:14px 16px; cursor:pointer;
+  }
+  .user-avatar {
+    width:38px; height:38px; border-radius:10px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Fraunces',serif; font-size:16px; font-weight:700;
+    background: var(--surface2);
+  }
+  .user-email  { font-size:13px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .user-meta   { font-size:10px; color:var(--muted); margin-top:2px; }
+
+  .role-badge {
+    flex-shrink:0; padding:3px 10px; border-radius:20px;
+    font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+  }
+  .role-superadmin { background:rgba(167,139,250,.15); color:var(--purple); border:1px solid rgba(167,139,250,.3); }
+  .role-admin      { background:rgba(232,160,69,.15);  color:var(--amber);  border:1px solid rgba(232,160,69,.3); }
+  .role-manager    { background:rgba(77,184,255,.15);   color:var(--blue);   border:1px solid rgba(77,184,255,.3); }
+  .role-employe    { background:rgba(110,110,100,.15);  color:var(--muted);  border:1px solid var(--border); }
+
+  .status-dot {
+    width:8px; height:8px; border-radius:50%; flex-shrink:0;
+  }
+  .status-dot.active   { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .status-dot.inactive { background:var(--muted); }
+
+  /* ── Modules grid ── */
+  .user-detail { padding:0 16px 16px; border-top:1px solid var(--border); }
+  .modules-title { font-size:10px; color:var(--muted); letter-spacing:1.5px; text-transform:uppercase; margin:14px 0 10px; }
+  .modules-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; margin-bottom:14px; }
+  .module-toggle {
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:10px 8px; border-radius:10px;
+    border:2px solid var(--border); background:var(--bg);
+    cursor:pointer; transition:all .2s; user-select:none;
+  }
+  .module-toggle.on {
+    border-color:var(--amber); background:rgba(232,160,69,.08);
+  }
+  .module-toggle:hover { border-color:var(--border2); }
+  .module-toggle.on:hover { border-color:var(--amber2); }
+  .module-ico  { font-size:20px; }
+  .module-name { font-size:10px; color:var(--muted); text-align:center; }
+  .module-toggle.on .module-name { color:var(--amber); }
+  .module-check { font-size:10px; color:var(--muted); }
+  .module-toggle.on .module-check { color:var(--amber); }
+
+  .detail-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+  /* ── Inputs ── */
+  .form-input {
+    width:100%; padding:10px 14px;
+    background:var(--bg); border:1px solid var(--border);
+    border-radius:10px; color:var(--text);
+    font-family:'DM Mono',monospace; font-size:13px;
+    outline:none; transition:border-color .15s; margin-bottom:10px;
+  }
+  .form-input:focus { border-color:var(--amber); }
+  .form-label { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:5px; display:block; }
+
+  select.form-input {
+    appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236a6a5e' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center; padding-right:32px;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    padding:9px 18px; border-radius:9px; border:none;
+    font-family:'DM Mono',monospace; font-size:12px; font-weight:500;
+    cursor:pointer; transition:all .15s;
+  }
+  .btn-primary { background:var(--amber); color:#000; }
+  .btn-primary:hover { background:var(--amber2); }
+  .btn-ghost   { background:transparent; border:1px solid var(--border); color:var(--muted); }
+  .btn-ghost:hover { border-color:var(--amber); color:var(--text); }
+  .btn-danger  { background:transparent; border:1px solid rgba(255,64,64,.3); color:var(--red); }
+  .btn-danger:hover { background:rgba(255,64,64,.1); }
+  .btn-green   { background:var(--green); color:#000; }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,.8); backdrop-filter:blur(4px);
+    z-index:600; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:16px; padding:24px; width:100%; max-width:420px;
+  }
+  .modal-title { font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--amber); margin-bottom:18px; }
+
+  /* ── Toast ── */
+  .toast-container { position:fixed; bottom:24px; right:24px; z-index:700; display:flex; flex-direction:column; gap:8px; }
+  .toast { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 18px; font-size:12px; animation:slideIn .2s ease; max-width:300px; }
+  @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:none;opacity:1} }
+
+  .loading { text-align:center; padding:40px; color:var(--muted); }
+
+  /* Responsive */
+  @media(max-width:640px) {
+    .sidebar { display:none; }
+    .content { padding:16px 16px 80px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Auth guard -->
+<script>
+  const _u = localStorage.getItem('sl_user');
+  if (!_u) { window.location.replace('login.html'); }
+  else {
+    const _p = JSON.parse(_u);
+    if (!['superadmin','admin'].includes(_p.role)) { window.location.replace('index.html'); }
+  }
+</script>
+
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-mark">▦</div>
+      <div class="sidebar-logo-name">StoreLine</div>
+      <div class="sidebar-logo-sub">Admin</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-item active" onclick="showView('dashboard',this)">
+        <span class="nav-icon">📊</span> Dashboard
+      </div>
+      <div class="nav-item" onclick="showView('users',this)">
+        <span class="nav-icon">👥</span> Utilisateurs
+      </div>
+      <div class="nav-item" onclick="showView('modules',this)">
+        <span class="nav-icon">🧩</span> Modules
+      </div>
+      <div class="nav-item" onclick="showView('tenants',this)">
+        <span class="nav-icon">🏪</span> Clients
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info" id="sidebar-email">—</div>
+      <button class="btn-logout" onclick="logout()">↩ Déconnexion</button>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="page-title" id="page-title">Dashboard</div>
+        <div class="page-sub" id="page-sub">Vue globale StoreLine</div>
+      </div>
+      <button class="btn btn-primary" id="topbar-action" style="display:none"></button>
+    </div>
+
+    <div class="content">
+
+      <!-- ══ DASHBOARD ══ -->
+      <div class="view active" id="view-dashboard">
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card"><div class="stat-val" id="stat-users">—</div><div class="stat-lbl">Utilisateurs</div></div>
+          <div class="stat-card"><div class="stat-val" id="stat-actifs">—</div><div class="stat-lbl">Actifs</div></div>
+          <div class="stat-card"><div class="stat-val" id="stat-tenants">—</div><div class="stat-lbl">Clients</div></div>
+          <div class="stat-card"><div class="stat-val" id="stat-modules">7</div><div class="stat-lbl">Modules</div></div>
+        </div>
+
+        <div class="section-title" style="margin-bottom:12px">Activité récente</div>
+        <div id="recent-users" class="loading">⏳ Chargement...</div>
+      </div>
+
+      <!-- ══ UTILISATEURS ══ -->
+      <div class="view" id="view-users">
+        <div class="section-header">
+          <div></div>
+          <button class="btn btn-primary" onclick="openInviteModal()">＋ Inviter un utilisateur</button>
+        </div>
+        <div id="users-list" class="loading">⏳ Chargement...</div>
+      </div>
+
+      <!-- ══ MODULES ══ -->
+      <div class="view" id="view-modules">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px">
+          <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700;margin-bottom:8px">Les 7 modules StoreLine</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.8">
+            Chaque module peut être activé ou désactivé individuellement par utilisateur.<br>
+            Les admins ont accès à tous les modules par défaut.
+          </div>
+        </div>
+        <div id="modules-overview"></div>
+      </div>
+
+      <!-- ══ CLIENTS (TENANTS) ══ -->
+      <div class="view" id="view-tenants">
+        <div class="section-header">
+          <div></div>
+          <button class="btn btn-primary" onclick="openNewTenantModal()">＋ Nouveau client</button>
+        </div>
+        <div id="tenants-list" class="loading">⏳ Chargement...</div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- Modal inviter utilisateur -->
+<div class="modal-overlay" id="modal-invite" onclick="if(event.target.id==='modal-invite')closeModal('modal-invite')">
+  <div class="modal">
+    <div class="modal-title">＋ Inviter un utilisateur</div>
+    <label class="form-label">Email *</label>
+    <input id="inv-email" class="form-input" type="email" placeholder="prenom@commerce.be">
+    <label class="form-label">Nom</label>
+    <input id="inv-nom" class="form-input" type="text" placeholder="Prénom Nom">
+    <label class="form-label">Rôle</label>
+    <select id="inv-role" class="form-input">
+      <option value="employe">Employé — modules quotidiens</option>
+      <option value="manager">Manager — tous modules + gestion zones</option>
+      <option value="admin">Admin — tout + gestion utilisateurs</option>
+    </select>
+    <label class="form-label">Modules activés</label>
+    <div id="inv-modules" style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:16px"></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-ghost" onclick="closeModal('modal-invite')" style="flex:1">Annuler</button>
+      <button class="btn btn-primary" onclick="inviteUser()" style="flex:1">Envoyer l'invitation</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal nouveau client -->
+<div class="modal-overlay" id="modal-tenant" onclick="if(event.target.id==='modal-tenant')closeModal('modal-tenant')">
+  <div class="modal">
+    <div class="modal-title">🏪 Nouveau client</div>
+    <label class="form-label">Nom du commerce *</label>
+    <input id="ten-nom" class="form-input" type="text" placeholder="Ex : Boulangerie Dupont">
+    <label class="form-label">Slug (identifiant unique)</label>
+    <input id="ten-slug" class="form-input" type="text" placeholder="boulangerie-dupont">
+    <label class="form-label">Couleur principale (accent)</label>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input id="ten-accent" class="form-input" type="text" placeholder="#e8a045" style="flex:1;margin-bottom:0">
+      <input type="color" id="ten-accent-picker" value="#e8a045"
+        style="width:44px;height:44px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;padding:2px"
+        oninput="document.getElementById('ten-accent').value=this.value">
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-ghost" onclick="closeModal('modal-tenant')" style="flex:1">Annuler</button>
+      <button class="btn btn-primary" onclick="createTenant()" style="flex:1">Créer le client</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+const ME = JSON.parse(localStorage.getItem('sl_user') || '{}');
+
+const MODULES = [
+  { id:'dlc',          label:'Suivi DLC',     ico:'📦' },
+  { id:'pertes',       label:'Pertes',        ico:'📉' },
+  { id:'produits',     label:'Produits',      ico:'📋' },
+  { id:'allergenes',   label:'Allergènes',    ico:'⚠️' },
+  { id:'temperatures', label:'Températures',  ico:'🌡️' },
+  { id:'documents',    label:'Documents',     ico:'📁' },
+  { id:'transferts',   label:'Transferts',    ico:'🔄' },
+];
+
+// Modules actifs par défaut selon le rôle
+const DEFAULT_MODULES = {
+  employe: ['dlc','pertes','temperatures'],
+  manager: ['dlc','pertes','produits','allergenes','temperatures','documents','transferts'],
+  admin:   ['dlc','pertes','produits','allergenes','temperatures','documents','transferts'],
+};
+
+// ── Toast ──
+function toast(msg, isError=false) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// ── Navigation ──
+const TITLES = {
+  dashboard: ['Dashboard', 'Vue globale StoreLine'],
+  users:     ['Utilisateurs', 'Gérer les accès et les rôles'],
+  modules:   ['Modules', 'Vue d\'ensemble des fonctionnalités'],
+  tenants:   ['Clients', 'Gérer les commerces sur StoreLine'],
+};
+
+function showView(name, el) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  if (el) el.classList.add('active');
+  const [title, sub] = TITLES[name] || [name, ''];
+  document.getElementById('page-title').textContent = title;
+  document.getElementById('page-sub').textContent   = sub;
+
+  if (name === 'users')   loadUsers();
+  if (name === 'tenants') loadTenants();
+  if (name === 'modules') renderModulesOverview();
+}
+
+// ── Auth ──
+document.getElementById('sidebar-email').textContent = ME.email || '—';
+
+async function logout() {
+  await sb.auth.signOut();
+  localStorage.removeItem('sl_auth');
+  localStorage.removeItem('sl_user');
+  window.location.href = 'login.html';
+}
+
+// ── Dashboard ──
+async function loadDashboard() {
+  try {
+    const { data: profiles } = await sb.from('profiles').select('*');
+    const { data: tenants  } = await sb.from('tenants').select('*');
+    const actifs = profiles?.filter(p => p.actif) || [];
+
+    document.getElementById('stat-users').textContent   = profiles?.length || 0;
+    document.getElementById('stat-actifs').textContent  = actifs.length;
+    document.getElementById('stat-tenants').textContent = tenants?.length || 0;
+
+    // Derniers utilisateurs
+    const recent = (profiles || []).slice(-5).reverse();
+    document.getElementById('recent-users').innerHTML = recent.length
+      ? recent.map(p => `
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+          <div style="width:34px;height:34px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:var(--amber)">${(p.email||'?')[0].toUpperCase()}</div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600">${p.email}</div>
+            <div style="font-size:11px;color:var(--muted)">${p.role}</div>
+          </div>
+          <span class="role-badge role-${p.role}">${p.role}</span>
+        </div>`).join('')
+      : '<div style="color:var(--muted);padding:20px;text-align:center">Aucun utilisateur</div>';
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+// ── Utilisateurs ──
+let allUsers = [];
+let expandedUser = null;
+
+async function loadUsers() {
+  document.getElementById('users-list').innerHTML = '<div class="loading">⏳ Chargement...</div>';
+  try {
+    const { data: profiles, error } = await sb
+      .from('profiles')
+      .select('*, permissions(*)')
+      .order('created_at', { ascending:false });
+
+    if (error) throw error;
+    allUsers = profiles || [];
+    renderUsers();
+  } catch(e) {
+    document.getElementById('users-list').innerHTML = `<div class="loading" style="color:var(--red)">⚠ ${e.message}</div>`;
+  }
+}
+
+function renderUsers() {
+  const el = document.getElementById('users-list');
+  if (!allUsers.length) {
+    el.innerHTML = '<div class="loading">Aucun utilisateur. Invitez quelqu\'un !</div>';
+    return;
+  }
+  el.innerHTML = allUsers.map(u => {
+    const perms  = u.permissions || [];
+    const isExp  = expandedUser === u.id;
+    const modSet = new Set(perms.filter(p => p.actif).map(p => p.module));
+    return `
+    <div class="user-card" id="ucard-${u.id}">
+      <div class="user-card-header" onclick="toggleUser('${u.id}')">
+        <div class="user-avatar" style="color:var(--amber)">${(u.email||'?')[0].toUpperCase()}</div>
+        <div style="flex:1;min-width:0">
+          <div class="user-email">${u.email}</div>
+          <div class="user-meta">${u.nom || '—'} · ${perms.filter(p=>p.actif).length} module${perms.filter(p=>p.actif).length>1?'s':''} actif${perms.filter(p=>p.actif).length>1?'s':''}</div>
+        </div>
+        <div class="status-dot ${u.actif?'active':'inactive'}"></div>
+        <span class="role-badge role-${u.role}">${u.role}</span>
+        <span style="color:var(--muted);margin-left:6px;font-size:12px">${isExp?'▲':'▼'}</span>
+      </div>
+      ${isExp ? `
+      <div class="user-detail">
+        <div class="modules-title">Modules activés</div>
+        <div class="modules-grid">
+          ${MODULES.map(m => {
+            const on = modSet.has(m.id) || ['superadmin','admin'].includes(u.role);
+            return `<div class="module-toggle ${on?'on':''}" onclick="toggleModule('${u.id}','${m.id}',${on})">
+              <span class="module-ico">${m.ico}</span>
+              <span class="module-name">${m.label}</span>
+              <span class="module-check">${on?'✓ Actif':'○ Inactif'}</span>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="modules-title">Rôle</div>
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+          ${['employe','manager','admin'].map(r => `
+            <button class="btn ${u.role===r?'btn-primary':'btn-ghost'}" onclick="changeRole('${u.id}','${r}')">${r}</button>
+          `).join('')}
+        </div>
+        <div class="detail-actions">
+          <button class="btn btn-ghost" onclick="activateUser('${u.id}',${!u.actif})">${u.actif?'⏸ Désactiver':'▶ Activer'}</button>
+          <button class="btn btn-green" onclick="setAllModules('${u.id}',true)">✓ Tout activer</button>
+          <button class="btn btn-ghost" onclick="setAllModules('${u.id}',false)">○ Tout désactiver</button>
+        </div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function toggleUser(id) {
+  expandedUser = expandedUser === id ? null : id;
+  renderUsers();
+}
+
+async function toggleModule(userId, module, currentlyOn) {
+  // Admin/superadmin ont tout par défaut — on gère quand même les permissions
+  const isAdmin = allUsers.find(u=>u.id===userId)?.role;
+  if (['superadmin','admin'].includes(isAdmin)) {
+    toast('Les admins ont accès à tous les modules par défaut.'); return;
+  }
+
+  const newState = !currentlyOn;
+  try {
+    const { error } = await sb.from('permissions').upsert({
+      user_id: userId,
+      module,
+      actif: newState,
+    }, { onConflict: 'user_id,module' });
+    if (error) throw error;
+
+    // Mettre à jour local
+    const u = allUsers.find(u => u.id === userId);
+    if (u) {
+      const existing = u.permissions.find(p => p.module === module);
+      if (existing) existing.actif = newState;
+      else u.permissions.push({ user_id:userId, module, actif:newState });
+    }
+    renderUsers();
+    toast(`${newState ? '✓ Activé' : '○ Désactivé'} : ${module}`);
+  } catch(e) {
+    toast('⚠ Erreur : ' + e.message, true);
+  }
+}
+
+async function changeRole(userId, role) {
+  try {
+    const { error } = await sb.from('profiles').update({ role }).eq('id', userId);
+    if (error) throw error;
+    const u = allUsers.find(u => u.id === userId);
+    if (u) u.role = role;
+    renderUsers();
+    toast(`✓ Rôle changé en "${role}"`);
+  } catch(e) {
+    toast('⚠ ' + e.message, true);
+  }
+}
+
+async function activateUser(userId, active) {
+  try {
+    const { error } = await sb.from('profiles').update({ actif: active }).eq('id', userId);
+    if (error) throw error;
+    const u = allUsers.find(u => u.id === userId);
+    if (u) u.actif = active;
+    renderUsers();
+    toast(active ? '✓ Utilisateur activé' : '⏸ Utilisateur désactivé');
+  } catch(e) {
+    toast('⚠ ' + e.message, true);
+  }
+}
+
+async function setAllModules(userId, active) {
+  try {
+    const upserts = MODULES.map(m => ({ user_id:userId, module:m.id, actif:active }));
+    const { error } = await sb.from('permissions').upsert(upserts, { onConflict:'user_id,module' });
+    if (error) throw error;
+    const u = allUsers.find(u => u.id === userId);
+    if (u) u.permissions = MODULES.map(m => ({ user_id:userId, module:m.id, actif:active }));
+    renderUsers();
+    toast(active ? '✓ Tous les modules activés' : '○ Tous les modules désactivés');
+  } catch(e) {
+    toast('⚠ ' + e.message, true);
+  }
+}
+
+// ── Inviter un utilisateur ──
+let invSelected = new Set();
+
+function openInviteModal() {
+  document.getElementById('inv-email').value = '';
+  document.getElementById('inv-nom').value   = '';
+  document.getElementById('inv-role').value  = 'employe';
+  invSelected = new Set(DEFAULT_MODULES['employe']);
+  renderInvModules();
+  document.getElementById('modal-invite').style.display = 'flex';
+}
+
+document.getElementById('inv-role').addEventListener('change', function() {
+  invSelected = new Set(DEFAULT_MODULES[this.value] || []);
+  renderInvModules();
+});
+
+function renderInvModules() {
+  document.getElementById('inv-modules').innerHTML = MODULES.map(m => `
+    <div class="module-toggle ${invSelected.has(m.id)?'on':''}" onclick="toggleInvModule('${m.id}')">
+      <span>${m.ico} ${m.label}</span>
+      <span class="module-check">${invSelected.has(m.id)?'✓':''}</span>
+    </div>`).join('');
+}
+
+function toggleInvModule(id) {
+  if (invSelected.has(id)) invSelected.delete(id);
+  else invSelected.add(id);
+  renderInvModules();
+}
+
+async function inviteUser() {
+  const email = document.getElementById('inv-email').value.trim();
+  const nom   = document.getElementById('inv-nom').value.trim();
+  const role  = document.getElementById('inv-role').value;
+  if (!email) { toast('⚠ Email obligatoire', true); return; }
+
+  try {
+    // Inviter via Supabase admin (nécessite service_role — on utilise signUp avec metadata)
+    const { data, error } = await sb.auth.admin?.inviteUserByEmail
+      ? await sb.auth.admin.inviteUserByEmail(email)
+      : { error: { message: 'invite_not_available' } };
+
+    // Si l'API admin n'est pas dispo depuis le client, on notifie Esteban de créer manuellement
+    if (error?.message === 'invite_not_available') {
+      toast('⚠ L\'invitation doit être envoyée depuis le dashboard Supabase → Authentication → Invite user', true);
+      closeModal('modal-invite');
+      return;
+    }
+    if (error) throw error;
+
+    toast(`✓ Invitation envoyée à ${email}`);
+    closeModal('modal-invite');
+    await loadUsers();
+  } catch(e) {
+    toast('⚠ ' + e.message, true);
+  }
+}
+
+// ── Modules overview ──
+function renderModulesOverview() {
+  const el = document.getElementById('modules-overview');
+  el.innerHTML = MODULES.map(m => `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:16px">
+      <div style="font-size:28px;flex-shrink:0">${m.ico}</div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:700">${m.label}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">${moduleDesc(m.id)}</div>
+      </div>
+      <div style="font-size:11px;color:var(--green)">● Actif</div>
+    </div>`).join('');
+}
+
+function moduleDesc(id) {
+  return {
+    dlc:          'Suivi des dates de péremption, alertes, contrôle rapide',
+    pertes:       'Enregistrement des pertes avec quantité et historique',
+    produits:     'Catalogue articles, filtres, ajout et suppression',
+    allergenes:   '14 allergènes EU, 3 états (Oui/Non/?), filtres conseils',
+    temperatures: 'Relevés quotidiens par zone, détection hors norme',
+    documents:    'Checklists, liens PDF, contacts utiles',
+    transferts:   'Bons de transfert inter-rayons avec impression',
+  }[id] || '';
+}
+
+// ── Tenants ──
+async function loadTenants() {
+  const el = document.getElementById('tenants-list');
+  el.innerHTML = '<div class="loading">⏳ Chargement...</div>';
+  try {
+    const { data: tenants, error } = await sb.from('tenants').select('*').order('created_at');
+    if (error) throw error;
+    el.innerHTML = tenants.map(t => `
+      <div style="background:var(--surface);border:1px solid var(--border);border-left:4px solid ${t.theme_accent};border-radius:12px;padding:18px 20px;margin-bottom:10px;display:flex;align-items:center;gap:16px">
+        <div style="width:42px;height:42px;border-radius:10px;background:${t.theme_accent}22;border:2px solid ${t.theme_accent}44;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🏪</div>
+        <div style="flex:1">
+          <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700">${t.nom}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">slug: ${t.slug} · accent: <span style="color:${t.theme_accent}">${t.theme_accent}</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:8px;height:8px;border-radius:50%;background:${t.actif?'var(--green)':'var(--muted)'}"></div>
+          <span style="font-size:11px;color:var(--muted)">${t.actif?'Actif':'Inactif'}</span>
+        </div>
+      </div>`).join('') || '<div class="loading">Aucun client.</div>';
+  } catch(e) {
+    el.innerHTML = `<div class="loading" style="color:var(--red)">⚠ ${e.message}</div>`;
+  }
+}
+
+function openNewTenantModal() {
+  document.getElementById('ten-nom').value  = '';
+  document.getElementById('ten-slug').value = '';
+  document.getElementById('ten-accent').value = '#e8a045';
+  document.getElementById('ten-accent-picker').value = '#e8a045';
+  document.getElementById('modal-tenant').style.display = 'flex';
+}
+
+// Auto-générer le slug depuis le nom
+document.getElementById('ten-nom').addEventListener('input', function() {
+  document.getElementById('ten-slug').value = this.value
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+});
+
+async function createTenant() {
+  const nom    = document.getElementById('ten-nom').value.trim();
+  const slug   = document.getElementById('ten-slug').value.trim();
+  const accent = document.getElementById('ten-accent').value.trim() || '#e8a045';
+  if (!nom || !slug) { toast('⚠ Nom et slug obligatoires', true); return; }
+
+  try {
+    const { error } = await sb.from('tenants').insert({
+      nom, slug,
+      theme_accent:  accent,
+      theme_bg:      '#0f0f0d',
+      theme_surface: '#1a1a16',
+      theme_text:    '#f0ede4',
+      actif: true,
+    });
+    if (error) throw error;
+    toast(`✓ Client "${nom}" créé`);
+    closeModal('modal-tenant');
+    loadTenants();
+  } catch(e) {
+    toast('⚠ ' + e.message, true);
+  }
+}
+
+// ── Utils ──
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+// ── Init ──
+loadDashboard();
+</script>
+</body>
+</html>
