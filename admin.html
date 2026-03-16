@@ -226,12 +226,41 @@
 
 <!-- Auth guard -->
 <script>
-  const _u = localStorage.getItem('sl_user');
-  if (!_u) { window.location.replace('login.html'); }
-  else {
-    const _p = JSON.parse(_u);
-    if (!['superadmin','admin'].includes(_p.role)) { window.location.replace('index.html'); }
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+(async () => {
+  // Vérifier la session Supabase directement
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.replace('login.html'); return; }
+
+  // Charger le profil
+  const { data: profile } = await sb
+    .from('profiles')
+    .select('role, tenant_id, email, nom')
+    .eq('id', session.user.id)
+    .single();
+
+  if (!profile || !['superadmin','admin'].includes(profile.role)) {
+    window.location.replace('index.html');
+    return;
   }
+
+  // Stocker pour le reste de la page
+  const user = {
+    id: session.user.id,
+    email: session.user.email,
+    role: profile.role,
+    tenant_id: profile.tenant_id,
+    nom: profile.nom,
+  };
+  localStorage.setItem('sl_auth', '1');
+  localStorage.setItem('sl_user', JSON.stringify(user));
+  window._SL_USER = user;
+  window._SL_SB   = sb;
+})();
 </script>
 
 <div class="layout">
@@ -369,14 +398,11 @@
 
 <div class="toast-container" id="toast-container"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
-
-const ME = JSON.parse(localStorage.getItem('sl_user') || '{}');
+const ME = window._SL_USER || JSON.parse(localStorage.getItem('sl_user') || '{}');
+const sb = window._SL_SB || (() => { const {createClient} = supabase; return createClient(SUPABASE_URL, SUPABASE_ANON); })();
 
 const MODULES = [
   { id:'dlc',          label:'Suivi DLC',     ico:'📦' },

@@ -216,7 +216,6 @@
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
-
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -227,9 +226,27 @@ function showError(msg) {
   el.style.animation = 'none';
   requestAnimationFrame(() => el.style.animation = '');
 }
+function hideError() { document.getElementById('error-msg').style.display = 'none'; }
 
-function hideError() {
-  document.getElementById('error-msg').style.display = 'none';
+async function storeAndRedirect(userId, email) {
+  const { data: profile } = await sb
+    .from('profiles')
+    .select('role, tenant_id')
+    .eq('id', userId)
+    .single();
+
+  const role = profile?.role || 'employe';
+  localStorage.setItem('sl_auth', '1');
+  localStorage.setItem('sl_user', JSON.stringify({
+    id: userId, email, role,
+    tenant_id: profile?.tenant_id || null,
+  }));
+
+  if (role === 'superadmin' || role === 'admin') {
+    window.location.replace('admin.html');
+  } else {
+    window.location.replace('index.html');
+  }
 }
 
 async function login() {
@@ -238,7 +255,6 @@ async function login() {
   const btn      = document.getElementById('btn-login');
 
   if (!email || !password) { showError('Remplis les deux champs.'); return; }
-
   hideError();
   btn.disabled = true;
   btn.textContent = 'Connexion…';
@@ -251,143 +267,59 @@ async function login() {
     btn.textContent = 'Se connecter →';
     btn.classList.remove('btn-loading');
     if (error.message.includes('Invalid login')) showError('Email ou mot de passe incorrect.');
-    else if (error.message.includes('Email not confirmed')) showError('Confirme d\'abord ton email.');
+    else if (error.message.includes('Email not confirmed')) showError('Confirme ton email.');
     else showError(error.message);
     return;
   }
 
-  // Charger le profil pour savoir où rediriger
-  const { data: profile } = await sb
-    .from('profiles')
-    .select('role, tenant_id')
-    .eq('id', data.user.id)
-    .single();
-
-  // Stocker en localStorage pour les modules
-  localStorage.setItem('sl_auth', '1');
-  localStorage.setItem('sl_user', JSON.stringify({
-    id:       data.user.id,
-    email:    data.user.email,
-    role:     profile?.role || 'employe',
-    tenant_id: profile?.tenant_id,
-  }));
-
   btn.textContent = '✓ Connecté !';
-
-  // Redirection selon le rôle
-  setTimeout(() => {
-    if (profile?.role === 'superadmin' || profile?.role === 'admin') {
-      window.location.href = 'admin.html';
-    } else {
-      window.location.href = 'index.html';
-    }
-  }, 600);
+  await storeAndRedirect(data.user.id, data.user.email);
 }
 
 async function forgotPassword() {
   const email = document.getElementById('email').value.trim();
-  if (!email) { showError('Entre ton email d\'abord.'); return; }
+  if (!email) { showError('Entre ton email d'abord.'); return; }
   const { error } = await sb.auth.resetPasswordForEmail(email, {
     redirectTo: window.location.origin + '/login.html'
   });
   if (error) showError(error.message);
   else {
-    hideError();
     const el = document.getElementById('error-msg');
-    el.style.background = 'rgba(76,219,138,.1)';
-    el.style.borderColor = 'rgba(76,219,138,.3)';
-    el.style.color = 'var(--green)';
+    el.style.cssText += ';background:rgba(76,219,138,.1);border-color:rgba(76,219,138,.3);color:var(--green);display:block';
     el.textContent = '✓ Email de réinitialisation envoyé.';
-    el.style.display = 'block';
   }
 }
 
-// Gérer le token d'invitation/reset dans l'URL (évite la boucle infinie)
-async function checkSession() {
+// Gérer le token d'invitation dans l'URL (type=invite ou type=recovery)
+async function handleUrlToken() {
   const hash = window.location.hash;
-  const params = new URLSearchParams(window.location.search);
+  if (!hash.includes('access_token')) return false;
 
-  // Si l'URL contient un token de type invitation ou recovery → ne pas rediriger
-  // Laisser Supabase le traiter via onAuthStateChange
-  if (hash.includes('access_token') || hash.includes('type=invite') || hash.includes('type=recovery')) {
-    // Supabase va traiter le token automatiquement
-    // On attend l'événement auth pour rediriger
+  // Laisser Supabase parser le token
+  const { data: { session }, error } = await sb.auth.getSession();
+  if (error || !session) return false;
+
+  history.replaceState(null, '', window.location.pathname);
+  await storeAndRedirect(session.user.id, session.user.email);
+  return true;
+}
+
+async function init() {
+  // 1. Vérifier si token dans URL (invitation/reset)
+  const handled = await handleUrlToken();
+  if (handled) return;
+
+  // 2. Vérifier si déjà une session active
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    await storeAndRedirect(session.user.id, session.user.email);
     return;
   }
 
-  // Vérifier si déjà connecté
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    await redirectByRole(session.user.id);
-  }
+  // 3. Sinon afficher le formulaire normalement
 }
 
-async function redirectByRole(userId) {
-  const { data: profile } = await sb
-    .from('profiles')
-    .select('role')
-    .eq('id', userId)
-    .single();
-  const role = profile?.role || 'employe';
-  localStorage.setItem('sl_auth', '1');
-  if (role === 'superadmin' || role === 'admin') {
-    window.location.href = 'admin.html';
-  } else {
-    window.location.href = 'index.html';
-  }
-}
-
-// Écouter les changements d'auth (gère les tokens d'invitation)
-sb.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'SIGNED_IN' && session) {
-    // Stocker les infos
-    const { data: profile } = await sb
-      .from('profiles')
-      .select('role, tenant_id')
-      .eq('id', session.user.id)
-      .single();
-    localStorage.setItem('sl_auth', '1');
-    localStorage.setItem('sl_user', JSON.stringify({
-      id:        session.user.id,
-      email:     session.user.email,
-      role:      profile?.role || 'employe',
-      tenant_id: profile?.tenant_id,
-    }));
-    // Nettoyer le hash de l'URL avant de rediriger
-    history.replaceState(null, '', window.location.pathname);
-    await redirectByRole(session.user.id);
-  }
-  if (event === 'PASSWORD_RECOVERY') {
-    // Afficher le formulaire de nouveau mot de passe
-    showPasswordRecovery();
-  }
-});
-
-function showPasswordRecovery() {
-  document.querySelector('.card').innerHTML = `
-    <div class="logo">
-      <div class="logo-icon">▦</div>
-      <div class="logo-name">StoreLine</div>
-      <div class="logo-sub">Nouveau mot de passe</div>
-    </div>
-    <label for="new-pwd">Nouveau mot de passe</label>
-    <input id="new-pwd" type="password" placeholder="••••••••" class="form-input" style="margin-bottom:16px">
-    <button class="btn-login" onclick="updatePassword()">Enregistrer →</button>
-  `;
-}
-
-async function updatePassword() {
-  const pwd = document.getElementById('new-pwd')?.value;
-  if (!pwd || pwd.length < 6) { showError('Mot de passe trop court (6 caractères min)'); return; }
-  const { error } = await sb.auth.updateUser({ password: pwd });
-  if (error) showError(error.message);
-  else {
-    localStorage.setItem('sl_auth', '1');
-    window.location.href = 'admin.html';
-  }
-}
-
-checkSession();
+init();
 </script>
 </body>
 </html>
