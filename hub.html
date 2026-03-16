@@ -112,6 +112,7 @@
       <span id="clock">--:--</span>
       <span id="date-str"></span>
     </div>
+    <a href="admin.html" id="admin-btn" style="display:none;padding:6px 12px;background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:#a78bfa;text-decoration:none;transition:all .15s">⚙ Admin</a>
     <button onclick="logout()" id="logout-btn" style="display:none;padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--red)';this.style.borderColor='rgba(255,64,64,.4)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">↩ Déco</button>
   </div>
 </header>
@@ -182,7 +183,7 @@
 
 </div>
 
-<div class="version-tag">hub v1.6 · 16/03/2026 18:46</div>
+<div class="version-tag">hub v1.7 · 16/03/2026 20:32</div>
 
 <script>
 // ── Auth : check immédiat avant le rendu ──
@@ -241,8 +242,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (localStorage.getItem('sl_access_token')) {
     const btn = document.getElementById('logout-btn');
     if (btn) btn.style.display = 'block';
-    // Afficher le nom si dispo
     const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
+    // Bouton Admin visible uniquement pour superadmin et admin
+    if (['superadmin','admin'].includes(user.role)) {
+      const adminBtn = document.getElementById('admin-btn');
+      if (adminBtn) adminBtn.style.display = 'flex';
+    }
     if (user.email) {
       const sub = document.querySelector('.hero-sub');
       if (sub) sub.textContent = user.email + ' · Pâtisserie Rob The Market';
