@@ -212,42 +212,43 @@
 
 <div class="version">StoreLine v1.0 · 16/03/2026</div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
+// ── API Supabase via fetch natif (pas de lib, pas d'eval) ──
+async function sbAuth(email, password) {
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  return r.json();
+}
+
+async function sbGetProfile(userId, accessToken) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=role,tenant_id`, {
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${accessToken}`,
+    },
+  });
+  const data = await r.json();
+  return Array.isArray(data) ? data[0] : null;
+}
+
+// ── UI ──
 function showError(msg) {
   const el = document.getElementById('error-msg');
   el.textContent = msg;
-  el.style.display = 'block';
+  el.style.cssText = 'display:block;background:rgba(255,64,64,.1);border:1px solid rgba(255,64,64,.3);color:var(--red)';
   el.style.animation = 'none';
-  requestAnimationFrame(() => el.style.animation = '');
+  requestAnimationFrame(() => el.style.animation = 'shake .3s ease');
 }
 function hideError() { document.getElementById('error-msg').style.display = 'none'; }
-
-async function storeAndRedirect(userId, email) {
-  const { data: profile } = await sb
-    .from('profiles')
-    .select('role, tenant_id')
-    .eq('id', userId)
-    .single();
-
-  const role = profile?.role || 'employe';
-  localStorage.setItem('sl_auth', '1');
-  localStorage.setItem('sl_user', JSON.stringify({
-    id: userId, email, role,
-    tenant_id: profile?.tenant_id || null,
-  }));
-
-  if (role === 'superadmin' || role === 'admin') {
-    window.location.replace('admin.html');
-  } else {
-    window.location.replace('index.html');
-  }
-}
 
 async function login() {
   const email    = document.getElementById('email').value.trim();
@@ -260,66 +261,89 @@ async function login() {
   btn.textContent = 'Connexion…';
   btn.classList.add('btn-loading');
 
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  try {
+    const authData = await sbAuth(email, password);
 
-  if (error) {
+    if (authData.error || !authData.access_token) {
+      btn.disabled = false;
+      btn.textContent = 'Se connecter →';
+      btn.classList.remove('btn-loading');
+      const msg = authData.error_description || authData.message || authData.error || 'Erreur de connexion';
+      if (msg.includes('Invalid login')) showError('Email ou mot de passe incorrect.');
+      else if (msg.includes('Email not confirmed')) showError('Confirme ton email d'abord.');
+      else showError(msg);
+      return;
+    }
+
+    // Stocker les tokens
+    localStorage.setItem('sl_access_token',  authData.access_token);
+    localStorage.setItem('sl_refresh_token', authData.refresh_token);
+    localStorage.setItem('sl_auth', '1');
+
+    // Charger le profil
+    const profile = await sbGetProfile(authData.user.id, authData.access_token);
+    const role = profile?.role || 'employe';
+
+    localStorage.setItem('sl_user', JSON.stringify({
+      id:        authData.user.id,
+      email:     authData.user.email,
+      role,
+      tenant_id: profile?.tenant_id || null,
+    }));
+
+    btn.textContent = '✓ Connecté !';
+
+    setTimeout(() => {
+      if (role === 'superadmin' || role === 'admin') {
+        window.location.replace('admin.html');
+      } else {
+        window.location.replace('index.html');
+      }
+    }, 500);
+
+  } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Se connecter →';
     btn.classList.remove('btn-loading');
-    if (error.message.includes('Invalid login')) showError('Email ou mot de passe incorrect.');
-    else if (error.message.includes('Email not confirmed')) showError('Confirme ton email.');
-    else showError(error.message);
-    return;
+    showError('Erreur réseau — vérifie ta connexion.');
+    console.error(e);
   }
-
-  btn.textContent = '✓ Connecté !';
-  await storeAndRedirect(data.user.id, data.user.email);
 }
 
 async function forgotPassword() {
   const email = document.getElementById('email').value.trim();
   if (!email) { showError('Entre ton email d'abord.'); return; }
-  const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin + '/login.html'
-  });
-  if (error) showError(error.message);
-  else {
+  try {
+    await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'apikey': SUPABASE_ANON },
+      body: JSON.stringify({ email }),
+    });
     const el = document.getElementById('error-msg');
-    el.style.cssText += ';background:rgba(76,219,138,.1);border-color:rgba(76,219,138,.3);color:var(--green);display:block';
+    el.style.cssText = 'display:block;background:rgba(76,219,138,.1);border:1px solid rgba(76,219,138,.3);color:var(--green)';
     el.textContent = '✓ Email de réinitialisation envoyé.';
-  }
+  } catch(e) { showError('Erreur réseau.'); }
 }
 
-// Gérer le token d'invitation dans l'URL (type=invite ou type=recovery)
-async function handleUrlToken() {
-  const hash = window.location.hash;
-  if (!hash.includes('access_token')) return false;
-
-  // Laisser Supabase parser le token
-  const { data: { session }, error } = await sb.auth.getSession();
-  if (error || !session) return false;
-
-  history.replaceState(null, '', window.location.pathname);
-  await storeAndRedirect(session.user.id, session.user.email);
-  return true;
+// Vérifier si déjà connecté avec un token valide
+async function checkExistingSession() {
+  const token = localStorage.getItem('sl_access_token');
+  if (!token) return;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` }
+    });
+    if (r.ok) {
+      const user = await r.json();
+      const profile = await sbGetProfile(user.id, token);
+      const role = profile?.role || 'employe';
+      if (role === 'superadmin' || role === 'admin') window.location.replace('admin.html');
+      else window.location.replace('index.html');
+    }
+  } catch(e) {}
 }
 
-async function init() {
-  // 1. Vérifier si token dans URL (invitation/reset)
-  const handled = await handleUrlToken();
-  if (handled) return;
-
-  // 2. Vérifier si déjà une session active
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    await storeAndRedirect(session.user.id, session.user.email);
-    return;
-  }
-
-  // 3. Sinon afficher le formulaire normalement
-}
-
-init();
+checkExistingSession();
 </script>
 </body>
 </html>

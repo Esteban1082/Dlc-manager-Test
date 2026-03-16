@@ -402,7 +402,21 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
 const ME = window._SL_USER || JSON.parse(localStorage.getItem('sl_user') || '{}');
-const sb = window._SL_SB || (() => { const {createClient} = supabase; return createClient(SUPABASE_URL, SUPABASE_ANON); })();
+
+// API helper
+async function sbFetch(path, options={}) {
+  const token = localStorage.getItem('sl_access_token');
+  const r = await fetch(SUPABASE_URL + path, {
+    ...options,
+    headers: { 'apikey':SUPABASE_ANON, 'Authorization':`Bearer ${token}`, 'Content-Type':'application/json', 'Prefer':'return=representation', ...(options.headers||{}) },
+  });
+  const text = await r.text();
+  try { return JSON.parse(text); } catch { return null; }
+}
+async function sbSelect(table, query='') { return sbFetch(`/rest/v1/${table}${query}`); }
+async function sbInsert(table, body) { return sbFetch(`/rest/v1/${table}`, { method:'POST', body:JSON.stringify(body) }); }
+async function sbUpdate(table, query, body) { return sbFetch(`/rest/v1/${table}${query}`, { method:'PATCH', body:JSON.stringify(body) }); }
+async function sbUpsert(table, body, onConflict) { return sbFetch(`/rest/v1/${table}`, { method:'POST', headers:{ 'Prefer':`resolution=merge-duplicates,return=representation` }, body:JSON.stringify(body) }); }
 
 const MODULES = [
   { id:'dlc',          label:'Suivi DLC',     ico:'📦' },
@@ -458,7 +472,7 @@ function showView(name, el) {
 document.getElementById('sidebar-email').textContent = ME.email || '—';
 
 async function logout() {
-  await sb.auth.signOut();
+  await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method:'POST', headers:{'apikey':SUPABASE_ANON,'Authorization':`Bearer ${localStorage.getItem('sl_access_token')}`} });
   localStorage.removeItem('sl_auth');
   localStorage.removeItem('sl_user');
   window.location.href = 'login.html';
@@ -467,8 +481,8 @@ async function logout() {
 // ── Dashboard ──
 async function loadDashboard() {
   try {
-    const { data: profiles } = await sb.from('profiles').select('*');
-    const { data: tenants  } = await sb.from('tenants').select('*');
+    const profiles = await sbSelect('profiles', '?select=*');
+    const tenants = await sbSelect('tenants', '?select=*');
     const actifs = profiles?.filter(p => p.actif) || [];
 
     document.getElementById('stat-users').textContent   = profiles?.length || 0;
@@ -500,10 +514,8 @@ let expandedUser = null;
 async function loadUsers() {
   document.getElementById('users-list').innerHTML = '<div class="loading">⏳ Chargement...</div>';
   try {
-    const { data: profiles, error } = await sb
-      .from('profiles')
-      .select('*, permissions(*)')
-      .order('created_at', { ascending:false });
+    const profiles = await sbSelect('profiles', '?select=*,permissions(*)&order=created_at.asc');
+    const error = null;
 
     if (error) throw error;
     allUsers = profiles || [];
@@ -578,11 +590,8 @@ async function toggleModule(userId, module, currentlyOn) {
 
   const newState = !currentlyOn;
   try {
-    const { error } = await sb.from('permissions').upsert({
-      user_id: userId,
-      module,
-      actif: newState,
-    }, { onConflict: 'user_id,module' });
+    const result = await sbUpsert('permissions', { user_id: userId, module, actif: newState });
+    const error = result?.error || null;
     if (error) throw error;
 
     // Mettre à jour local
@@ -601,7 +610,8 @@ async function toggleModule(userId, module, currentlyOn) {
 
 async function changeRole(userId, role) {
   try {
-    const { error } = await sb.from('profiles').update({ role }).eq('id', userId);
+    const result = await sbUpdate('profiles', `?id=eq.${userId}`, { role });
+    const error = result?.error || null;
     if (error) throw error;
     const u = allUsers.find(u => u.id === userId);
     if (u) u.role = role;
@@ -614,7 +624,8 @@ async function changeRole(userId, role) {
 
 async function activateUser(userId, active) {
   try {
-    const { error } = await sb.from('profiles').update({ actif: active }).eq('id', userId);
+    const result = await sbUpdate('profiles', `?id=eq.${userId}`, { actif: active });
+    const error = result?.error || null;
     if (error) throw error;
     const u = allUsers.find(u => u.id === userId);
     if (u) u.actif = active;
@@ -628,7 +639,8 @@ async function activateUser(userId, active) {
 async function setAllModules(userId, active) {
   try {
     const upserts = MODULES.map(m => ({ user_id:userId, module:m.id, actif:active }));
-    const { error } = await sb.from('permissions').upsert(upserts, { onConflict:'user_id,module' });
+    const result = await sbUpsert('permissions', upserts);
+    const error = result?.error || null;
     if (error) throw error;
     const u = allUsers.find(u => u.id === userId);
     if (u) u.permissions = MODULES.map(m => ({ user_id:userId, module:m.id, actif:active }));
@@ -729,7 +741,8 @@ async function loadTenants() {
   const el = document.getElementById('tenants-list');
   el.innerHTML = '<div class="loading">⏳ Chargement...</div>';
   try {
-    const { data: tenants, error } = await sb.from('tenants').select('*').order('created_at');
+    const tenants = await sbSelect('tenants', '?select=*&order=created_at.asc');
+    const error = tenants === null ? {message:'Erreur réseau'} : null;
     if (error) throw error;
     el.innerHTML = tenants.map(t => `
       <div style="background:var(--surface);border:1px solid var(--border);border-left:4px solid ${t.theme_accent};border-radius:12px;padding:18px 20px;margin-bottom:10px;display:flex;align-items:center;gap:16px">
@@ -772,7 +785,7 @@ async function createTenant() {
   if (!nom || !slug) { toast('⚠ Nom et slug obligatoires', true); return; }
 
   try {
-    const { error } = await sb.from('tenants').insert({
+    const insertResult = await sbInsert('tenants', {
       nom, slug,
       theme_accent:  accent,
       theme_bg:      '#0f0f0d',
@@ -780,7 +793,7 @@ async function createTenant() {
       theme_text:    '#f0ede4',
       actif: true,
     });
-    if (error) throw error;
+    if (!insertResult || insertResult.error) throw new Error(insertResult?.error?.message || 'Erreur');
     toast(`✓ Client "${nom}" créé`);
     closeModal('modal-tenant');
     loadTenants();
