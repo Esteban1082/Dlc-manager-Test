@@ -302,20 +302,88 @@ async function forgotPassword() {
   }
 }
 
-// Vérifier si déjà connecté → rediriger directement
+// Gérer le token d'invitation/reset dans l'URL (évite la boucle infinie)
 async function checkSession() {
+  const hash = window.location.hash;
+  const params = new URLSearchParams(window.location.search);
+
+  // Si l'URL contient un token de type invitation ou recovery → ne pas rediriger
+  // Laisser Supabase le traiter via onAuthStateChange
+  if (hash.includes('access_token') || hash.includes('type=invite') || hash.includes('type=recovery')) {
+    // Supabase va traiter le token automatiquement
+    // On attend l'événement auth pour rediriger
+    return;
+  }
+
+  // Vérifier si déjà connecté
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
+    await redirectByRole(session.user.id);
+  }
+}
+
+async function redirectByRole(userId) {
+  const { data: profile } = await sb
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .single();
+  const role = profile?.role || 'employe';
+  localStorage.setItem('sl_auth', '1');
+  if (role === 'superadmin' || role === 'admin') {
+    window.location.href = 'admin.html';
+  } else {
+    window.location.href = 'index.html';
+  }
+}
+
+// Écouter les changements d'auth (gère les tokens d'invitation)
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_IN' && session) {
+    // Stocker les infos
     const { data: profile } = await sb
       .from('profiles')
-      .select('role')
+      .select('role, tenant_id')
       .eq('id', session.user.id)
       .single();
-    if (profile?.role === 'superadmin' || profile?.role === 'admin') {
-      window.location.href = 'admin.html';
-    } else {
-      window.location.href = 'index.html';
-    }
+    localStorage.setItem('sl_auth', '1');
+    localStorage.setItem('sl_user', JSON.stringify({
+      id:        session.user.id,
+      email:     session.user.email,
+      role:      profile?.role || 'employe',
+      tenant_id: profile?.tenant_id,
+    }));
+    // Nettoyer le hash de l'URL avant de rediriger
+    history.replaceState(null, '', window.location.pathname);
+    await redirectByRole(session.user.id);
+  }
+  if (event === 'PASSWORD_RECOVERY') {
+    // Afficher le formulaire de nouveau mot de passe
+    showPasswordRecovery();
+  }
+});
+
+function showPasswordRecovery() {
+  document.querySelector('.card').innerHTML = `
+    <div class="logo">
+      <div class="logo-icon">▦</div>
+      <div class="logo-name">StoreLine</div>
+      <div class="logo-sub">Nouveau mot de passe</div>
+    </div>
+    <label for="new-pwd">Nouveau mot de passe</label>
+    <input id="new-pwd" type="password" placeholder="••••••••" class="form-input" style="margin-bottom:16px">
+    <button class="btn-login" onclick="updatePassword()">Enregistrer →</button>
+  `;
+}
+
+async function updatePassword() {
+  const pwd = document.getElementById('new-pwd')?.value;
+  if (!pwd || pwd.length < 6) { showError('Mot de passe trop court (6 caractères min)'); return; }
+  const { error } = await sb.auth.updateUser({ password: pwd });
+  if (error) showError(error.message);
+  else {
+    localStorage.setItem('sl_auth', '1');
+    window.location.href = 'admin.html';
   }
 }
 
