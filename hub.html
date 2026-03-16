@@ -183,7 +183,7 @@
 
 </div>
 
-<div class="version-tag">hub v1.7 · 16/03/2026 20:32</div>
+<div class="version-tag">hub v1.8 · 16/03/2026 21:40</div>
 
 <script>
 // ── Auth : check immédiat avant le rendu ──
@@ -239,18 +239,20 @@ function logout() {
 
 // Afficher le bouton déco seulement si connecté via Supabase
 document.addEventListener('DOMContentLoaded', () => {
-  if (localStorage.getItem('sl_access_token')) {
-    const btn = document.getElementById('logout-btn');
-    if (btn) btn.style.display = 'block';
-    const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
-    // Bouton Admin visible uniquement pour superadmin et admin
-    if (['superadmin','admin'].includes(user.role)) {
+  // Connexion Supabase (StoreLine)
+  const slToken = localStorage.getItem('sl_access_token');
+  const slUser  = JSON.parse(localStorage.getItem('sl_user') || '{}');
+  if (slToken) {
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) logoutBtn.style.display = 'block';
+    // Bouton Admin visible pour superadmin et admin
+    if (['superadmin','admin'].includes(slUser.role)) {
       const adminBtn = document.getElementById('admin-btn');
-      if (adminBtn) adminBtn.style.display = 'flex';
+      if (adminBtn) adminBtn.style.display = 'inline-flex';
     }
-    if (user.email) {
+    if (slUser.email) {
       const sub = document.querySelector('.hero-sub');
-      if (sub) sub.textContent = user.email + ' · Pâtisserie Rob The Market';
+      if (sub) sub.textContent = slUser.email + ' · Pâtisserie Rob The Market';
     }
   }
 });
