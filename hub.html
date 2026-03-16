@@ -107,9 +107,12 @@
     <div class="logo-title">🏪 Pâtisserie Manager</div>
     <div class="logo-sub">Rob The Market</div>
   </div>
-  <div class="date-display">
-    <span id="clock">--:--</span>
-    <span id="date-str"></span>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="date-display">
+      <span id="clock">--:--</span>
+      <span id="date-str"></span>
+    </div>
+    <button onclick="logout()" id="logout-btn" style="display:none;padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--red)';this.style.borderColor='rgba(255,64,64,.4)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">↩ Déco</button>
   </div>
 </header>
 
@@ -179,13 +182,13 @@
 
 </div>
 
-<div class="version-tag">hub v1.5 · 15/03/2026 16:55</div>
+<div class="version-tag">hub v1.6 · 16/03/2026 18:46</div>
 
 <script>
 // ── Auth : check immédiat avant le rendu ──
 const PWD_HASH = "15197cf7214b58e67cae565e573ffd9aa44bcb81f8ee5d7185dfe8da0a16ef43";
 
-function isAuth() { return localStorage.getItem('pm_auth') === '1'; }
+function isAuth() { return localStorage.getItem('sl_auth') === '1' || localStorage.getItem('pm_auth') === '1'; }
 
 function showLock() {
   const ls = document.getElementById('lock-screen');
@@ -205,6 +208,7 @@ async function checkPassword() {
   const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
   if (hash === PWD_HASH) {
     localStorage.setItem('pm_auth', '1');
+    localStorage.setItem('sl_auth', '1');
     hideLock();
   } else {
     const err = document.getElementById('pwd-error');
@@ -220,6 +224,29 @@ document.addEventListener('DOMContentLoaded', () => {
     hideLock();
   } else {
     showLock();
+  }
+});
+
+function logout() {
+  localStorage.removeItem('sl_auth');
+  localStorage.removeItem('sl_access_token');
+  localStorage.removeItem('sl_refresh_token');
+  localStorage.removeItem('sl_user');
+  localStorage.removeItem('pm_auth');
+  window.location.replace('index.html');
+}
+
+// Afficher le bouton déco seulement si connecté via Supabase
+document.addEventListener('DOMContentLoaded', () => {
+  if (localStorage.getItem('sl_access_token')) {
+    const btn = document.getElementById('logout-btn');
+    if (btn) btn.style.display = 'block';
+    // Afficher le nom si dispo
+    const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
+    if (user.email) {
+      const sub = document.querySelector('.hero-sub');
+      if (sub) sub.textContent = user.email + ' · Pâtisserie Rob The Market';
+    }
   }
 });
 
