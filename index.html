@@ -271,7 +271,7 @@ async function login() {
       btn.classList.remove('btn-loading');
       const msg = authData.error_description || authData.message || authData.error || 'Erreur de connexion';
       if (msg.includes('Invalid login')) showError('Email ou mot de passe incorrect.');
-      else if (msg.includes('Email not confirmed')) showError('Confirme ton email d'abord.');
+      else if (msg.includes('Email not confirmed')) showError('Confirme ton email avant de te connecter.');
       else showError(msg);
       return;
     }
@@ -313,7 +313,7 @@ async function login() {
 
 async function forgotPassword() {
   const email = document.getElementById('email').value.trim();
-  if (!email) { showError('Entre ton email d'abord.'); return; }
+  if (!email) { showError('Entre ton email avant de continuer.'); return; }
   try {
     await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
       method: 'POST',
