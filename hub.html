@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pâtisserie Manager – Rob The Market</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:      #0f0f0d;
+    --surface: #1a1a16;
+    --border:  #2e2e28;
+    --text:    #f0ede4;
+    --muted:   #7a7a6e;
+    --amber:   #e8a045;
+    --amber2:  #f5c060;
+    --red:     #ff4040;
+    --green:   #4cdb8a;
+    --yellow:  #f5c842;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
+  button { transition:all .15s; }
+  button:active { transform:scale(0.97); }
+
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 32px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--bg); z-index:100;
+  }
+  .logo-title { font-family:'Fraunces',serif; font-weight:900; font-size:24px; color:var(--amber); }
+  .logo-sub   { font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+  .date-display { font-size:11px; color:var(--muted); letter-spacing:1px; text-align:right; }
+  #clock { color:var(--text); font-size:18px; display:block; }
+
+  .hero {
+    padding:48px 32px 24px;
+    max-width:900px; margin:0 auto;
+    text-align:center;
+  }
+  .hero-title {
+    font-family:'Fraunces',serif; font-weight:900; font-size:36px;
+    color:var(--amber); margin-bottom:10px;
+  }
+  .hero-sub { font-size:13px; color:var(--muted); letter-spacing:1px; }
+
+  .grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap:20px;
+    padding:24px 32px 60px;
+    max-width:1100px; margin:0 auto;
+  }
+
+  .tile {
+    display:flex; flex-direction:column;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:16px; padding:28px 24px;
+    cursor:pointer; text-decoration:none; color:var(--text);
+    transition:all .2s; position:relative; overflow:hidden;
+  }
+  .tile:hover { border-color:var(--amber); transform:translateY(-3px); box-shadow:0 8px 32px rgba(232,160,69,.15); }
+  .tile.locked { pointer-events:none; opacity:0.4; }
+  .tile:active { transform:translateY(0); }
+  .tile-accent { position:absolute; top:0; left:0; right:0; height:3px; background:var(--amber); }
+  .tile-icon { font-size:38px; margin-bottom:16px; line-height:1; }
+  .tile-name { font-family:'Fraunces',serif; font-size:20px; font-weight:700; margin-bottom:8px; }
+  .tile-desc { font-size:12px; color:var(--muted); line-height:1.6; }
+  .tile-badge {
+    display:inline-flex; align-items:center;
+    margin-top:16px; padding:4px 10px;
+    background:rgba(232,160,69,.12); border:1px solid rgba(232,160,69,.25);
+    border-radius:20px; font-size:10px; color:var(--amber); letter-spacing:1px;
+  }
+  .tile.disabled { opacity:.45; cursor:not-allowed; pointer-events:none; }
+  .tile.disabled .tile-accent { background:var(--border); }
+  .tile.disabled .tile-badge { background:rgba(110,110,100,.12); border-color:var(--border); color:var(--muted); }
+
+  .version-tag {
+    position:fixed; bottom:10px; left:14px;
+    font-size:10px; color:var(--border);
+    font-family:'DM Mono',monospace; letter-spacing:1px; z-index:50;
+  }
+</style>
+</head>
+<body>
+
+<!-- Écran de connexion -->
+<div id="lock-screen" style="position:fixed;inset:0;z-index:9999;background:var(--bg);display:none;align-items:center;justify-content:center;">
+  <div style="text-align:center;width:340px;padding:20px">
+    <div style="font-family:'Fraunces',serif;font-size:48px;font-weight:900;color:var(--amber);margin-bottom:8px">🏪</div>
+    <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--amber);margin-bottom:6px">Pâtisserie Manager</div>
+    <div style="font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:40px">Rob The Market</div>
+    <input id="pwd-input" type="password" placeholder="• • • •"
+      autocomplete="off"
+      style="width:100%;box-sizing:border-box;padding:18px 20px;background:var(--surface);border:2px solid var(--border);border-radius:14px;color:var(--text);font-family:'DM Mono',monospace;font-size:28px;text-align:center;letter-spacing:12px;outline:none;margin-bottom:8px;transition:border-color .2s"
+      onkeydown="if(event.key==='Enter')checkPassword()"
+      oninput="if(this.value.length>0){this.style.borderColor='var(--amber)'}else{this.style.borderColor='var(--border)'}"
+    >
+    <div id="pwd-error" style="color:var(--red);font-size:12px;min-height:18px;margin-bottom:14px"></div>
+    <button onclick="checkPassword()" style="width:100%;padding:18px;background:var(--amber);border:none;border-radius:14px;font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:#000;cursor:pointer;transition:all .15s">Entrer →</button>
+  </div>
+</div>
+
+<header>
+  <div>
+    <div class="logo-title">🏪 Pâtisserie Manager</div>
+    <div class="logo-sub">Rob The Market</div>
+  </div>
+  <div class="date-display">
+    <span id="clock">--:--</span>
+    <span id="date-str"></span>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="hero-title">Outils internes</div>
+  <div class="hero-sub">Développés en interne · Pâtisserie Rob The Market</div>
+</div>
+
+<div class="grid">
+
+  <a class="tile locked" href="dlc.html">
+    <div class="tile-accent"></div>
+    <div class="tile-icon">📦</div>
+    <div class="tile-name">Suivi DLC</div>
+    <div class="tile-desc">Gestion des dates de péremption. Alertes automatiques, contrôle rapide, scanner code-barres.</div>
+    <div class="tile-badge">✓ Opérationnel</div>
+  </a>
+
+  <a class="tile locked" href="pertes.html">
+    <div class="tile-accent"></div>
+    <div class="tile-icon">📉</div>
+    <div class="tile-name">Pertes</div>
+    <div class="tile-desc">Enregistrement des produits jetés. Historique filtrable par jour, semaine, mois.</div>
+    <div class="tile-badge">✓ Opérationnel</div>
+  </a>
+
+  <a class="tile locked" href="produits.html">
+    <div class="tile-accent"></div>
+    <div class="tile-icon">📋</div>
+    <div class="tile-name">Base produits</div>
+    <div class="tile-desc">Catalogue complet des articles. Recherche par nom, marque ou code-barres.</div>
+    <div class="tile-badge">✓ Opérationnel</div>
+  </a>
+
+  <a class="tile locked" href="allergenes.html">
+    <div class="tile-accent"></div>
+    <div class="tile-icon">⚠️</div>
+    <div class="tile-name">Allergènes</div>
+    <div class="tile-desc">Fiches allergènes par produit. Les 14 allergènes réglementaires, consultables rapidement.</div>
+    <div class="tile-badge">✓ Opérationnel</div>
+  </a>
+
+  <a class="tile locked" href="temperatures.html">
+    <div class="tile-accent"></div>
+    <div class="tile-icon">🌡️</div>
+    <div class="tile-name">Températures</div>
+    <div class="tile-desc">Relevé quotidien des températures par appareil. Historique et détection hors norme.</div>
+    <div class="tile-badge">✓ Opérationnel</div>
+  </a>
+
+  <a class="tile locked" href="documents.html">
+    <div class="tile-accent"></div>
+    <div class="tile-icon">📁</div>
+    <div class="tile-name">Documents</div>
+    <div class="tile-desc">Checklists d'ouverture/fermeture, fiches PDF, contacts utiles.</div>
+    <div class="tile-badge">✓ Opérationnel</div>
+  </a>
+
+
+  <a class="tile locked" href="transferts.html">
+    <div class="tile-accent"></div>
+    <div class="tile-icon">🔄</div>
+    <div class="tile-name">Transferts</div>
+    <div class="tile-desc">Bons de transfert inter-rayons. Articles, quantités, code-barres, prix total et historique.</div>
+    <div class="tile-badge">✓ Opérationnel</div>
+  </a>
+
+</div>
+
+<div class="version-tag">hub v1.5 · 15/03/2026 16:55</div>
+
+<script>
+// ── Auth : check immédiat avant le rendu ──
+const PWD_HASH = "15197cf7214b58e67cae565e573ffd9aa44bcb81f8ee5d7185dfe8da0a16ef43";
+
+function isAuth() { return localStorage.getItem('pm_auth') === '1'; }
+
+function showLock() {
+  const ls = document.getElementById('lock-screen');
+  ls.style.display = 'flex';
+  document.querySelectorAll('.tile').forEach(t => t.classList.add('locked'));
+  setTimeout(() => document.getElementById('pwd-input').focus(), 100);
+}
+
+function hideLock() {
+  document.getElementById('lock-screen').style.display = 'none';
+  document.querySelectorAll('.tile').forEach(t => t.classList.remove('locked'));
+}
+
+async function checkPassword() {
+  const val = document.getElementById('pwd-input').value;
+  const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
+  const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  if (hash === PWD_HASH) {
+    localStorage.setItem('pm_auth', '1');
+    hideLock();
+  } else {
+    const err = document.getElementById('pwd-error');
+    err.textContent = '⚠ Code incorrect';
+    document.getElementById('pwd-input').value = '';
+    setTimeout(() => err.textContent = '', 2000);
+  }
+}
+
+// Exécuté dès que le DOM est prêt
+document.addEventListener('DOMContentLoaded', () => {
+  if (isAuth()) {
+    hideLock();
+  } else {
+    showLock();
+  }
+});
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit' });
+  document.getElementById('date-str').textContent = ' · ' + now.toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' });
+}
+updateClock(); setInterval(updateClock, 1000);
+</script>
+</body>
+</html>
