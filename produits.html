@@ -99,9 +99,23 @@ document.addEventListener('DOMContentLoaded', () => {
     oninput="renderList()" autocomplete="off"
     style="width:100%;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;margin-bottom:10px;transition:border-color .15s">
 
-  <!-- Filtres par marque -->
-  <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch" id="marque-filters">
-    <button class="filter-btn active" onclick="setMarqueFilter('',this)">Tous</button>
+  <!-- Filtres : tri + marque -->
+  <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:140px;position:relative">
+      <select id="tri-select" onchange="setTri(this.value)"
+        style="width:100%;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;appearance:none;cursor:pointer;transition:border-color .15s">
+        <option value="nom">↑ Trier par nom</option>
+        <option value="marque">↑ Trier par patissier</option>
+      </select>
+      <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none">▾</span>
+    </div>
+    <div style="flex:1;min-width:140px;position:relative">
+      <select id="marque-select" onchange="setMarqueFilter(this.value)"
+        style="width:100%;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;appearance:none;cursor:pointer;transition:border-color .15s">
+        <option value="">Tous les patissiers</option>
+      </select>
+      <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none">▾</span>
+    </div>
   </div>
 
   <div id="produits-stats" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
@@ -138,13 +152,14 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">produits v1.1 · 15/03/2026 17:45</div>
+<div class="version-tag">produits v1.2 · 16/03/2026 06:23</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
 let sheetProducts = [];
 let _apiCallId = 0;
 let filtreMarque = '';
+let triMode = 'nom';
 
 function api(params) {
   return new Promise((resolve, reject) => {
@@ -182,18 +197,22 @@ function getProduitFields(p) {
   };
 }
 
-function setMarqueFilter(marque, btn) {
+function setTri(mode) {
+  triMode = mode;
+  renderList();
+}
+
+function setMarqueFilter(marque) {
   filtreMarque = marque;
-  document.querySelectorAll('#marque-filters .filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
   renderList();
 }
 
 function buildMarqueFilters() {
   const marques = [...new Set(sheetProducts.map(p => getProduitFields(p).marque).filter(Boolean))].sort();
-  const container = document.getElementById('marque-filters');
-  container.innerHTML = `<button class="filter-btn ${filtreMarque===''?'active':''}" onclick="setMarqueFilter('',this)">Tous</button>` +
-    marques.map(m => `<button class="filter-btn ${filtreMarque===m?'active':''}" onclick="setMarqueFilter('${m.replace(/'/g,"\'")}',this)">${m}</button>`).join('');
+  const sel = document.getElementById('marque-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Tous les patissiers</option>' +
+    marques.map(m => `<option value="${m.replace(/"/g,'&quot;')}" ${filtreMarque===m?'selected':''}>${m}</option>`).join('');
 }
 
 function renderList() {
@@ -203,6 +222,10 @@ function renderList() {
   if (q) items = items.filter(p => { const f = getProduitFields(p); return f.nom.toLowerCase().includes(q) || f.marque.toLowerCase().includes(q) || f.barcode.includes(q); });
 
   const statsEl = document.getElementById('produits-stats');
+  // Tri
+  if (triMode === 'nom') items.sort((a,b) => { const fa=getProduitFields(a), fb=getProduitFields(b); return fa.nom.localeCompare(fb.nom, 'fr'); });
+  else items.sort((a,b) => { const fa=getProduitFields(a), fb=getProduitFields(b); return fa.marque.localeCompare(fb.marque, 'fr') || fa.nom.localeCompare(fb.nom, 'fr'); });
+
   const filterInfo = filtreMarque ? ` · ${filtreMarque}` : '';
   statsEl.textContent = `${items.length} / ${sheetProducts.length} produit${sheetProducts.length !== 1 ? 's' : ''}${filterInfo}`;
 

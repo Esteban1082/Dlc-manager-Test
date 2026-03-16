@@ -157,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">temperatures v1.1 · 15/03/2026 17:45</div>
+<div class="version-tag">temperatures v1.2 · 16/03/2026 06:24</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -211,7 +211,7 @@ function renderAppareils() {
     </div>`;
     return;
   }
-  list.innerHTML = appareils.map(a => {
+  list.innerHTML = zones.map(a => {
     return `<div class="appliance-card" id="card-${a.id}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div>
@@ -243,7 +243,7 @@ function checkTemp(id) {
 }
 
 async function saveAllTemps() {
-  const entries = appareils.map(a => {
+  const entries = zones.map(a => {
     const val = document.getElementById('temp-' + a.id)?.value;
     return { id:a.id, nom:a.nom, temp:val, date:todayStr };
   }).filter(e => e.temp !== '' && e.temp !== undefined);
@@ -349,13 +349,13 @@ function closeZoneModal() { document.getElementById('modal-zones').style.display
 
 function renderZonesManage() {
   document.getElementById('zones-manage-list').innerHTML = zones.length
-    ? appareils.map(a => `
+    ? zones.map(a => `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:6px">
         <div>
           <span style="font-size:13px;font-weight:600">${a.nom}</span>
           <span style="font-size:11px;color:var(--muted);margin-left:8px">${a.min}°C → ${a.max}°C</span>
         </div>
-        <button onclick="removeAppliance('${a.id}')" style="padding:4px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:12px;color:var(--red);">🗑</button>
+        <button onclick="removeZone('${a.id}')" style="padding:4px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:12px;color:var(--red);">🗑</button>
       </div>`).join('')
     : '<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Aucune zone configurée.</div>';
 }
@@ -377,19 +377,19 @@ function addZone() {
 }
 
 function removeZone(id) {
-  appareils = zones.filter(a => a.id !== id);
+  zones = zones.filter(a => a.id !== id);
   saveZonesLocal();
   renderAppareils();
   renderZonesManage();
 }
 
 function saveZonesLocal() {
-  try { localStorage.setItem('pm_zones', JSON.stringify(appareils)); } catch(e) {}
+  try { localStorage.setItem('pm_zones', JSON.stringify(zones)); } catch(e) {}
 }
 function loadZonesLocal() {
   try {
     const saved = localStorage.getItem('pm_zones');
-    if (saved) appareils = JSON.parse(saved);
+    if (saved) zones = JSON.parse(saved);
   } catch(e) {}
 }
 

@@ -308,8 +308,16 @@ document.addEventListener('DOMContentLoaded', () => {
   <div class="modal">
     <div class="modal-title">✓ Valider le transfert</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:16px" id="valider-resume"></div>
-    <label class="form-label" style="margin-bottom:6px">Prix total (€)</label>
-    <input id="prix-total-input" class="form-input" type="number" step="0.01" min="0" placeholder="Ex : 12.50" style="margin-bottom:16px">
+    <div style="display:flex;gap:10px;margin-bottom:16px">
+      <div style="flex:1">
+        <label class="form-label" style="margin-bottom:6px">Date du transfert</label>
+        <input id="date-transfert" class="form-input" type="date" style="margin-bottom:0">
+      </div>
+      <div style="flex:1">
+        <label class="form-label" style="margin-bottom:6px">Prix total (€)</label>
+        <input id="prix-total-input" class="form-input" type="number" step="0.01" min="0" placeholder="Ex : 12.50" style="margin-bottom:0">
+      </div>
+    </div>
     <label class="form-label" style="margin-bottom:6px">Note (optionnel)</label>
     <input id="note-transfert" class="form-input" type="text" placeholder="Ex : Urgent pour service midi" style="margin-bottom:16px">
     <label class="form-label" style="margin-bottom:6px">Code-barres du bon <span style="color:var(--muted);font-weight:400">(optionnel)</span></label>
@@ -347,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">transferts v1.2 · 15/03/2026 17:09</div>
+<div class="version-tag">transferts v1.3 · 16/03/2026 06:24</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -393,7 +401,8 @@ function toast(msg, isError=false) {
 }
 
 function fmtDate(str) {
-  return new Date(str+'T00:00:00').toLocaleDateString('fr-BE', {weekday:'short',day:'numeric',month:'short'});
+  if (!str) return '?';
+  return new Date(str+'T00:00:00').toLocaleDateString('fr-BE', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
 }
 function fmtEur(v) { return parseFloat(v||0).toFixed(2).replace('.',',') + ' €'; }
 
@@ -621,6 +630,7 @@ function validerTransfert() {
   const totalQty = panier.reduce((s,a) => s+a.qty, 0);
   document.getElementById('valider-resume').innerHTML =
     `<strong style="color:var(--text)">${panier.length} article${panier.length>1?'s':''}</strong> · ${totalQty} unité${totalQty>1?'s':''} → <span style="color:var(--blue)">${rayonActuel}</span>`;
+  document.getElementById('date-transfert').value = new Date().toISOString().split('T')[0];
   document.getElementById('prix-total-input').value = '';
   document.getElementById('note-transfert').value = '';
   document.getElementById('bon-barcode').value = '';
@@ -634,7 +644,7 @@ async function confirmerTransfert() {
   const prix = parseFloat(document.getElementById('prix-total-input').value) || 0;
   const note = document.getElementById('note-transfert').value.trim();
   const bonBarcode = document.getElementById('bon-barcode').value.trim();
-  const today = new Date().toISOString().split('T')[0];
+  const today = document.getElementById('date-transfert').value || new Date().toISOString().split('T')[0];
   const heure = new Date().toLocaleTimeString('fr-BE', {hour:'2-digit',minute:'2-digit'});
 
   const bon = {
