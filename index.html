@@ -298,7 +298,7 @@ async function login() {
       if (role === 'superadmin' || role === 'admin') {
         window.location.replace('admin.html');
       } else {
-        window.location.replace('index.html');
+        window.location.replace('hub.html');
       }
     }, 500);
 
@@ -352,7 +352,7 @@ async function checkExistingSession() {
     const role = profile?.role || 'employe';
     localStorage.setItem('sl_user', JSON.stringify({ id:user.id, email:user.email, role, tenant_id:profile?.tenant_id }));
     if (role === 'superadmin' || role === 'admin') window.location.replace('admin.html');
-    else window.location.replace('index.html');
+    else window.location.replace('hub.html');
   } catch(e) {
     // En cas d'erreur réseau — ne pas rediriger, laisser l'utilisateur se connecter manuellement
     console.warn('Session check failed:', e);

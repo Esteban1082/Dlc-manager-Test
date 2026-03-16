@@ -538,8 +538,8 @@ async function logout() {
 // ── Dashboard ──
 async function loadDashboard() {
   try {
-    const profiles = await sbSelect('profiles', '?select=*');
-    const tenants = await sbSelect('tenants', '?select=*');
+    const profiles = await sbSelect('profiles', '?select=id,email,role,actif,created_at');
+    const tenants = await sbSelect('tenants', '?select=id,nom,actif');
     const actifs = profiles?.filter(p => p.actif) || [];
 
     document.getElementById('stat-users').textContent   = profiles?.length || 0;
@@ -571,8 +571,8 @@ let expandedUser = null;
 async function loadUsers() {
   document.getElementById('users-list').innerHTML = '<div class="loading">⏳ Chargement...</div>';
   try {
-    const profiles = await sbSelect('profiles', '?select=*,permissions(*)&order=created_at.asc');
-    const error = null;
+    const profiles = await sbSelect('profiles', '?select=id,email,nom,role,actif,tenant_id,created_at,permissions(*)&order=created_at.desc');
+    const error = (!profiles || profiles.message) ? {message: profiles?.message || 'Erreur lecture'} : null;
 
     if (error) throw error;
     allUsers = profiles || [];
