@@ -225,42 +225,46 @@
 </head>
 <body>
 
-<!-- Auth guard -->
+<!-- Auth guard — pure fetch, pas de lib externe -->
 <script>
-const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
-
 (async () => {
-  // Vérifier la session Supabase directement
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.replace('login.html?from=admin'); return; }
+  const SB_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+  const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+
+  const token = localStorage.getItem('sl_access_token');
+  if (!token) { window.location.replace('login.html?from=admin'); return; }
+
+  // Vérifier le token
+  const authResp = await fetch(`${SB_URL}/auth/v1/user`, {
+    headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${token}` }
+  });
+  if (!authResp.ok) {
+    localStorage.clear();
+    window.location.replace('login.html?from=admin');
+    return;
+  }
+  const authUser = await authResp.json();
 
   // Charger le profil
-  const { data: profile } = await sb
-    .from('profiles')
-    .select('role, tenant_id, email, nom')
-    .eq('id', session.user.id)
-    .single();
+  const profResp = await fetch(`${SB_URL}/rest/v1/profiles?id=eq.${authUser.id}&select=role,tenant_id,email,nom`, {
+    headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${token}` }
+  });
+  const profiles = await profResp.json();
+  const profile = Array.isArray(profiles) ? profiles[0] : null;
 
   if (!profile || !['superadmin','admin'].includes(profile.role)) {
     window.location.replace('index.html');
     return;
   }
 
-  // Stocker pour le reste de la page
-  const user = {
-    id: session.user.id,
-    email: session.user.email,
+  window._SL_USER = {
+    id: authUser.id,
+    email: authUser.email,
     role: profile.role,
     tenant_id: profile.tenant_id,
     nom: profile.nom,
   };
-  localStorage.setItem('sl_auth', '1');
-  localStorage.setItem('sl_user', JSON.stringify(user));
-  window._SL_USER = user;
-  window._SL_SB   = sb;
+  localStorage.setItem('sl_user', JSON.stringify(window._SL_USER));
 })();
 </script>
 
@@ -402,7 +406,10 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
-const ME = window._SL_USER || JSON.parse(localStorage.getItem('sl_user') || '{}');
+
+// Attendre que le guard ait fini de charger le profil
+function getMe() { return window._SL_USER || JSON.parse(localStorage.getItem('sl_user') || '{}'); }
+const ME = getMe();
 
 // API helper
 async function sbFetch(path, options={}) {
