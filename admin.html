@@ -235,7 +235,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 (async () => {
   // Vérifier la session Supabase directement
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.replace('login.html'); return; }
+  if (!session) { window.location.replace('login.html?from=admin'); return; }
 
   // Charger le profil
   const { data: profile } = await sb

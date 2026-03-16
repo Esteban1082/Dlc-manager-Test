@@ -326,22 +326,37 @@ async function forgotPassword() {
   } catch(e) { showError('Erreur réseau.'); }
 }
 
-// Vérifier si déjà connecté avec un token valide
+// Vérifier si déjà connecté — seulement si on ne vient PAS d'un redirect
 async function checkExistingSession() {
+  // Si on arrive avec ?from=admin ou ?from=hub c'est un redirect — ne pas boucler
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('from')) return;
+
   const token = localStorage.getItem('sl_access_token');
   if (!token) return;
+
   try {
     const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` }
     });
-    if (r.ok) {
-      const user = await r.json();
-      const profile = await sbGetProfile(user.id, token);
-      const role = profile?.role || 'employe';
-      if (role === 'superadmin' || role === 'admin') window.location.replace('admin.html');
-      else window.location.replace('index.html');
+    if (!r.ok) {
+      // Token invalide — nettoyer
+      localStorage.removeItem('sl_access_token');
+      localStorage.removeItem('sl_refresh_token');
+      localStorage.removeItem('sl_auth');
+      localStorage.removeItem('sl_user');
+      return;
     }
-  } catch(e) {}
+    const user = await r.json();
+    const profile = await sbGetProfile(user.id, token);
+    const role = profile?.role || 'employe';
+    localStorage.setItem('sl_user', JSON.stringify({ id:user.id, email:user.email, role, tenant_id:profile?.tenant_id }));
+    if (role === 'superadmin' || role === 'admin') window.location.replace('admin.html');
+    else window.location.replace('index.html');
+  } catch(e) {
+    // En cas d'erreur réseau — ne pas rediriger, laisser l'utilisateur se connecter manuellement
+    console.warn('Session check failed:', e);
+  }
 }
 
 checkExistingSession();
