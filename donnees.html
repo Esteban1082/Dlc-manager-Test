@@ -299,6 +299,7 @@ window.__guardPassed = undefined;
             <tr style="position:sticky;top:0;background:var(--surface2)">
               <th style="padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Article</th>
               <th style="padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Patissier</th>
+              <th style="padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Code-barres</th>
               <th style="padding:10px 14px;text-align:right;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Qté totale</th>
               <th style="padding:10px 14px;text-align:right;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Occurrences</th>
             </tr>
@@ -325,7 +326,7 @@ window.__guardPassed = undefined;
   </div>
 </div>
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">données v1.2 · 17/03/2026 19:44</div>
+<div class="version-tag">données v1.3 · 17/03/2026 21:37</div>
 
 <script>
 // ══════════════════════════════════════
@@ -403,11 +404,12 @@ const TABS = {
     action: 'getTransferts',
     parseData: d => d.success && d.transferts ? d.transferts : (Array.isArray(d) ? d : []),
     cols: [
-      { key:'date',     label:'Date',      editable:false, type:'date'  },
-      { key:'rayon',    label:'Rayon',     editable:false               },
-      { key:'total',    label:'Prix (€)',  editable:false, type:'price_smart' },
-      { key:'articles', label:'Articles',  editable:false, type:'articles_count' },
-      { key:'note',     label:'Note',      editable:false               },
+      { key:'date',       label:'Date',       editable:false, type:'date'         },
+      { key:'rayon',      label:'Rayon',      editable:false                      },
+      { key:'bonBarcode', label:'N° bon',     editable:false                      },
+      { key:'total',      label:'Prix (€)',   editable:false, type:'price_smart'  },
+      { key:'articles',   label:'Articles',   editable:false, type:'articles_count'},
+      { key:'note',       label:'Note',       editable:false                      },
     ],
     sortKey: 'date',
     sortDir: 'desc',
@@ -760,14 +762,42 @@ function exportCSV() {
   const rows = filteredData.length ? filteredData : (allData[currentTab] || []);
   if (!rows.length) { toast('⚠ Aucune donnée à exporter', true); return; }
 
-  const headers = cfg.cols.map(c => c.label);
-  const lines = [
-    headers.join(';'),
-    ...rows.map(r => cfg.cols.map(c => {
-      const v = r[c.key] ?? '';
-      return `"${String(v).replace(/"/g,'""')}"`;
-    }).join(';'))
-  ];
+  let headers, lines;
+
+  if (currentTab === 'transferts') {
+    // Export transferts enrichi : date, rayon, bonBarcode, prix total, articles détaillés
+    headers = ['Date','Rayon','Code bon (bonBarcode)','Barcode articles','Prix total (€)','Articles','Note'];
+    lines = [
+      headers.join(';'),
+      ...rows.map(r => {
+        const total = parseFloat(r.total || r.prix_total || 0);
+        let articles = [];
+        try { articles = JSON.parse(r.articles || '[]'); } catch(e) {}
+        const articlesStr = articles.map(a => `${a.nom||a.name||'?'} x${a.qty||1}`).join(' | ');
+        const barcodesStr = articles.map(a => a.barcode || '').filter(Boolean).join(' | ');
+        return [
+          `"${r.date || ''}"`,
+          `"${r.rayon || ''}"`,
+          `"${r.bonBarcode || r.bon_barcode || ''}"`,
+          `"${barcodesStr}"`,
+          total > 0 ? total.toFixed(2).replace('.',',') : '',
+          `"${articlesStr}"`,
+          `"${(r.note || '').replace(/"/g,''''')}"`
+        ].join(';');
+      })
+    ];
+  } else {
+    // Export standard avec ajout code-barres si disponible
+    const extraCols = currentTab === 'pertes' ? [] : [];
+    headers = cfg.cols.map(c => c.label);
+    lines = [
+      headers.join(';'),
+      ...rows.map(r => cfg.cols.map(c => {
+        const v = r[c.key] ?? '';
+        return `"${String(v).replace(/"/g,''''')}"`; 
+      }).join(';'))
+    ];
+  }
 
   const blob = new Blob(['\ufeff' + lines.join('\n')], { type:'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -821,9 +851,10 @@ function genererRapport() {
   const groups = {};
   filtered.forEach(p => {
     const key = (p.name || '?') + '||' + (p.brand || '');
-    if (!groups[key]) groups[key] = { name: p.name || '?', brand: p.brand || '—', qty: 0, count: 0 };
-    groups[key].qty   += parseInt(p.quantity) || 1;
-    groups[key].count += 1;
+    if (!groups[key]) groups[key] = { name: p.name || '?', brand: p.brand || '—', barcode: p.barcode || '', qty: 0, count: 0 };
+    groups[key].qty     += parseInt(p.quantity) || 1;
+    groups[key].count   += 1;
+    if (!groups[key].barcode && p.barcode) groups[key].barcode = p.barcode;
   });
 
   // Trier par quantité totale desc
@@ -842,6 +873,7 @@ function genererRapport() {
     <tr style="border-bottom:1px solid var(--border)">
       <td style="padding:9px 14px">${r.name}</td>
       <td style="padding:9px 14px;color:var(--muted)">${r.brand}</td>
+      <td style="padding:9px 14px;color:var(--muted);font-size:11px">${r.barcode || '—'}</td>
       <td style="padding:9px 14px;text-align:right;color:var(--amber);font-weight:700">${r.qty}</td>
       <td style="padding:9px 14px;text-align:right;color:var(--muted)">${r.count}×</td>
     </tr>`).join('');
@@ -857,8 +889,8 @@ function exportRapportCSV() {
   const debut = document.getElementById('rapport-debut').value;
   const fin   = document.getElementById('rapport-fin').value;
   const lines = [
-    'Article;Patissier;Quantité totale;Occurrences',
-    ...rapportData.map(r => `"${r.name}";"${r.brand}";${r.qty};${r.count}`)
+    'Article;Patissier;Code-barres;Quantite totale;Occurrences',
+    ...rapportData.map(r => `"${r.name}";"${r.brand}";"${r.barcode || ''}";${r.qty};${r.count}`)
   ];
   const blob = new Blob(['\ufeff' + lines.join('\n')], {type:'text/csv;charset=utf-8;'});
   const url  = URL.createObjectURL(blob);
