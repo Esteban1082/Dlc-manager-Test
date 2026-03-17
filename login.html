@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StoreLine — Connexion</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:      #0a0a08;
+    --surface: #141410;
+    --border:  #252520;
+    --text:    #f0ede4;
+    --muted:   #6a6a5e;
+    --amber:   #e8a045;
+    --amber2:  #f5c060;
+    --red:     #ff4040;
+    --green:   #4cdb8a;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* Fond animé */
+  .bg-grid {
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(232,160,69,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(232,160,69,.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    animation: gridDrift 20s linear infinite;
+  }
+  @keyframes gridDrift { from { transform: translateY(0); } to { transform: translateY(48px); } }
+
+  .glow {
+    position: fixed;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(232,160,69,.06) 0%, transparent 70%);
+    top: -200px; left: -200px;
+    z-index: 0;
+    animation: glowPulse 4s ease-in-out infinite;
+  }
+  @keyframes glowPulse { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.1)} }
+
+  .card {
+    position: relative; z-index: 1;
+    width: 100%; max-width: 400px;
+    padding: 40px 36px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: 0 32px 64px rgba(0,0,0,.5), 0 0 0 1px rgba(232,160,69,.05);
+    animation: cardIn .4s cubic-bezier(0.16, 1, 0.3, 1);
+    margin: 20px;
+  }
+  @keyframes cardIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+
+  .logo { text-align: center; margin-bottom: 32px; }
+  .logo-icon {
+    width: 56px; height: 56px; margin: 0 auto 14px;
+    background: linear-gradient(135deg, var(--amber), var(--amber2));
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    box-shadow: 0 8px 24px rgba(232,160,69,.3);
+  }
+  .logo-name {
+    font-family: 'Fraunces', serif;
+    font-size: 28px; font-weight: 900;
+    color: var(--amber);
+    letter-spacing: -0.5px;
+  }
+  .logo-sub {
+    font-size: 11px; color: var(--muted);
+    letter-spacing: 2px; text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  .tenant-badge {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(232,160,69,.08);
+    border: 1px solid rgba(232,160,69,.2);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 24px;
+    font-size: 12px; color: var(--amber2);
+  }
+  .tenant-badge-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    flex-shrink: 0;
+  }
+
+  label {
+    display: block;
+    font-size: 10px; color: var(--muted);
+    letter-spacing: 1.5px; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  input {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+    margin-bottom: 16px;
+  }
+  input:focus {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 3px rgba(232,160,69,.1);
+  }
+  input::placeholder { color: var(--muted); }
+
+  .btn-login {
+    width: 100%;
+    padding: 14px;
+    background: var(--amber);
+    border: none; border-radius: 10px;
+    font-family: 'Fraunces', serif;
+    font-size: 16px; font-weight: 700;
+    color: #000;
+    cursor: pointer;
+    transition: all .15s;
+    margin-top: 4px;
+    position: relative; overflow: hidden;
+  }
+  .btn-login:hover { background: var(--amber2); transform: translateY(-1px); box-shadow: 0 8px 20px rgba(232,160,69,.3); }
+  .btn-login:active { transform: scale(0.98); }
+  .btn-login:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+
+  .btn-loading::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent);
+    animation: shimmer 1s infinite;
+  }
+  @keyframes shimmer { from{transform:translateX(-100%)} to{transform:translateX(100%)} }
+
+  .error-msg {
+    display: none;
+    background: rgba(255,64,64,.1);
+    border: 1px solid rgba(255,64,64,.3);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px; color: var(--red);
+    margin-bottom: 16px;
+    animation: shake .3s ease;
+  }
+  @keyframes shake { 0%,100%{transform:none} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+
+  .forgot-link {
+    display: block; text-align: center;
+    font-size: 11px; color: var(--muted);
+    margin-top: 16px; cursor: pointer;
+    text-decoration: none;
+    transition: color .15s;
+  }
+  .forgot-link:hover { color: var(--amber); }
+
+  .version { position: fixed; bottom: 16px; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--border); letter-spacing: 1px; }
+</style>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#e8a045">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="StoreLine">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then(r => console.log('SW registered'))
+          .catch(e => console.warn('SW failed:', e));
+      });
+    }
+  </script>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="glow"></div>
+
+<div class="card">
+  <div class="logo">
+    <div class="logo-icon">▦</div>
+    <div class="logo-name">StoreLine</div>
+    <div class="logo-sub">Gestion de rayon</div>
+  </div>
+
+  <div class="tenant-badge" id="tenant-badge" style="display:none">
+    <div class="tenant-badge-dot"></div>
+    <span id="tenant-name">Chargement...</span>
+  </div>
+
+  <div class="error-msg" id="error-msg"></div>
+
+  <label for="email">Email</label>
+  <input id="email" type="email" placeholder="prenom@robthemarket.be" autocomplete="email">
+
+  <label for="password">Mot de passe</label>
+  <input id="password" type="password" placeholder="••••••••" autocomplete="current-password"
+    onkeydown="if(event.key==='Enter') login()">
+
+  <button class="btn-login" id="btn-login" onclick="login()">
+    Se connecter →
+  </button>
+
+  <a class="forgot-link" onclick="forgotPassword()">Mot de passe oublié ?</a>
+</div>
+
+<div class="version">StoreLine v1.0 · 16/03/2026</div>
+
+<script>
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+
+// ── API Supabase via fetch natif (pas de lib, pas d'eval) ──
+async function sbAuth(email, password) {
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  return r.json();
+}
+
+async function sbGetProfile(userId, accessToken) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=role,tenant_id`, {
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${accessToken}`,
+    },
+  });
+  const data = await r.json();
+  return Array.isArray(data) ? data[0] : null;
+}
+
+// ── UI ──
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.style.cssText = 'display:block;background:rgba(255,64,64,.1);border:1px solid rgba(255,64,64,.3);color:var(--red)';
+  el.style.animation = 'none';
+  requestAnimationFrame(() => el.style.animation = 'shake .3s ease');
+}
+function hideError() { document.getElementById('error-msg').style.display = 'none'; }
+
+async function login() {
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const btn      = document.getElementById('btn-login');
+
+  if (!email || !password) { showError('Remplis les deux champs.'); return; }
+  hideError();
+  btn.disabled = true;
+  btn.textContent = 'Connexion…';
+  btn.classList.add('btn-loading');
+
+  try {
+    const authData = await sbAuth(email, password);
+
+    if (authData.error || !authData.access_token) {
+      btn.disabled = false;
+      btn.textContent = 'Se connecter →';
+      btn.classList.remove('btn-loading');
+      const msg = authData.error_description || authData.message || authData.error || 'Erreur de connexion';
+      if (msg.includes('Invalid login')) showError('Email ou mot de passe incorrect.');
+      else if (msg.includes('Email not confirmed')) showError('Confirme ton email avant de te connecter.');
+      else showError(msg);
+      return;
+    }
+
+    // Stocker les tokens
+    localStorage.setItem('sl_access_token',  authData.access_token);
+    localStorage.setItem('sl_refresh_token', authData.refresh_token);
+    localStorage.setItem('sl_auth', '1');
+
+    // Charger le profil
+    const profile = await sbGetProfile(authData.user.id, authData.access_token);
+    const role = profile?.role || 'employe';
+
+    localStorage.setItem('sl_user', JSON.stringify({
+      id:        authData.user.id,
+      email:     authData.user.email,
+      role,
+      tenant_id: profile?.tenant_id || null,
+    }));
+
+    btn.textContent = '✓ Connecté !';
+
+    setTimeout(() => {
+      if (role === 'superadmin' || role === 'admin') {
+        window.location.replace('admin.html');
+      } else {
+        window.location.replace('hub.html');
+      }
+    }, 500);
+
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Se connecter →';
+    btn.classList.remove('btn-loading');
+    showError('Erreur réseau — vérifie ta connexion.');
+    console.error(e);
+  }
+}
+
+async function forgotPassword() {
+  const email = document.getElementById('email').value.trim();
+  if (!email) { showError('Entre ton email avant de continuer.'); return; }
+  try {
+    await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'apikey': SUPABASE_ANON },
+      body: JSON.stringify({ email }),
+    });
+    const el = document.getElementById('error-msg');
+    el.style.cssText = 'display:block;background:rgba(76,219,138,.1);border:1px solid rgba(76,219,138,.3);color:var(--green)';
+    el.textContent = '✓ Email de réinitialisation envoyé.';
+  } catch(e) { showError('Erreur réseau.'); }
+}
+
+// Vérifier si déjà connecté — seulement si on ne vient PAS d'un redirect
+async function checkExistingSession() {
+  // Si on arrive avec ?from=admin ou ?from=hub c'est un redirect — ne pas boucler
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('from')) return;
+
+  const token = localStorage.getItem('sl_access_token');
+  if (!token) return;
+
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` }
+    });
+    if (!r.ok) {
+      // Token invalide — nettoyer
+      localStorage.removeItem('sl_access_token');
+      localStorage.removeItem('sl_refresh_token');
+      localStorage.removeItem('sl_auth');
+      localStorage.removeItem('sl_user');
+      return;
+    }
+    const user = await r.json();
+    const profile = await sbGetProfile(user.id, token);
+    const role = profile?.role || 'employe';
+    localStorage.setItem('sl_user', JSON.stringify({ id:user.id, email:user.email, role, tenant_id:profile?.tenant_id }));
+    if (role === 'superadmin' || role === 'admin') window.location.replace('admin.html');
+    else window.location.replace('hub.html');
+  } catch(e) {
+    // En cas d'erreur réseau — ne pas rediriger, laisser l'utilisateur se connecter manuellement
+    console.warn('Session check failed:', e);
+  }
+}
+
+checkExistingSession();
+</script>
+</body>
+</html>

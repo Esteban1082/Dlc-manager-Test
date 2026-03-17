@@ -1,0 +1,26 @@
+{
+  "name": "StoreLine",
+  "short_name": "StoreLine",
+  "description": "Gestion de rayon — Rob The Market",
+  "start_url": "/login.html",
+  "display": "standalone",
+  "background_color": "#0f0f0d",
+  "theme_color": "#e8a045",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "fr"
+}
