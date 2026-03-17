@@ -329,11 +329,11 @@ const TABS = {
     action: 'getTransferts',
     parseData: d => d.success && d.transferts ? d.transferts : (Array.isArray(d) ? d : []),
     cols: [
-      { key:'date',    label:'Date',      editable:false, type:'date'  },
-      { key:'rayon',   label:'Rayon',     editable:false               },
-      { key:'total',   label:'Prix (€)',  editable:false, type:'price_from_articles' },
-      { key:'note',    label:'Note',      editable:false               },
-      { key:'articles',label:'Articles',  editable:false, type:'articles_count' },
+      { key:'date',     label:'Date',      editable:false, type:'date'  },
+      { key:'rayon',    label:'Rayon',     editable:false               },
+      { key:'total',    label:'Prix (€)',  editable:false, type:'price_smart' },
+      { key:'articles', label:'Articles',  editable:false, type:'articles_count' },
+      { key:'note',     label:'Note',      editable:false               },
     ],
     sortKey: 'date',
     sortDir: 'desc',
@@ -515,14 +515,24 @@ function renderCell(row, rowIdx, col) {
     return `<td><span class="cell-view" style="color:var(--amber)">${price.toLocaleString('fr-BE',{style:'currency',currency:'EUR'})}</span></td>`;
   }
   if (col.type === 'price_from_articles') {
-    // Calculer le prix total depuis les articles JSON
     let total = 0;
     try {
       const articles = JSON.parse(row.articles || '[]');
       total = articles.reduce((s, a) => s + (parseFloat(a.prix || a.price || 0) * (parseInt(a.qty || a.quantity || 1))), 0);
     } catch(e) {}
-    // Si total = 0, essayer le champ total direct
     if (!total) total = parseFloat(row.total || row.prix_total || 0);
+    const fmt = total > 0 ? total.toLocaleString('fr-BE',{style:'currency',currency:'EUR'}) : '—';
+    return `<td><span class="cell-view" style="color:${total>0?'var(--amber)':'var(--muted)'}">${fmt}</span></td>`;
+  }
+  if (col.type === 'price_smart') {
+    // Essayer toutes les clés possibles pour le prix
+    let total = parseFloat(row.total || row.prix_total || row.price || row.prix || 0);
+    // Si toujours 0 ou NaN, décoder depuis le barcode du bon (format Rob The Market)
+    if (!total && row.bonBarcode) {
+      const stripped = String(row.bonBarcode).slice(0, -1).slice(-7);
+      const c = parseInt(stripped, 10);
+      if (!isNaN(c) && c > 0) total = c / 100;
+    }
     const fmt = total > 0 ? total.toLocaleString('fr-BE',{style:'currency',currency:'EUR'}) : '—';
     return `<td><span class="cell-view" style="color:${total>0?'var(--amber)':'var(--muted)'}">${fmt}</span></td>`;
   }
