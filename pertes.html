@@ -85,6 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
   #modal-scanner { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:700;
     align-items:center; justify-content:center; padding:20px; }
 </style>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -172,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">pertes v1.0 · 16/03/2026 18:46</div>
+<div class="version-tag">pertes v1.1 · 16/03/2026 21:46</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -388,13 +389,7 @@ function renderPertes() {
 }
 
 // ── Scanner ──
-function preloadScanner() {
-  if (document.getElementById('html5qr-script')) return;
-  const s = document.createElement('script');
-  s.id  = 'html5qr-script';
-  s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
-  document.head.appendChild(s);
-}
+function preloadScanner() { /* lib chargée statiquement dans le head */ }
 
 async function openPertesScanner() {
   const modal = document.getElementById('modal-scanner');
