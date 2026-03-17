@@ -511,17 +511,41 @@ async function sbUpsert(table, body) {
 }
 
 async function sbUpsertPermission(userId, module, actif) {
-  // Essayer PATCH d'abord (ligne existe déjà)
-  const patch = await sbFetch(
-    `/rest/v1/permissions?user_id=eq.${userId}&module=eq.${module}`,
-    { method: 'PATCH', body: JSON.stringify({ actif }) }
+  const token = localStorage.getItem('sl_access_token');
+  // PATCH sur la ligne existante
+  const patchResp = await fetch(
+    `${SUPABASE_URL}/rest/v1/permissions?user_id=eq.${userId}&module=eq.${module}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_ANON,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation',
+      },
+      body: JSON.stringify({ actif })
+    }
   );
-  if (patch !== null) return patch;
-  // Sinon INSERT
-  return sbFetch('/rest/v1/permissions', {
+  const patchData = await patchResp.json().catch(() => null);
+  console.log('PATCH permission:', patchResp.status, patchData);
+
+  // Si la ligne existe et a été mise à jour (200) → OK
+  if (patchResp.ok && Array.isArray(patchData) && patchData.length > 0) return patchData;
+
+  // Sinon INSERT (nouvelle ligne)
+  const insertResp = await fetch(`${SUPABASE_URL}/rest/v1/permissions`, {
     method: 'POST',
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+    },
     body: JSON.stringify({ user_id: userId, module, actif })
   });
+  const insertData = await insertResp.json().catch(() => null);
+  console.log('INSERT permission:', insertResp.status, insertData);
+  return insertData;
 }
 
 const MODULES = [
