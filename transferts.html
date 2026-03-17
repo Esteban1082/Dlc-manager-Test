@@ -361,21 +361,23 @@ window.__guardPassed = false;
   <div class="modal">
     <div class="modal-title">✓ Valider le transfert</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:16px" id="valider-resume"></div>
-    <div style="display:flex;gap:10px;margin-bottom:16px">
-      <div style="flex:1">
-        <label class="form-label" style="margin-bottom:6px">Date du transfert</label>
-        <input id="date-transfert" class="form-input" type="date" style="margin-bottom:0">
-      </div>
-      <div style="flex:1">
-        <label class="form-label" style="margin-bottom:6px">Prix total (€)</label>
-        <input id="prix-total-input" class="form-input" type="number" step="0.01" min="0" placeholder="Ex : 12.50" style="margin-bottom:0">
-      </div>
+    <label class="form-label" style="margin-bottom:6px">Date du transfert</label>
+    <input id="date-transfert" class="form-input" type="date" style="margin-bottom:16px">
+
+    <!-- Prix décodé automatiquement depuis le code-barres du bon -->
+    <div id="prix-decode-wrap" style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(76,219,138,.08);border:1px solid rgba(76,219,138,.25);border-radius:10px">
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Prix total (décodé du code-barres)</div>
+      <div id="prix-decode-val" style="font-family:'Fraunces',serif;font-size:24px;font-weight:900;color:var(--green)"></div>
+    </div>
+    <div id="prix-manual-wrap" style="margin-bottom:16px">
+      <label class="form-label" style="margin-bottom:6px">Prix total (€) <span style="color:var(--muted);font-weight:400">— ou scanner le code-barres du bon</span></label>
+      <input id="prix-total-input" class="form-input" type="number" step="0.01" min="0" placeholder="Ex : 12.50" style="margin-bottom:0">
     </div>
     <label class="form-label" style="margin-bottom:6px">Note (optionnel)</label>
     <input id="note-transfert" class="form-input" type="text" placeholder="Ex : Urgent pour service midi" style="margin-bottom:16px">
     <label class="form-label" style="margin-bottom:6px">Code-barres du bon <span style="color:var(--muted);font-weight:400">(optionnel)</span></label>
     <div style="display:flex;gap:8px;margin-bottom:20px">
-      <input id="bon-barcode" class="form-input" type="text" placeholder="Scanner ou saisir le code…" style="flex:1">
+      <input id="bon-barcode" class="form-input" type="text" placeholder="Scanner ou saisir le code…" style="flex:1" oninput="decodePrixFromBarcode(this.value)">
       <button onclick="openBonScanner()" style="padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:20px;" title="Scanner le bon">📷</button>
     </div>
     <div style="display:flex;gap:10px">
@@ -408,7 +410,7 @@ window.__guardPassed = false;
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">transferts v1.4 · 17/03/2026 15:13</div>
+<div class="version-tag">transferts v1.5 · 17/03/2026 16:12</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -687,6 +689,8 @@ function validerTransfert() {
   document.getElementById('prix-total-input').value = '';
   document.getElementById('note-transfert').value = '';
   document.getElementById('bon-barcode').value = '';
+  document.getElementById('prix-decode-wrap').style.display = 'none';
+  document.getElementById('prix-manual-wrap').style.display = 'block';
   document.getElementById('modal-valider').style.display = 'flex';
   setTimeout(() => document.getElementById('prix-total-input').focus(), 100);
 }
@@ -993,7 +997,37 @@ async function init() {
   } catch(e) {}
 }
 
-init();
+if (window.__guardPassed !== false) { init(); }
+// ── Décodage prix depuis code-barres interne ──
+function decodePrixFromBarcode(code) {
+  const wrap     = document.getElementById('prix-decode-wrap');
+  const valEl    = document.getElementById('prix-decode-val');
+  const manualWrap = document.getElementById('prix-manual-wrap');
+  const prixInput  = document.getElementById('prix-total-input');
+
+  if (!code || code.length < 4) {
+    wrap.style.display = 'none';
+    manualWrap.style.display = 'block';
+    return;
+  }
+
+  // Supprimer le dernier chiffre (check digit)
+  const stripped = code.slice(0, -1);
+  // Supprimer les zéros du début → ce qui reste = centimes
+  const centimes = parseInt(stripped, 10);
+
+  if (!isNaN(centimes) && centimes > 0) {
+    const euros = (centimes / 100).toFixed(2);
+    valEl.textContent = parseFloat(euros).toLocaleString('fr-BE', {style:'currency', currency:'EUR'});
+    prixInput.value = euros;
+    wrap.style.display = 'block';
+    manualWrap.style.display = 'none';
+  } else {
+    wrap.style.display = 'none';
+    manualWrap.style.display = 'block';
+  }
+}
+
 </script>
 </body>
 </html>
