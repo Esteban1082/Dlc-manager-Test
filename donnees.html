@@ -760,54 +760,48 @@ function confirmDelete(rowIdx) {
 function exportCSV() {
   const cfg = TABS[currentTab];
   const rows = filteredData.length ? filteredData : (allData[currentTab] || []);
-  if (!rows.length) { toast('⚠ Aucune donnée à exporter', true); return; }
+  if (!rows.length) { toast('Aucune donnee a exporter', true); return; }
 
-  let headers, lines;
-
-  if (currentTab === 'transferts') {
-    // Export transferts enrichi : date, rayon, bonBarcode, prix total, articles détaillés
-    headers = ['Date','Rayon','Code bon (bonBarcode)','Barcode articles','Prix total (€)','Articles','Note'];
-    lines = [
-      headers.join(';'),
-      ...rows.map(r => {
-        const total = parseFloat(r.total || r.prix_total || 0);
-        let articles = [];
-        try { articles = JSON.parse(r.articles || '[]'); } catch(e) {}
-        const articlesStr = articles.map(a => `${a.nom||a.name||'?'} x${a.qty||1}`).join(' | ');
-        const barcodesStr = articles.map(a => a.barcode || '').filter(Boolean).join(' | ');
-        return [
-          `"${r.date || ''}"`,
-          `"${r.rayon || ''}"`,
-          `"${r.bonBarcode || r.bon_barcode || ''}"`,
-          `"${barcodesStr}"`,
-          total > 0 ? total.toFixed(2).replace('.',',') : '',
-          `"${articlesStr}"`,
-          `"${(r.note || '').replace(/"/g, '')}"`
-        ].join(';');
-      })
-    ];
-  } else {
-    // Export standard avec ajout code-barres si disponible
-    const extraCols = currentTab === 'pertes' ? [] : [];
-    headers = cfg.cols.map(c => c.label);
-    lines = [
-      headers.join(';'),
-      ...rows.map(r => cfg.cols.map(c => {
-        const v = r[c.key] ?? '';
-        const escaped = String(v).replace(/"/g, '""'); return `"${escaped}"`;  
-    ];
+  function esc(v) {
+    return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   }
 
-  const blob = new Blob(['\ufeff' + lines.join('\n')], { type:'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  var lines = [];
+
+  if (currentTab === 'transferts') {
+    lines.push(['Date','Rayon','Prix','Articles','Note'].join(';'));
+    rows.forEach(function(r) {
+      var total = parseFloat(r.total || r.prix_total || 0);
+      var articles = [];
+      try { articles = JSON.parse(r.articles || '[]'); } catch(e) {}
+      var articlesStr = articles.map(function(a) { return (a.nom||a.name||'?') + ' x' + (a.qty||1); }).join(' | ');
+      lines.push([
+        esc(r.date || ''),
+        esc(r.rayon || ''),
+        total > 0 ? total.toFixed(2).replace('.', ',') : '',
+        esc(articlesStr),
+        esc(r.note || '')
+      ].join(';'));
+    });
+  } else {
+    lines.push(cfg.cols.map(function(c) { return c.label; }).join(';'));
+    rows.forEach(function(r) {
+      lines.push(cfg.cols.map(function(c) {
+        return esc(r[c.key] != null ? r[c.key] : '');
+      }).join(';'));
+    });
+  }
+
+  var csvContent = '\ufeff' + lines.join('\r\n');
+  var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
   a.href = url;
-  a.download = `storeline_${currentTab}_${new Date().toISOString().split('T')[0]}.csv`;
+  a.download = 'storeline_' + currentTab + '_' + new Date().toISOString().split('T')[0] + '.csv';
   a.click();
   URL.revokeObjectURL(url);
-  toast(`✓ ${rows.length} lignes exportées`);
+  toast('Export CSV : ' + rows.length + ' lignes');
 }
-
 
 // ══════════════════════════════════════
 // RAPPORT DE PERTES
