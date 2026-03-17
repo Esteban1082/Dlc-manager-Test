@@ -267,21 +267,23 @@ const TABS = {
     action: 'getProducts',
     parseData: d => d.success && d.products ? d.products : [],
     cols: [
-      { key:'nom',         label:'Nom',        editable:true  },
-      { key:'marque',      label:'Patissier',  editable:true  },
-      { key:'code_barres', label:'Code-barres',editable:true  },
+      { key:'nom_article',  label:'Nom',         editable:false },
+      { key:'patissier',    label:'Patissier',   editable:false },
+      { key:'code_barres',  label:'Code-barres', editable:false },
+      { key:'categorie',    label:'Catégorie',   editable:false },
     ],
-    sortKey: 'nom',
+    sortKey: 'nom_article',
   },
   pertes: {
     label: 'Pertes',
     action: 'getPertes',
     parseData: d => d.success && d.pertes ? d.pertes : (Array.isArray(d) ? d : []),
     cols: [
-      { key:'nom',        label:'Article',    editable:false },
-      { key:'marque',     label:'Patissier',  editable:false },
-      { key:'quantite',   label:'Quantité',   editable:false },
-      { key:'date',       label:'Date',       editable:false, type:'date' },
+      { key:'name',      label:'Article',    editable:false },
+      { key:'brand',     label:'Patissier',  editable:false },
+      { key:'quantity',  label:'Quantité',   editable:false },
+      { key:'barcode',   label:'Code-barres',editable:false },
+      { key:'date',      label:'Date',       editable:false, type:'date' },
     ],
     sortKey: 'date',
     sortDir: 'desc',
@@ -291,10 +293,9 @@ const TABS = {
     action: 'getTemperatures',
     parseData: d => d.success && d.temperatures ? d.temperatures : (Array.isArray(d) ? d : []),
     cols: [
-      { key:'zone',       label:'Zone',       editable:false },
-      { key:'valeur',     label:'Temp. (°C)', editable:false },
-      { key:'date',       label:'Date',       editable:false, type:'date' },
-      { key:'horsNorme',  label:'Statut',     editable:false, type:'badge' },
+      { key:'nom',   label:'Zone',       editable:false },
+      { key:'temp',  label:'Temp. (°C)', editable:false },
+      { key:'date',  label:'Date',       editable:false, type:'date' },
     ],
     sortKey: 'date',
     sortDir: 'desc',
@@ -302,15 +303,24 @@ const TABS = {
   allergenes: {
     label: 'Allergènes',
     action: 'getAllergenes',
-    parseData: d => d.success && d.allergenes ? d.allergenes : (Array.isArray(d) ? d : []),
+    parseData: d => {
+      // getAllergenes retourne un tableau d'objets avec .nom et .allergenes (liste)
+      if (d.success && Array.isArray(d.fiches)) return d.fiches;
+      if (d.success && Array.isArray(d.allergenes)) return d.allergenes;
+      if (Array.isArray(d)) return d;
+      // Essayer de récupérer depuis d directement
+      const keys = Object.keys(d).filter(k => k !== 'success' && k !== 'error');
+      for (const k of keys) { if (Array.isArray(d[k])) return d[k]; }
+      return [];
+    },
     cols: [
-      { key:'nom',        label:'Gâteau',     editable:false },
-      { key:'patissier',  label:'Patissier',  editable:false },
-      { key:'gluten',     label:'Gluten',     editable:false, type:'allergen' },
-      { key:'lait',       label:'Lait',       editable:false, type:'allergen' },
-      { key:'oeufs',      label:'Œufs',       editable:false, type:'allergen' },
-      { key:'fruits_coq', label:'Fr. coq.',   editable:false, type:'allergen' },
-      { key:'arachides',  label:'Arachides',  editable:false, type:'allergen' },
+      { key:'nom',        label:'Gâteau',    editable:false },
+      { key:'patissier',  label:'Patissier', editable:false },
+      { key:'gluten',     label:'Gluten',    editable:false, type:'allergen' },
+      { key:'lait',       label:'Lait',      editable:false, type:'allergen' },
+      { key:'oeufs',      label:'Œufs',      editable:false, type:'allergen' },
+      { key:'fruits_coq', label:'Fr. coq.',  editable:false, type:'allergen' },
+      { key:'arachides',  label:'Arachides', editable:false, type:'allergen' },
     ],
     sortKey: 'nom',
   },
@@ -319,10 +329,11 @@ const TABS = {
     action: 'getTransferts',
     parseData: d => d.success && d.transferts ? d.transferts : (Array.isArray(d) ? d : []),
     cols: [
-      { key:'date',       label:'Date',       editable:false, type:'date' },
-      { key:'rayon',      label:'Rayon',      editable:false },
-      { key:'total',      label:'Prix (€)',   editable:false, type:'price' },
-      { key:'note',       label:'Note',       editable:false },
+      { key:'date',    label:'Date',      editable:false, type:'date'  },
+      { key:'rayon',   label:'Rayon',     editable:false               },
+      { key:'total',   label:'Prix (€)',  editable:false, type:'price_from_articles' },
+      { key:'note',    label:'Note',      editable:false               },
+      { key:'articles',label:'Articles',  editable:false, type:'articles_count' },
     ],
     sortKey: 'date',
     sortDir: 'desc',
@@ -407,6 +418,7 @@ async function loadTab(tabId) {
     const data = await api({ action: cfg.action });
     const rows = cfg.parseData ? cfg.parseData(data) : (data.data || data.items || []);
     console.log('[donnees] tab:', tabId, '→', rows.length, 'lignes', rows[0] || '');
+    if (tabId === 'allergenes' && rows.length === 0) console.log('[donnees] allergenes raw:', JSON.stringify(data).substring(0, 300));
     allData[tabId] = rows;
     renderTable(rows);
     setStatus(`${rows.length} ligne${rows.length>1?'s':''} chargée${rows.length>1?'s':''}`);
@@ -501,6 +513,27 @@ function renderCell(row, rowIdx, col) {
   if (col.type === 'price') {
     const price = parseFloat(displayVal) || 0;
     return `<td><span class="cell-view" style="color:var(--amber)">${price.toLocaleString('fr-BE',{style:'currency',currency:'EUR'})}</span></td>`;
+  }
+  if (col.type === 'price_from_articles') {
+    // Calculer le prix total depuis les articles JSON
+    let total = 0;
+    try {
+      const articles = JSON.parse(row.articles || '[]');
+      total = articles.reduce((s, a) => s + (parseFloat(a.prix || a.price || 0) * (parseInt(a.qty || a.quantity || 1))), 0);
+    } catch(e) {}
+    // Si total = 0, essayer le champ total direct
+    if (!total) total = parseFloat(row.total || row.prix_total || 0);
+    const fmt = total > 0 ? total.toLocaleString('fr-BE',{style:'currency',currency:'EUR'}) : '—';
+    return `<td><span class="cell-view" style="color:${total>0?'var(--amber)':'var(--muted)'}">${fmt}</span></td>`;
+  }
+  if (col.type === 'articles_count') {
+    try {
+      const articles = JSON.parse(row.articles || '[]');
+      const noms = articles.map(a => `${a.nom||a.name||'?'} ×${a.qty||a.quantity||1}`).join(', ');
+      return `<td><span class="cell-view" style="color:var(--muted);max-width:200px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${noms}">${articles.length} article${articles.length>1?'s':''} — ${noms}</span></td>`;
+    } catch(e) {
+      return `<td><span class="cell-view" style="color:var(--muted)">—</span></td>`;
+    }
   }
   if (col.type === 'date') {
     try {
