@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src * blob: data:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; style-src * 'unsafe-inline'; connect-src *; img-src * blob: data:; worker-src * blob:; media-src * blob:;">
+<script>
+document.documentElement.style.visibility = 'hidden';
+window.__guardPassed = undefined;
+(async () => {
+  const pm  = localStorage.getItem('pm_auth') === '1';
+  const sl  = localStorage.getItem('sl_auth') === '1';
+  const tok = localStorage.getItem('sl_access_token');
+  function block(title, sub) {
+    window.__guardPassed = false;
+    const render = () => {
+      if (!document.body) { requestAnimationFrame(render); return; }
+      document.documentElement.style.visibility = 'visible';
+      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🚫</div><div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">${title}</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">${sub}</div><a href="index.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>`;
+    };
+    render();
+  }
+  function allow() { window.__guardPassed = true; document.documentElement.style.visibility = 'visible'; }
+  if (!pm && !sl) { block('Accès restreint', 'Connecte-toi depuis le hub'); return; }
+  if (tok && sl) {
+    const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
+    if (['superadmin','admin'].includes(user.role)) { allow(); return; }
+    if (!user.id) { allow(); return; }
+    try {
+      const r = await fetch('https://jeqptodorjzeyhapbmrz.supabase.co/rest/v1/permissions?user_id=eq.'+user.id+'&module=eq.commandes&actif=eq.true&select=id',
+        {headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk','Authorization':'Bearer '+tok}});
+      const perms = await r.json();
+      if (!Array.isArray(perms)||perms.length===0){block('Module non activé',"Parle à Esteban pour obtenir l'accès");return;}
+      allow();
+    } catch(e){allow();}
+    return;
+  }
+  allow();
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commandes — StoreLine</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:      #0f0f0d;
+    --surface: #1a1a16;
+    --surface2:#222218;
+    --border:  #2e2e28;
+    --border2: #3a3a32;
+    --text:    #f0ede4;
+    --muted:   #7a7a6e;
+    --amber:   #e8a045;
+    --amber2:  #f5c060;
+    --red:     #ff4040;
+    --green:   #4cdb8a;
+    --blue:    #4db8ff;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
+  button { cursor:pointer; transition:all .15s; font-family:'DM Mono',monospace; }
+  input, select, textarea { font-family:'DM Mono',monospace; }
+
+  /* ── Header ── */
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 20px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--bg); z-index:100;
+  }
+  .logo-title { font-family:'Fraunces',serif; font-weight:900; font-size:20px; color:var(--amber); }
+  .logo-sub   { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-top:2px; }
+  .back-btn {
+    padding:7px 14px; border:1px solid var(--border);
+    border-radius:8px; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:12px; text-decoration:none; transition:all .15s;
+  }
+  .back-btn:hover { border-color:var(--amber); color:var(--text); }
+
+  /* ── Content ── */
+  .content { padding:20px; max-width:900px; margin:0 auto 80px; }
+
+  /* ── Fournisseur selector ── */
+  .fourn-bar {
+    display:flex; gap:10px; align-items:center;
+    margin-bottom:20px; flex-wrap:wrap;
+  }
+  .fourn-select {
+    flex:1; min-width:200px; padding:12px 16px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; color:var(--text); font-size:14px;
+    outline:none; transition:border-color .15s;
+    appearance:none; cursor:pointer;
+  }
+  .fourn-select:focus { border-color:var(--amber); }
+
+  .btn {
+    padding:11px 18px; border-radius:10px; border:none;
+    font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; white-space:nowrap;
+  }
+  .btn-primary { background:var(--amber); color:#000; }
+  .btn-primary:hover { background:var(--amber2); }
+  .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); }
+  .btn-ghost:hover { border-color:var(--amber); color:var(--text); }
+  .btn-green { background:var(--green); color:#000; }
+  .btn-green:hover { filter:brightness(1.1); }
+  .btn-red   { background:transparent; border:1px solid rgba(255,64,64,.3); color:var(--red); }
+  .btn-red:hover { background:rgba(255,64,64,.1); }
+
+  /* ── Commande form ── */
+  .commande-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; overflow:hidden;
+  }
+  .commande-header {
+    padding:16px 20px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  }
+  .fourn-name { font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--amber); }
+  .fourn-contact { font-size:11px; color:var(--muted); margin-top:3px; }
+
+  /* ── Date selector ── */
+  .date-bar {
+    display:flex; gap:8px; padding:14px 20px;
+    border-bottom:1px solid var(--border); overflow-x:auto;
+    scrollbar-width:none;
+  }
+  .date-bar::-webkit-scrollbar { display:none; }
+  .day-btn {
+    padding:8px 16px; border-radius:20px;
+    border:1px solid var(--border); background:transparent;
+    color:var(--muted); font-size:12px; white-space:nowrap;
+    transition:all .15s;
+  }
+  .day-btn.active { background:var(--amber); color:#000; border-color:var(--amber); font-weight:700; }
+  .day-btn:hover:not(.active) { border-color:var(--amber); color:var(--text); }
+
+  /* ── Produits table ── */
+  .produits-section { padding:0 20px 20px; }
+  .categorie-title {
+    font-family:'Fraunces',serif; font-size:13px; font-weight:700;
+    color:var(--muted); letter-spacing:1px; text-transform:uppercase;
+    padding:16px 0 8px; border-bottom:1px solid var(--border); margin-bottom:4px;
+  }
+
+  .produit-row {
+    display:flex; align-items:center; gap:12px;
+    padding:10px 0; border-bottom:1px solid var(--border);
+  }
+  .produit-row:last-child { border-bottom:none; }
+  .produit-nom { flex:1; font-size:13px; }
+  .qty-input {
+    width:72px; padding:8px 10px; text-align:center;
+    background:var(--bg); border:1px solid var(--border);
+    border-radius:8px; color:var(--text); font-size:14px; font-weight:600;
+    outline:none; transition:border-color .15s;
+  }
+  .qty-input:focus { border-color:var(--amber); }
+  .qty-input:not(:placeholder-shown) { border-color:rgba(232,160,69,.4); background:rgba(232,160,69,.05); }
+  .qty-btns { display:flex; gap:4px; }
+  .qty-btn {
+    width:30px; height:30px; border-radius:8px;
+    border:1px solid var(--border); background:var(--surface2);
+    color:var(--text); font-size:16px; display:flex;
+    align-items:center; justify-content:center;
+  }
+  .qty-btn:hover { border-color:var(--amber); color:var(--amber); }
+
+  /* ── Note ── */
+  .note-section { padding:0 20px 20px; }
+  .note-label { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+  .note-input {
+    width:100%; padding:12px 16px;
+    background:var(--bg); border:1px solid var(--border);
+    border-radius:10px; color:var(--text); font-size:13px;
+    outline:none; resize:none; transition:border-color .15s; min-height:80px;
+  }
+  .note-input:focus { border-color:var(--amber); }
+
+  /* ── Actions bar ── */
+  .actions-bar {
+    display:flex; gap:10px; padding:16px 20px;
+    border-top:1px solid var(--border); flex-wrap:wrap;
+  }
+
+  /* ── Historique ── */
+  .historique-section { margin-top:28px; }
+  .section-title { font-family:'Fraunces',serif; font-size:16px; font-weight:700; margin-bottom:14px; color:var(--amber); }
+  .histo-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:14px 16px; margin-bottom:10px;
+    cursor:pointer; transition:border-color .15s;
+  }
+  .histo-card:hover { border-color:var(--border2); }
+  .histo-header { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+  .histo-fourn { font-family:'Fraunces',serif; font-size:14px; font-weight:700; }
+  .histo-date  { font-size:11px; color:var(--muted); }
+  .histo-badge {
+    padding:3px 10px; border-radius:20px; font-size:10px; font-weight:700;
+    background:rgba(76,219,138,.1); color:var(--green); border:1px solid rgba(76,219,138,.3);
+  }
+  .histo-detail { margin-top:10px; display:none; }
+  .histo-detail.open { display:block; }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,.8); backdrop-filter:blur(4px);
+    z-index:500; align-items:flex-end; justify-content:center;
+  }
+  .modal {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:16px 16px 0 0; padding:24px 20px;
+    width:100%; max-width:600px; max-height:85vh; overflow-y:auto;
+  }
+  .modal-title { font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--amber); margin-bottom:18px; }
+  .form-label { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:5px; display:block; }
+  .form-input {
+    width:100%; padding:11px 14px;
+    background:var(--bg); border:1px solid var(--border);
+    border-radius:10px; color:var(--text); font-size:13px;
+    outline:none; transition:border-color .15s; margin-bottom:12px;
+  }
+  .form-input:focus { border-color:var(--amber); }
+  select.form-input {
+    appearance:none; cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a7a6e' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center; padding-right:32px;
+  }
+
+  /* ── Toast ── */
+  .toast-container { position:fixed; bottom:24px; right:16px; z-index:700; display:flex; flex-direction:column; gap:8px; }
+  .toast {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:12px 16px; font-size:12px;
+    animation:slideIn .2s ease; max-width:280px;
+  }
+  @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:none;opacity:1} }
+
+  .version-tag { position:fixed; bottom:10px; left:14px; font-size:10px; color:var(--border); z-index:50; }
+
+  /* ── Empty state ── */
+  .empty { text-align:center; padding:40px 20px; color:var(--muted); }
+  .empty-ico { font-size:40px; margin-bottom:12px; }
+  .empty-txt { font-size:13px; }
+
+  @media(max-width:520px) {
+    .produit-nom { font-size:12px; }
+    .qty-btns { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo-title">📋 Commandes</div>
+    <div class="logo-sub">StoreLine · Rob The Market</div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button onclick="openGererModal()" style="padding:7px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;font-size:18px;color:var(--muted);transition:all .15s" title="Gérer fournisseurs">⚙</button>
+    <a class="back-btn" href="index.html">← Hub</a>
+  </div>
+</header>
+
+<div class="content">
+
+  <!-- Sélecteur fournisseur -->
+  <div class="fourn-bar">
+    <select id="fourn-select" class="fourn-select" onchange="onFournChange()">
+      <option value="">— Choisir un fournisseur —</option>
+    </select>
+    <button class="btn btn-primary" onclick="nouvelleCommande()" id="btn-nouvelle" style="display:none">＋ Nouvelle commande</button>
+  </div>
+
+  <!-- Formulaire commande -->
+  <div id="commande-wrap" style="display:none">
+    <div class="commande-card">
+      <div class="commande-header">
+        <div>
+          <div class="fourn-name" id="fourn-title"></div>
+          <div class="fourn-contact" id="fourn-contact"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);text-align:right">
+          <div id="date-label" style="font-size:13px;color:var(--text);font-weight:600"></div>
+          Rob The Market · Pâtisserie
+        </div>
+      </div>
+
+      <!-- Sélection du jour -->
+      <div class="date-bar" id="date-bar"></div>
+
+      <!-- Produits -->
+      <div class="produits-section" id="produits-section"></div>
+
+      <!-- Note -->
+      <div class="note-section">
+        <div class="note-label">Note pour le fournisseur</div>
+        <textarea id="note-commande" class="note-input" placeholder="Informations complémentaires, urgences..."></textarea>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions-bar">
+        <button class="btn btn-green" onclick="envoyerCommande()" style="flex:1">📧 Envoyer la commande</button>
+        <button class="btn btn-ghost" onclick="sauvegarderBrouillon()">💾 Brouillon</button>
+        <button class="btn btn-ghost" onclick="resetCommande()">↺ Réinitialiser</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Historique -->
+  <div class="historique-section">
+    <div class="section-title">Historique</div>
+    <div id="historique-list"></div>
+  </div>
+
+</div>
+
+<!-- Modal gérer fournisseurs -->
+<div class="modal-overlay" id="modal-gerer" onclick="if(event.target.id==='modal-gerer')closeModal('modal-gerer')">
+  <div class="modal">
+    <div class="modal-title">⚙ Gérer les fournisseurs</div>
+
+    <div id="fourn-list-manage" style="margin-bottom:20px"></div>
+
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
+      <div style="font-size:12px;color:var(--amber);font-weight:600;margin-bottom:12px">＋ Nouveau fournisseur</div>
+      <label class="form-label">Nom *</label>
+      <input id="new-fourn-nom" class="form-input" type="text" placeholder="Ex : Joost Arijs">
+      <label class="form-label">Email fournisseur *</label>
+      <input id="new-fourn-email" class="form-input" type="email" placeholder="info@fournisseur.be">
+      <label class="form-label">Téléphone</label>
+      <input id="new-fourn-tel" class="form-input" type="text" placeholder="09/336 23 10">
+      <label class="form-label">Jours de livraison</label>
+      <div id="new-fourn-jours" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
+      <button class="btn btn-primary" onclick="ajouterFournisseur()" style="width:100%">Ajouter le fournisseur</button>
+    </div>
+
+    <button class="btn btn-ghost" onclick="closeModal('modal-gerer')" style="width:100%;margin-top:10px">Fermer</button>
+  </div>
+</div>
+
+<!-- Modal gérer produits d'un fournisseur -->
+<div class="modal-overlay" id="modal-produits" onclick="if(event.target.id==='modal-produits')closeModal('modal-produits')">
+  <div class="modal">
+    <div class="modal-title" id="modal-produits-title">Produits</div>
+
+    <div id="produits-list-manage" style="margin-bottom:20px"></div>
+
+    <div style="border-top:1px solid var(--border);padding-top:16px">
+      <div style="font-size:12px;color:var(--amber);font-weight:600;margin-bottom:12px">＋ Nouveau produit</div>
+      <label class="form-label">Catégorie</label>
+      <input id="new-prod-cat" class="form-input" type="text" placeholder="Ex : Gâteaux individuels">
+      <label class="form-label">Nom du produit *</label>
+      <input id="new-prod-nom" class="form-input" type="text" placeholder="Ex : Exotic 1P">
+      <button class="btn btn-primary" onclick="ajouterProduitFourn()" style="width:100%">Ajouter</button>
+    </div>
+
+    <button class="btn btn-ghost" onclick="closeModal('modal-produits')" style="width:100%;margin-top:10px">Fermer</button>
+  </div>
+</div>
+
+<!-- Modal email preview -->
+<div class="modal-overlay" id="modal-email" onclick="if(event.target.id==='modal-email')closeModal('modal-email')">
+  <div class="modal" style="border-radius:16px;max-height:90vh">
+    <div class="modal-title">📧 Aperçu de la commande</div>
+    <div id="email-preview" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:12px;line-height:1.8;margin-bottom:16px;white-space:pre-wrap;max-height:50vh;overflow-y:auto"></div>
+    <label class="form-label">Email copie Rob The Market</label>
+    <input id="copy-email" class="form-input" type="email" placeholder="patisserie@robthemarket.be" value="patisserie@robthemarket.be">
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-ghost" onclick="closeModal('modal-email')" style="flex:1">Annuler</button>
+      <button class="btn btn-green" onclick="confirmerEnvoi()" style="flex:1">✓ Confirmer l'envoi</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<div class="version-tag">commandes v1.0 · 17/03/2026 18:00</div>
+
+<script>
+// ══════════════════════════════════════
+// STORAGE
+// ══════════════════════════════════════
+const LS = 'pm_cmd_';
+function lsGet(k, def) { try { const v = localStorage.getItem(LS+k); return v ? JSON.parse(v) : def; } catch(e) { return def; } }
+function lsSet(k, v)   { try { localStorage.setItem(LS+k, JSON.stringify(v)); } catch(e) {} }
+
+// ══════════════════════════════════════
+// ÉTAT
+// ══════════════════════════════════════
+const JOURS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+
+let fournisseurs  = lsGet('fournisseurs', []);
+let historique    = lsGet('historique', []);
+let fournActuel   = null;
+let jourActuel    = '';
+let qtesActuelles = {}; // { [produit_id]: { [jour]: qty } }
+let editFournIdx  = null; // index du fournisseur dont on gère les produits
+
+// ══════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════
+function toast(msg, isError=false) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// ══════════════════════════════════════
+// INIT
+// ══════════════════════════════════════
+function init() {
+  buildFournSelect();
+  renderHistorique();
+  renderJoursNewFourn();
+}
+
+// ══════════════════════════════════════
+// FOURNISSEURS
+// ══════════════════════════════════════
+function buildFournSelect() {
+  const sel = document.getElementById('fourn-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Choisir un fournisseur —</option>' +
+    fournisseurs.map((f, i) => `<option value="${i}">${f.nom}</option>`).join('');
+}
+
+function onFournChange() {
+  const idx = document.getElementById('fourn-select').value;
+  const btn = document.getElementById('btn-nouvelle');
+  const wrap = document.getElementById('commande-wrap');
+  if (idx === '') {
+    btn.style.display = 'none';
+    wrap.style.display = 'none';
+    fournActuel = null;
+    return;
+  }
+  fournActuel = { ...fournisseurs[parseInt(idx)], idx: parseInt(idx) };
+  btn.style.display = 'block';
+  wrap.style.display = 'none'; // montré quand on clique "Nouvelle commande"
+}
+
+function nouvelleCommande() {
+  if (!fournActuel) return;
+  resetCommande();
+  document.getElementById('commande-wrap').style.display = 'block';
+  document.getElementById('fourn-title').textContent = fournActuel.nom;
+  document.getElementById('fourn-contact').textContent =
+    [fournActuel.email, fournActuel.tel].filter(Boolean).join(' · ');
+  buildDateBar();
+  renderProduitsForm();
+}
+
+function buildDateBar() {
+  const jours = fournActuel.jours || JOURS;
+  const bar = document.getElementById('date-bar');
+  bar.innerHTML = jours.map(j => `
+    <button class="day-btn ${j===jourActuel?'active':''}" onclick="selectJour('${j}')">${j}</button>
+  `).join('');
+  if (!jourActuel || !jours.includes(jourActuel)) {
+    selectJour(jours[0]);
+  }
+}
+
+function selectJour(jour) {
+  jourActuel = jour;
+  const today = new Date();
+  const joursMap = {Lundi:1,Mardi:2,Mercredi:3,Jeudi:4,Vendredi:5,Samedi:6,Dimanche:0};
+  const targetDay = joursMap[jour];
+  const diff = (targetDay - today.getDay() + 7) % 7 || 7;
+  const target = new Date(today);
+  target.setDate(today.getDate() + diff);
+  document.getElementById('date-label').textContent =
+    jour + ' ' + target.toLocaleDateString('fr-BE', {day:'numeric', month:'long', year:'numeric'});
+
+  document.querySelectorAll('.day-btn').forEach(b => b.classList.toggle('active', b.textContent === jour));
+  renderProduitsForm();
+}
+
+function renderProduitsForm() {
+  const section = document.getElementById('produits-section');
+  if (!fournActuel || !section) return;
+
+  const produits = fournActuel.produits || [];
+  if (!produits.length) {
+    section.innerHTML = `<div class="empty"><div class="empty-ico">📦</div><div class="empty-txt">Aucun produit configuré.<br>Ajoute des produits via ⚙ → ce fournisseur.</div></div>`;
+    return;
+  }
+
+  // Grouper par catégorie
+  const categories = {};
+  produits.forEach((p, i) => {
+    const cat = p.categorie || 'Produits';
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push({ ...p, idx: i });
+  });
+
+  section.innerHTML = Object.entries(categories).map(([cat, prods]) => `
+    <div class="categorie-title">${cat}</div>
+    ${prods.map(p => {
+      const key = `${fournActuel.idx}_${p.idx}`;
+      const qty = (qtesActuelles[key] || {})[jourActuel] || '';
+      return `
+      <div class="produit-row">
+        <div class="produit-nom">${p.nom}</div>
+        <div class="qty-btns">
+          <button class="qty-btn" onclick="adjustQty('${key}', -1)">−</button>
+          <button class="qty-btn" onclick="adjustQty('${key}', 1)">＋</button>
+        </div>
+        <input class="qty-input" type="number" min="0" placeholder="0"
+          value="${qty}"
+          id="qty_${key}"
+          oninput="setQty('${key}', this.value)"
+          onclick="this.select()">
+      </div>`;
+    }).join('')}
+  `).join('');
+}
+
+function adjustQty(key, delta) {
+  const input = document.getElementById('qty_'+key);
+  const current = parseInt(input.value) || 0;
+  const newVal = Math.max(0, current + delta);
+  input.value = newVal || '';
+  setQty(key, newVal);
+}
+
+function setQty(key, val) {
+  if (!qtesActuelles[key]) qtesActuelles[key] = {};
+  qtesActuelles[key][jourActuel] = parseInt(val) || 0;
+}
+
+function resetCommande() {
+  qtesActuelles = {};
+  jourActuel = '';
+  document.getElementById('note-commande').value = '';
+  const wrap = document.getElementById('commande-wrap');
+  if (wrap) wrap.style.display = 'none';
+}
+
+// ══════════════════════════════════════
+// ENVOI EMAIL
+// ══════════════════════════════════════
+function envoyerCommande() {
+  if (!fournActuel) return;
+  const produits = fournActuel.produits || [];
+  if (!produits.length) { toast('⚠ Aucun produit configuré', true); return; }
+
+  // Vérifier qu'il y a au moins une quantité
+  const hasQty = Object.values(qtesActuelles).some(jours =>
+    Object.values(jours).some(q => q > 0)
+  );
+  if (!hasQty) { toast('⚠ Aucune quantité saisie', true); return; }
+
+  // Générer le corps de l'email
+  const note = document.getElementById('note-commande').value.trim();
+  const today = new Date().toLocaleDateString('fr-BE', {day:'numeric', month:'long', year:'numeric'});
+
+  // Grouper par catégorie et jour
+  const joursAvecQty = (fournActuel.jours || JOURS).filter(j =>
+    produits.some((p, i) => (qtesActuelles[`${fournActuel.idx}_${i}`] || {})[j] > 0)
+  );
+
+  let body = `COMMANDE AU FOURNISSEUR — ${fournActuel.nom.toUpperCase()}\n`;
+  body += `═══════════════════════════════════════\n\n`;
+  body += `De : Rob The Market — Pâtisserie\n`;
+  body += `Date : ${today}\n\n`;
+
+  if (joursAvecQty.length > 0) {
+    body += `DÉSIGNATION`.padEnd(32);
+    joursAvecQty.forEach(j => body += j.padEnd(12));
+    body += '\n' + '─'.repeat(32 + joursAvecQty.length * 12) + '\n';
+
+    const categories = {};
+    produits.forEach((p, i) => {
+      const cat = p.categorie || 'Produits';
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push({ ...p, idx: i });
+    });
+
+    Object.entries(categories).forEach(([cat, prods]) => {
+      body += `\n${cat.toUpperCase()}\n`;
+      prods.forEach(p => {
+        const hasAny = joursAvecQty.some(j => (qtesActuelles[`${fournActuel.idx}_${p.idx}`] || {})[j] > 0);
+        if (!hasAny) return;
+        body += p.nom.substring(0,31).padEnd(32);
+        joursAvecQty.forEach(j => {
+          const q = (qtesActuelles[`${fournActuel.idx}_${p.idx}`] || {})[j] || 0;
+          body += (q > 0 ? String(q) : '').padEnd(12);
+        });
+        body += '\n';
+      });
+    });
+  }
+
+  if (note) body += `\nNOTE : ${note}\n`;
+  body += `\n───────────────────────────────────────\n`;
+  body += `Rob The Market — Pâtisserie\n`;
+  body += `28, bd. De la Woluwe — 1150 Bruxelles\n`;
+  body += `TEL : 02/761 01 74`;
+
+  document.getElementById('email-preview').textContent = body;
+  document.getElementById('modal-email').style.display = 'flex';
+}
+
+function confirmerEnvoi() {
+  const copyEmail = document.getElementById('copy-email').value.trim();
+  const subject = encodeURIComponent(`Commande ${fournActuel.nom} — ${new Date().toLocaleDateString('fr-BE')}`);
+  const bodyText = document.getElementById('email-preview').textContent;
+  const body = encodeURIComponent(bodyText);
+  const cc = copyEmail ? `&cc=${encodeURIComponent(copyEmail)}` : '';
+
+  // Ouvrir le client email natif
+  const mailtoLink = `mailto:${encodeURIComponent(fournActuel.email)}?subject=${subject}${cc}&body=${body}`;
+  window.location.href = mailtoLink;
+
+  // Sauvegarder dans l'historique
+  const commande = {
+    id: Date.now(),
+    fourn: fournActuel.nom,
+    date: new Date().toISOString(),
+    jours: Object.keys(Object.fromEntries(
+      Object.entries(qtesActuelles).flatMap(([k, jours]) =>
+        Object.entries(jours).filter(([,q]) => q > 0).map(([j]) => [j, true])
+      )
+    )),
+    note: document.getElementById('note-commande').value.trim(),
+    qtes: JSON.parse(JSON.stringify(qtesActuelles)),
+    produits: fournActuel.produits,
+  };
+
+  historique.unshift(commande);
+  if (historique.length > 50) historique = historique.slice(0, 50);
+  lsSet('historique', historique);
+
+  closeModal('modal-email');
+  toast('✓ Commande envoyée et sauvegardée !');
+  renderHistorique();
+}
+
+function sauvegarderBrouillon() {
+  const brouillon = {
+    id: Date.now(),
+    fourn: fournActuel.nom,
+    fourIdx: fournActuel.idx,
+    date: new Date().toISOString(),
+    note: document.getElementById('note-commande').value.trim(),
+    qtes: JSON.parse(JSON.stringify(qtesActuelles)),
+    statut: 'brouillon',
+  };
+  const brouillons = lsGet('brouillons', []);
+  brouillons.unshift(brouillon);
+  lsSet('brouillons', brouillons.slice(0, 10));
+  toast('💾 Brouillon sauvegardé');
+}
+
+// ══════════════════════════════════════
+// HISTORIQUE
+// ══════════════════════════════════════
+function renderHistorique() {
+  const el = document.getElementById('historique-list');
+  if (!el) return;
+  if (!historique.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Aucune commande envoyée pour l\'instant.</div></div>';
+    return;
+  }
+  el.innerHTML = historique.slice(0, 20).map((c, i) => {
+    const date = new Date(c.date).toLocaleDateString('fr-BE', {day:'numeric',month:'short',year:'numeric'});
+    const heure = new Date(c.date).toLocaleTimeString('fr-BE', {hour:'2-digit',minute:'2-digit'});
+    return `
+    <div class="histo-card" onclick="toggleHisto(${i})">
+      <div class="histo-header">
+        <div>
+          <div class="histo-fourn">${c.fourn}</div>
+          <div class="histo-date">${date} à ${heure}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${c.jours?.length ? `<span style="font-size:11px;color:var(--muted)">${c.jours.join(', ')}</span>` : ''}
+          <span class="histo-badge">Envoyée</span>
+        </div>
+      </div>
+      <div class="histo-detail" id="histo-detail-${i}">
+        ${c.note ? `<div style="margin-top:8px;font-size:12px;color:var(--muted);padding:8px 10px;background:var(--bg);border-radius:8px">📝 ${c.note}</div>` : ''}
+        <div style="margin-top:10px;font-size:11px;color:var(--muted)">
+          ${(c.produits||[]).map((p, pi) => {
+            const jours = Object.entries((c.qtes?.[`${c.fourIdx||0}_${pi}`] || {}))
+              .filter(([,q]) => q > 0)
+              .map(([j,q]) => `${j}: ${q}`).join(' · ');
+            return jours ? `<div style="padding:4px 0;border-bottom:1px solid var(--border)">${p.nom} — ${jours}</div>` : '';
+          }).filter(Boolean).join('')}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleHisto(i) {
+  const el = document.getElementById('histo-detail-'+i);
+  if (el) el.classList.toggle('open');
+}
+
+// ══════════════════════════════════════
+// GÉRER FOURNISSEURS
+// ══════════════════════════════════════
+function renderJoursNewFourn() {
+  const el = document.getElementById('new-fourn-jours');
+  if (!el) return;
+  el.innerHTML = JOURS.map(j => `
+    <button type="button" onclick="toggleJourNewFourn(this,'${j}')"
+      style="padding:6px 12px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-family:'DM Mono',monospace;transition:all .15s"
+      data-jour="${j}">${j}</button>
+  `).join('');
+}
+
+function toggleJourNewFourn(btn, jour) {
+  const active = btn.dataset.active === 'true';
+  btn.dataset.active = !active;
+  btn.style.background = !active ? 'var(--amber)' : 'transparent';
+  btn.style.color = !active ? '#000' : 'var(--muted)';
+  btn.style.borderColor = !active ? 'var(--amber)' : 'var(--border)';
+}
+
+function openGererModal() {
+  renderFournListManage();
+  document.getElementById('modal-gerer').style.display = 'flex';
+}
+
+function renderFournListManage() {
+  const el = document.getElementById('fourn-list-manage');
+  if (!fournisseurs.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:10px">Aucun fournisseur configuré.</div>';
+    return;
+  }
+  el.innerHTML = fournisseurs.map((f, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:10px;margin-bottom:8px">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${f.nom}</div>
+        <div style="font-size:11px;color:var(--muted)">${f.email} · ${(f.produits||[]).length} produit(s)</div>
+      </div>
+      <button class="btn btn-ghost" onclick="ouvrirProduitsFourn(${i})" style="padding:6px 12px;font-size:11px">Produits</button>
+      <button onclick="supprimerFourn(${i})" style="padding:6px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:8px;color:var(--red);font-size:11px;cursor:pointer">✕</button>
+    </div>
+  `).join('');
+}
+
+function ajouterFournisseur() {
+  const nom   = document.getElementById('new-fourn-nom').value.trim();
+  const email = document.getElementById('new-fourn-email').value.trim();
+  const tel   = document.getElementById('new-fourn-tel').value.trim();
+  if (!nom || !email) { toast('⚠ Nom et email obligatoires', true); return; }
+
+  const joursEls = document.querySelectorAll('#new-fourn-jours button');
+  const jours = [...joursEls].filter(b => b.dataset.active === 'true').map(b => b.dataset.jour);
+
+  fournisseurs.push({ nom, email, tel, jours: jours.length ? jours : JOURS, produits: [] });
+  lsSet('fournisseurs', fournisseurs);
+
+  document.getElementById('new-fourn-nom').value = '';
+  document.getElementById('new-fourn-email').value = '';
+  document.getElementById('new-fourn-tel').value = '';
+  document.querySelectorAll('#new-fourn-jours button').forEach(b => {
+    b.dataset.active = 'false';
+    b.style.background = 'transparent';
+    b.style.color = 'var(--muted)';
+    b.style.borderColor = 'var(--border)';
+  });
+
+  buildFournSelect();
+  renderFournListManage();
+  toast(`✓ ${nom} ajouté`);
+}
+
+function supprimerFourn(i) {
+  fournisseurs.splice(i, 1);
+  lsSet('fournisseurs', fournisseurs);
+  buildFournSelect();
+  renderFournListManage();
+  toast('Fournisseur supprimé');
+}
+
+// ══════════════════════════════════════
+// GÉRER PRODUITS FOURNISSEUR
+// ══════════════════════════════════════
+function ouvrirProduitsFourn(i) {
+  editFournIdx = i;
+  const f = fournisseurs[i];
+  document.getElementById('modal-produits-title').textContent = `Produits — ${f.nom}`;
+  renderProduitsManage();
+  closeModal('modal-gerer');
+  document.getElementById('modal-produits').style.display = 'flex';
+}
+
+function renderProduitsManage() {
+  const el = document.getElementById('produits-list-manage');
+  const f = fournisseurs[editFournIdx];
+  const produits = f.produits || [];
+  if (!produits.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:10px">Aucun produit. Ajoute-en ci-dessous.</div>';
+    return;
+  }
+  el.innerHTML = produits.map((p, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:8px;margin-bottom:6px">
+      <div style="flex:1">
+        <div style="font-size:12px">${p.nom}</div>
+        <div style="font-size:10px;color:var(--muted)">${p.categorie||'Sans catégorie'}</div>
+      </div>
+      <button onclick="supprimerProduitFourn(${i})" style="padding:4px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;color:var(--red);font-size:11px;cursor:pointer">✕</button>
+    </div>
+  `).join('');
+}
+
+function ajouterProduitFourn() {
+  const nom = document.getElementById('new-prod-nom').value.trim();
+  const cat = document.getElementById('new-prod-cat').value.trim();
+  if (!nom) { toast('⚠ Nom obligatoire', true); return; }
+
+  if (!fournisseurs[editFournIdx].produits) fournisseurs[editFournIdx].produits = [];
+  fournisseurs[editFournIdx].produits.push({ nom, categorie: cat });
+  lsSet('fournisseurs', fournisseurs);
+
+  document.getElementById('new-prod-nom').value = '';
+  renderProduitsManage();
+  toast(`✓ ${nom} ajouté`);
+}
+
+function supprimerProduitFourn(i) {
+  fournisseurs[editFournIdx].produits.splice(i, 1);
+  lsSet('fournisseurs', fournisseurs);
+  renderProduitsManage();
+}
+
+// ══════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+// ══════════════════════════════════════
+// DÉMARRAGE
+// ══════════════════════════════════════
+function _runWhenReady() {
+  if (window.__guardPassed === true) { init(); }
+  else if (window.__guardPassed === false) {}
+  else { setTimeout(_runWhenReady, 50); }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _runWhenReady);
+} else {
+  _runWhenReady();
+}
+</script>
+</body>
+</html>

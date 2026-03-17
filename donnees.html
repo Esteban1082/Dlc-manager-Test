@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src * blob: data:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; style-src * 'unsafe-inline'; connect-src *; img-src * blob: data:; worker-src * blob:; media-src * blob:;">
+<script>
+document.documentElement.style.visibility = 'hidden';
+window.__guardPassed = undefined;
+(async () => {
+  const pm  = localStorage.getItem('pm_auth') === '1';
+  const sl  = localStorage.getItem('sl_auth') === '1';
+  const tok = localStorage.getItem('sl_access_token');
+  function block(title, sub) {
+    window.__guardPassed = false;
+    const render = () => {
+      if (!document.body) { requestAnimationFrame(render); return; }
+      document.documentElement.style.visibility = 'visible';
+      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🚫</div><div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">${title}</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">${sub}</div><a href="index.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>`;
+    };
+    render();
+  }
+  function allow() { window.__guardPassed = true; document.documentElement.style.visibility = 'visible'; }
+  if (!pm && !sl) { block('Accès restreint', 'Connecte-toi depuis le hub'); return; }
+  if (tok && sl) {
+    const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
+    if (['superadmin','admin'].includes(user.role)) { allow(); return; }
+    if (!user.id) { allow(); return; }
+    try {
+      const r = await fetch('https://jeqptodorjzeyhapbmrz.supabase.co/rest/v1/permissions?user_id=eq.'+user.id+'&module=eq.donnees&actif=eq.true&select=id',
+        {headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk','Authorization':'Bearer '+tok}});
+      const perms = await r.json();
+      if (!Array.isArray(perms)||perms.length===0){block('Module non activé',"Parle à Esteban pour obtenir l'accès");return;}
+      allow();
+    } catch(e){allow();}
+    return;
+  }
+  allow();
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Données — StoreLine</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:      #0f0f0d;
+    --surface: #1a1a16;
+    --surface2:#222218;
+    --border:  #2e2e28;
+    --border2: #3a3a32;
+    --text:    #f0ede4;
+    --muted:   #7a7a6e;
+    --amber:   #e8a045;
+    --amber2:  #f5c060;
+    --red:     #ff4040;
+    --green:   #4cdb8a;
+    --blue:    #4db8ff;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; display:flex; flex-direction:column; }
+
+  /* ── Header ── */
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 20px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--bg); z-index:100; flex-shrink:0;
+  }
+  .logo-title { font-family:'Fraunces',serif; font-weight:900; font-size:20px; color:var(--amber); }
+  .logo-sub   { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-top:2px; }
+  .back-btn {
+    padding:7px 14px; border:1px solid var(--border);
+    border-radius:8px; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:12px; text-decoration:none; transition:all .15s;
+  }
+  .back-btn:hover { border-color:var(--amber); color:var(--text); }
+
+  /* ── Tabs ── */
+  .tabs-bar {
+    display:flex; gap:0; overflow-x:auto;
+    border-bottom:1px solid var(--border);
+    background:var(--surface); flex-shrink:0;
+    scrollbar-width:none;
+  }
+  .tabs-bar::-webkit-scrollbar { display:none; }
+  .tab {
+    padding:12px 20px; font-size:12px; color:var(--muted);
+    border-bottom:2px solid transparent; white-space:nowrap;
+    cursor:pointer; transition:all .15s; border-top:none; border-left:none; border-right:none;
+    background:none;
+  }
+  .tab.active { color:var(--amber); border-bottom-color:var(--amber); }
+  .tab:hover:not(.active) { color:var(--text); }
+
+  /* ── Toolbar ── */
+  .toolbar {
+    display:flex; align-items:center; gap:8px;
+    padding:10px 16px; border-bottom:1px solid var(--border);
+    background:var(--surface); flex-wrap:wrap; flex-shrink:0;
+  }
+  .toolbar-search {
+    flex:1; min-width:160px; padding:8px 12px;
+    background:var(--bg); border:1px solid var(--border);
+    border-radius:8px; color:var(--text); font-size:12px;
+    outline:none; transition:border-color .15s;
+  }
+  .toolbar-search:focus { border-color:var(--amber); }
+  .btn-sm {
+    padding:7px 14px; border-radius:8px; border:none;
+    font-family:'DM Mono',monospace; font-size:11px; font-weight:600;
+    cursor:pointer; transition:all .15s; white-space:nowrap;
+  }
+  .btn-ghost-sm { background:transparent; border:1px solid var(--border); color:var(--muted); }
+  .btn-ghost-sm:hover { border-color:var(--amber); color:var(--text); }
+  .btn-amber-sm { background:var(--amber); color:#000; }
+  .btn-amber-sm:hover { background:var(--amber2); }
+  .btn-green-sm { background:var(--green); color:#000; }
+
+  /* ── Status bar ── */
+  .status-bar {
+    padding:6px 16px; background:var(--surface);
+    border-bottom:1px solid var(--border);
+    font-size:10px; color:var(--muted);
+    display:flex; align-items:center; gap:12px; flex-shrink:0;
+  }
+  .status-dot { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 4px var(--green); }
+
+  /* ── Table ── */
+  .table-wrap {
+    flex:1; overflow:auto; position:relative;
+  }
+  table {
+    width:100%; border-collapse:collapse; font-size:12px;
+    min-width:600px;
+  }
+  thead th {
+    position:sticky; top:0; z-index:10;
+    background:var(--surface2); padding:10px 14px;
+    text-align:left; font-size:10px; color:var(--muted);
+    letter-spacing:1px; text-transform:uppercase;
+    border-bottom:2px solid var(--border); white-space:nowrap;
+    cursor:pointer; user-select:none;
+  }
+  thead th:hover { color:var(--text); }
+  thead th.sorted-asc::after  { content:' ↑'; color:var(--amber); }
+  thead th.sorted-desc::after { content:' ↓'; color:var(--amber); }
+
+  tbody tr { border-bottom:1px solid var(--border); transition:background .1s; }
+  tbody tr:hover { background:rgba(232,160,69,.04); }
+  tbody tr.editing { background:rgba(232,160,69,.06); }
+
+  td {
+    padding:0; vertical-align:middle;
+    max-width:240px;
+  }
+  .cell-view {
+    padding:10px 14px; min-height:36px;
+    display:block; cursor:pointer;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .cell-view:hover { color:var(--amber); }
+  .cell-input {
+    width:100%; padding:9px 14px; background:rgba(232,160,69,.08);
+    border:none; border-bottom:2px solid var(--amber);
+    color:var(--text); font-family:'DM Mono',monospace; font-size:12px;
+    outline:none; min-height:36px;
+  }
+
+  /* Cellules spéciales */
+  .cell-badge {
+    display:inline-flex; padding:3px 8px; border-radius:20px;
+    font-size:10px; font-weight:700;
+  }
+  .badge-red    { background:rgba(255,64,64,.15);   color:var(--red);   border:1px solid rgba(255,64,64,.3); }
+  .badge-orange { background:rgba(232,160,69,.15);  color:var(--amber); border:1px solid rgba(232,160,69,.3); }
+  .badge-green  { background:rgba(76,219,138,.15);  color:var(--green); border:1px solid rgba(76,219,138,.3); }
+  .badge-muted  { background:rgba(122,122,110,.15); color:var(--muted); border:1px solid var(--border); }
+
+  td.col-actions { width:60px; text-align:center; }
+  .del-btn {
+    padding:4px 8px; background:transparent;
+    border:1px solid rgba(255,64,64,.2); border-radius:6px;
+    color:var(--red); font-size:11px; cursor:pointer;
+    opacity:0; transition:opacity .15s;
+  }
+  tbody tr:hover .del-btn { opacity:1; }
+  .del-btn:hover { background:rgba(255,64,64,.1); }
+
+  /* ── Loading / Empty ── */
+  .loading-row td { text-align:center; padding:40px; color:var(--muted); }
+  .empty-state { text-align:center; padding:60px 20px; color:var(--muted); }
+  .empty-ico { font-size:40px; margin-bottom:12px; }
+
+  /* ── Toast ── */
+  .toast-container { position:fixed; bottom:24px; right:16px; z-index:700; display:flex; flex-direction:column; gap:8px; }
+  .toast {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:12px 16px; font-size:12px;
+    animation:slideIn .2s ease; max-width:280px;
+  }
+  @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:none;opacity:1} }
+
+  .version-tag { position:fixed; bottom:10px; left:14px; font-size:10px; color:var(--border); z-index:50; }
+
+  @media(max-width:600px) {
+    .toolbar-search { min-width:100px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo-title">🗂 Données</div>
+    <div class="logo-sub">StoreLine · Vue tableur</div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <div id="sync-status" style="font-size:11px;color:var(--muted)"></div>
+    <a class="back-btn" href="index.html">← Hub</a>
+  </div>
+</header>
+
+<!-- Tabs -->
+<div class="tabs-bar">
+  <button class="tab active" onclick="switchTab('produits',this)">📋 Produits</button>
+  <button class="tab" onclick="switchTab('pertes',this)">📉 Pertes</button>
+  <button class="tab" onclick="switchTab('temperatures',this)">🌡️ Températures</button>
+  <button class="tab" onclick="switchTab('allergenes',this)">⚠️ Allergènes</button>
+  <button class="tab" onclick="switchTab('transferts',this)">🔄 Transferts</button>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <input class="toolbar-search" id="search-input" type="text" placeholder="🔍 Rechercher..." oninput="applyFilter()">
+  <button class="btn-sm btn-ghost-sm" onclick="exportCSV()">⬇ CSV</button>
+  <button class="btn-sm btn-amber-sm" onclick="syncData()" id="btn-sync">↻ Sync</button>
+  <button class="btn-sm btn-green-sm" id="btn-save" onclick="saveChanges()" style="display:none">💾 Sauvegarder</button>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <div class="status-dot" id="status-dot"></div>
+  <span id="status-text">Prêt</span>
+  <span id="row-count" style="margin-left:auto"></span>
+</div>
+
+<!-- Table -->
+<div class="table-wrap">
+  <table id="data-table">
+    <thead id="table-head"></thead>
+    <tbody id="table-body"></tbody>
+  </table>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<div class="version-tag">données v1.0 · 17/03/2026 18:00</div>
+
+<script>
+// ══════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════
+const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+let _apiCallId = 0;
+
+// Définition des onglets : colonnes, mapping API, tri par défaut
+const TABS = {
+  produits: {
+    label: 'Produits',
+    action: 'getProducts',
+    dataKey: 'products',
+    cols: [
+      { key:'nom',         label:'Nom',         editable:true  },
+      { key:'marque',      label:'Patissier',    editable:true  },
+      { key:'code_barres', label:'Code-barres',  editable:true  },
+    ],
+    sortKey: 'nom',
+    saveAction: 'updateProduct',
+  },
+  pertes: {
+    label: 'Pertes',
+    action: 'getPertes',
+    dataKey: 'pertes',
+    cols: [
+      { key:'nom',        label:'Article',     editable:false },
+      { key:'marque',     label:'Patissier',   editable:false },
+      { key:'quantite',   label:'Quantité',    editable:true  },
+      { key:'date_perte', label:'Date',        editable:false, type:'date' },
+    ],
+    sortKey: 'date_perte',
+    sortDir: 'desc',
+  },
+  temperatures: {
+    label: 'Températures',
+    action: 'getTemperatures',
+    dataKey: 'temperatures',
+    cols: [
+      { key:'zone',        label:'Zone',        editable:false },
+      { key:'valeur',      label:'Temp. (°C)',  editable:true, type:'number' },
+      { key:'date_releve', label:'Date',        editable:false, type:'date' },
+      { key:'hors_norme',  label:'Statut',      editable:false, type:'badge' },
+    ],
+    sortKey: 'date_releve',
+    sortDir: 'desc',
+  },
+  allergenes: {
+    label: 'Allergènes',
+    action: 'getAllergenes',
+    dataKey: 'allergenes',
+    cols: [
+      { key:'nom_gateau',  label:'Gâteau',      editable:true  },
+      { key:'patissier',   label:'Patissier',   editable:true  },
+      { key:'gluten',      label:'Gluten',      editable:false, type:'allergen' },
+      { key:'lait',        label:'Lait',        editable:false, type:'allergen' },
+      { key:'oeufs',       label:'Œufs',        editable:false, type:'allergen' },
+      { key:'fruits_coq',  label:'Fruits coq.', editable:false, type:'allergen' },
+      { key:'arachides',   label:'Arachides',   editable:false, type:'allergen' },
+    ],
+    sortKey: 'nom_gateau',
+  },
+  transferts: {
+    label: 'Transferts',
+    action: 'getTransferts',
+    dataKey: 'transferts',
+    cols: [
+      { key:'date_transfert', label:'Date',        editable:false, type:'date' },
+      { key:'rayon_dest',     label:'Rayon',       editable:false },
+      { key:'prix_total',     label:'Prix (€)',    editable:false, type:'price' },
+      { key:'note',           label:'Note',        editable:true  },
+    ],
+    sortKey: 'date_transfert',
+    sortDir: 'desc',
+  },
+};
+
+// ══════════════════════════════════════
+// ÉTAT
+// ══════════════════════════════════════
+let currentTab   = 'produits';
+let allData      = {};  // cache par tab
+let filteredData = [];
+let sortKey      = '';
+let sortDir      = 'asc';
+let pendingEdits = {}; // { rowIdx: { key: newVal } }
+
+// ══════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════
+function toast(msg, isError=false) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function setStatus(msg, syncing=false) {
+  document.getElementById('status-text').textContent = msg;
+  document.getElementById('status-dot').style.background = syncing ? 'var(--amber)' : 'var(--green)';
+  document.getElementById('status-dot').style.boxShadow  = syncing ? '0 0 4px var(--amber)' : '0 0 4px var(--green)';
+}
+
+function api(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'dlcCb_' + (++_apiCallId);
+    const timeout = setTimeout(() => {
+      delete window[cbName];
+      reject(new Error('Timeout'));
+    }, 15000);
+    window[cbName] = (data) => {
+      clearTimeout(timeout);
+      delete window[cbName];
+      resolve(data);
+    };
+    const p = new URLSearchParams({ ...params, callback: cbName });
+    const script = document.createElement('script');
+    script.onerror = () => { clearTimeout(timeout); delete window[cbName]; reject(new Error('Erreur réseau')); };
+    script.src = API_URL + '?' + p.toString();
+    document.head.appendChild(script);
+    setTimeout(() => { try { document.head.removeChild(script); } catch(e){} }, 20000);
+  });
+}
+
+// ══════════════════════════════════════
+// TABS
+// ══════════════════════════════════════
+function switchTab(tabId, el) {
+  currentTab = tabId;
+  pendingEdits = {};
+  document.getElementById('btn-save').style.display = 'none';
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.getElementById('search-input').value = '';
+  const cfg = TABS[tabId];
+  sortKey = cfg.sortKey || '';
+  sortDir = cfg.sortDir || 'asc';
+  if (allData[tabId]) {
+    renderTable(allData[tabId]);
+  } else {
+    loadTab(tabId);
+  }
+}
+
+async function loadTab(tabId) {
+  const cfg = TABS[tabId];
+  setStatus('Chargement...', true);
+  renderLoading();
+  try {
+    const data = await api({ action: cfg.action });
+    const rows = data[cfg.dataKey] || data.data || data.items || [];
+    allData[tabId] = rows;
+    renderTable(rows);
+    setStatus(`${rows.length} ligne${rows.length>1?'s':''} chargée${rows.length>1?'s':''}`);
+  } catch(e) {
+    setStatus('⚠ Erreur de chargement', false);
+    renderError(e.message);
+    toast('⚠ Impossible de charger les données', true);
+  }
+}
+
+async function syncData() {
+  allData[currentTab] = null;
+  await loadTab(currentTab);
+  toast('✓ Données rechargées');
+}
+
+// ══════════════════════════════════════
+// RENDU TABLE
+// ══════════════════════════════════════
+function renderLoading() {
+  const cfg = TABS[currentTab];
+  document.getElementById('table-head').innerHTML = `<tr>${cfg.cols.map(c=>`<th>${c.label}</th>`).join('')}<th></th></tr>`;
+  document.getElementById('table-body').innerHTML = `<tr class="loading-row"><td colspan="${cfg.cols.length+1}">⏳ Chargement...</td></tr>`;
+  document.getElementById('row-count').textContent = '';
+}
+
+function renderError(msg) {
+  const cfg = TABS[currentTab];
+  document.getElementById('table-body').innerHTML = `<tr class="loading-row"><td colspan="${cfg.cols.length+1}" style="color:var(--red)">⚠ ${msg}</td></tr>`;
+}
+
+function renderTable(rows) {
+  const cfg = TABS[currentTab];
+  const search = document.getElementById('search-input').value.toLowerCase();
+
+  // Filtrer
+  filteredData = rows.filter(row =>
+    !search || cfg.cols.some(c => String(row[c.key]||'').toLowerCase().includes(search))
+  );
+
+  // Trier
+  if (sortKey) {
+    filteredData.sort((a,b) => {
+      const va = String(a[sortKey]||'').toLowerCase();
+      const vb = String(b[sortKey]||'').toLowerCase();
+      return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+  }
+
+  // Header
+  document.getElementById('table-head').innerHTML = `<tr>
+    ${cfg.cols.map(c => `
+      <th onclick="sortBy('${c.key}')" class="${sortKey===c.key ? 'sorted-'+sortDir : ''}">
+        ${c.label}
+      </th>`).join('')}
+    <th></th>
+  </tr>`;
+
+  // Body
+  if (!filteredData.length) {
+    document.getElementById('table-body').innerHTML = `
+      <tr><td colspan="${cfg.cols.length+1}">
+        <div class="empty-state"><div class="empty-ico">🔍</div><div>Aucun résultat</div></div>
+      </td></tr>`;
+  } else {
+    document.getElementById('table-body').innerHTML = filteredData.map((row, i) =>
+      `<tr id="row-${i}">${cfg.cols.map(c => renderCell(row, i, c)).join('')}
+       <td class="col-actions">
+         <button class="del-btn" onclick="confirmDelete(${i})" title="Supprimer">✕</button>
+       </td>
+      </tr>`
+    ).join('');
+  }
+
+  document.getElementById('row-count').textContent = `${filteredData.length} / ${rows.length} lignes`;
+}
+
+function renderCell(row, rowIdx, col) {
+  const val = row[col.key] ?? '';
+  const edited = pendingEdits[rowIdx]?.[col.key];
+  const displayVal = edited !== undefined ? edited : val;
+
+  if (col.type === 'badge') {
+    const isHors = displayVal === true || displayVal === 'true' || displayVal === 'Hors norme';
+    return `<td><span class="cell-view"><span class="cell-badge ${isHors?'badge-red':'badge-green'}">${isHors?'⚠ Hors norme':'✓ Normal'}</span></span></td>`;
+  }
+  if (col.type === 'allergen') {
+    const cls = displayVal==='oui' ? 'badge-red' : displayVal==='non' ? 'badge-green' : 'badge-muted';
+    const txt = displayVal==='oui' ? '✓' : displayVal==='non' ? '✗' : '?';
+    return `<td><span class="cell-view" style="text-align:center;display:block"><span class="cell-badge ${cls}">${txt}</span></span></td>`;
+  }
+  if (col.type === 'price') {
+    const price = parseFloat(displayVal) || 0;
+    return `<td><span class="cell-view" style="color:var(--amber)">${price.toLocaleString('fr-BE',{style:'currency',currency:'EUR'})}</span></td>`;
+  }
+  if (col.type === 'date') {
+    try {
+      const d = new Date(displayVal);
+      if (!isNaN(d)) return `<td><span class="cell-view" style="color:var(--muted)">${d.toLocaleDateString('fr-BE')}</span></td>`;
+    } catch(e){}
+    return `<td><span class="cell-view" style="color:var(--muted)">${displayVal}</span></td>`;
+  }
+  if (!col.editable) {
+    return `<td><span class="cell-view">${displayVal}</span></td>`;
+  }
+  // Cellule éditable
+  const hasPending = edited !== undefined;
+  return `<td style="${hasPending?'border-left:2px solid var(--amber)':''}">
+    <span class="cell-view" id="cv-${rowIdx}-${col.key}"
+      onclick="editCell(${rowIdx},'${col.key}','${String(displayVal).replace(/'/g,"\\'")}',this)"
+      title="Cliquer pour modifier">${displayVal || '<span style="color:var(--border)">—</span>'}</span>
+  </td>`;
+}
+
+function editCell(rowIdx, key, currentVal, span) {
+  // Si déjà en édition
+  if (document.getElementById(`input-${rowIdx}-${key}`)) return;
+
+  const input = document.createElement('input');
+  input.className = 'cell-input';
+  input.id = `input-${rowIdx}-${key}`;
+  input.value = currentVal === '—' ? '' : currentVal;
+  input.style.width = Math.max(span.parentElement.offsetWidth, 120) + 'px';
+
+  span.style.display = 'none';
+  span.parentElement.parentElement.insertBefore(
+    Object.assign(document.createElement('td'), {
+      // workaround — replace cell content
+    }), span.parentElement
+  );
+
+  span.parentElement.appendChild(input);
+  input.focus();
+  input.select();
+
+  input.addEventListener('blur', () => commitEdit(rowIdx, key, input.value, span, input));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { input.remove(); span.style.display = ''; }
+  });
+
+  document.getElementById('row-'+rowIdx)?.classList.add('editing');
+}
+
+function commitEdit(rowIdx, key, newVal, span, input) {
+  const cfg = TABS[currentTab];
+  const col = cfg.cols.find(c => c.key === key);
+  const originalVal = filteredData[rowIdx]?.[key] ?? '';
+
+  input.remove();
+  span.style.display = '';
+  document.getElementById('row-'+rowIdx)?.classList.remove('editing');
+
+  if (String(newVal) === String(originalVal)) return; // pas de changement
+
+  if (!pendingEdits[rowIdx]) pendingEdits[rowIdx] = {};
+  pendingEdits[rowIdx][key] = newVal;
+
+  // Mettre à jour l'affichage
+  span.textContent = newVal || '';
+  span.parentElement.style.borderLeft = '2px solid var(--amber)';
+
+  document.getElementById('btn-save').style.display = 'block';
+  toast(`✏ Modification en attente — clique "Sauvegarder"`, false);
+}
+
+// ══════════════════════════════════════
+// TRI & FILTRE
+// ══════════════════════════════════════
+function sortBy(key) {
+  if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  else { sortKey = key; sortDir = 'asc'; }
+  renderTable(allData[currentTab] || []);
+}
+
+function applyFilter() {
+  renderTable(allData[currentTab] || []);
+}
+
+// ══════════════════════════════════════
+// SAUVEGARDE
+// ══════════════════════════════════════
+async function saveChanges() {
+  const editCount = Object.keys(pendingEdits).length;
+  if (!editCount) { toast('Aucune modification à sauvegarder'); return; }
+
+  const cfg = TABS[currentTab];
+  if (!cfg.saveAction) {
+    toast('⚠ Sauvegarde non disponible pour cet onglet (disponible en P2 avec Supabase)', true);
+    return;
+  }
+
+  setStatus('Sauvegarde...', true);
+  let saved = 0;
+  for (const [rowIdx, changes] of Object.entries(pendingEdits)) {
+    const row = filteredData[rowIdx];
+    const updated = { ...row, ...changes };
+    try {
+      await api({ action: cfg.saveAction, ...updated });
+      Object.assign(filteredData[rowIdx], changes);
+      if (allData[currentTab]) Object.assign(allData[currentTab].find(r => r === row) || {}, changes);
+      saved++;
+    } catch(e) {
+      toast(`⚠ Erreur ligne ${parseInt(rowIdx)+1}: ${e.message}`, true);
+    }
+  }
+
+  pendingEdits = {};
+  document.getElementById('btn-save').style.display = 'none';
+  setStatus(`${saved} modification${saved>1?'s':''} sauvegardée${saved>1?'s':''}`);
+  toast(`✓ ${saved} modification${saved>1?'s':''} sauvegardée${saved>1?'s':''}`);
+  renderTable(allData[currentTab] || []);
+}
+
+// ══════════════════════════════════════
+// SUPPRESSION
+// ══════════════════════════════════════
+function confirmDelete(rowIdx) {
+  const row = filteredData[rowIdx];
+  const cfg = TABS[currentTab];
+  const nom = row[cfg.cols[0].key] || 'cette ligne';
+  if (!confirm(`Supprimer "${nom}" ?`)) return;
+  // TODO: appel API suppression en P2
+  toast('⚠ Suppression disponible en P2 avec Supabase', true);
+}
+
+// ══════════════════════════════════════
+// EXPORT CSV
+// ══════════════════════════════════════
+function exportCSV() {
+  const cfg = TABS[currentTab];
+  const rows = filteredData.length ? filteredData : (allData[currentTab] || []);
+  if (!rows.length) { toast('⚠ Aucune donnée à exporter', true); return; }
+
+  const headers = cfg.cols.map(c => c.label);
+  const lines = [
+    headers.join(';'),
+    ...rows.map(r => cfg.cols.map(c => {
+      const v = r[c.key] ?? '';
+      return `"${String(v).replace(/"/g,'""')}"`;
+    }).join(';'))
+  ];
+
+  const blob = new Blob(['\ufeff' + lines.join('\n')], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `storeline_${currentTab}_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`✓ ${rows.length} lignes exportées`);
+}
+
+// ══════════════════════════════════════
+// INIT
+// ══════════════════════════════════════
+function init() {
+  const cfg = TABS[currentTab];
+  sortKey = cfg.sortKey || '';
+  sortDir = cfg.sortDir || 'asc';
+  loadTab(currentTab);
+}
+
+function _runWhenReady() {
+  if (window.__guardPassed === true) { init(); }
+  else if (window.__guardPassed === false) {}
+  else { setTimeout(_runWhenReady, 50); }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _runWhenReady);
+} else {
+  _runWhenReady();
+}
+</script>
+</body>
+</html>
