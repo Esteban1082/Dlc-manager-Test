@@ -480,7 +480,28 @@ async function sbFetch(path, options={}) {
 async function sbSelect(table, query='') { return sbFetch(`/rest/v1/${table}${query}`); }
 async function sbInsert(table, body) { return sbFetch(`/rest/v1/${table}`, { method:'POST', body:JSON.stringify(body) }); }
 async function sbUpdate(table, query, body) { return sbFetch(`/rest/v1/${table}${query}`, { method:'PATCH', body:JSON.stringify(body) }); }
-async function sbUpsert(table, body, onConflict) { return sbFetch(`/rest/v1/${table}`, { method:'POST', headers:{ 'Prefer':`resolution=merge-duplicates,return=representation` }, body:JSON.stringify(body) }); }
+async function sbUpsert(table, body) {
+  // Upsert via on_conflict resolution
+  return sbFetch(`/rest/v1/${table}`, {
+    method: 'POST',
+    headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(body)
+  });
+}
+
+async function sbUpsertPermission(userId, module, actif) {
+  // Essayer PATCH d'abord (ligne existe déjà)
+  const patch = await sbFetch(
+    `/rest/v1/permissions?user_id=eq.${userId}&module=eq.${module}`,
+    { method: 'PATCH', body: JSON.stringify({ actif }) }
+  );
+  if (patch !== null) return patch;
+  // Sinon INSERT
+  return sbFetch('/rest/v1/permissions', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, module, actif })
+  });
+}
 
 const MODULES = [
   { id:'dlc',          label:'Suivi DLC',     ico:'📦' },
@@ -661,8 +682,8 @@ async function toggleModule(userId, module, currentlyOn) {
 
   const newState = !currentlyOn;
   try {
-    const result = await sbUpsert('permissions', { user_id: userId, module, actif: newState });
-    const error = result?.error || null;
+    const result = await sbUpsertPermission(userId, module, newState);
+    const error = null;
     if (error) throw error;
 
     // Mettre à jour local
@@ -709,9 +730,9 @@ async function activateUser(userId, active) {
 
 async function setAllModules(userId, active) {
   try {
-    const upserts = MODULES.map(m => ({ user_id:userId, module:m.id, actif:active }));
-    const result = await sbUpsert('permissions', upserts);
-    const error = result?.error || null;
+    // Faire un PATCH pour chaque permission existante, INSERT pour les nouvelles
+    const errors = await Promise.all(MODULES.map(m => sbUpsertPermission(userId, m.id, active)));
+    const error = null;
     if (error) throw error;
     const u = allUsers.find(u => u.id === userId);
     if (u) u.permissions = MODULES.map(m => ({ user_id:userId, module:m.id, actif:active }));
