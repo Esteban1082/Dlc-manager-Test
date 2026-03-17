@@ -788,7 +788,7 @@ function genererRapport() {
   if (!debut || !fin) { toast('⚠ Choisis les deux dates', true); return; }
 
   const pertes = allData['pertes'] || [];
-  if (!pertes.length) { toast('⚠ Charge d'abord l'onglet Pertes', true); return; }
+  if (!pertes.length) { toast('⚠ Charge dabord onglet Pertes', true); return; }
 
   const dDebut = new Date(debut);
   const dFin   = new Date(fin); dFin.setHours(23,59,59);
