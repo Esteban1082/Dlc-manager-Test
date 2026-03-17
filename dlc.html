@@ -5,7 +5,7 @@
 <script>
 // Guard — bloque l'accès si pas de permission
 document.documentElement.style.visibility = 'hidden';
-window.__guardPassed = false;
+window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bloqué
 
 (async () => {
   const pm  = localStorage.getItem('pm_auth') === '1';
@@ -497,7 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.11 · 17/03/2026 16:11
+  v2.11 · 17/03/2026 16:49
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -2197,7 +2197,8 @@ function renderPertes() {
 // ── Init ──
 render();
 preloadZXing();
-if (window.__guardPassed !== false) { setTimeout(fullSync, 500); }
+document.addEventListener('guardPassed', () => { setTimeout(fullSync, 500); }, {once:true});
+if (window.__guardPassed === true) { setTimeout(fullSync, 500); }
 </script>
 
 

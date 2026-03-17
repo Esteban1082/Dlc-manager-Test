@@ -5,7 +5,7 @@
 <script>
 // Guard — bloque l'accès si pas de permission
 document.documentElement.style.visibility = 'hidden';
-window.__guardPassed = false;
+window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bloqué
 
 (async () => {
   const pm  = localStorage.getItem('pm_auth') === '1';
@@ -234,7 +234,7 @@ window.__guardPassed = false;
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">allergenes v2.0 · 17/03/2026 16:11</div>
+<div class="version-tag">allergenes v2.0 · 17/03/2026 16:49</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -458,7 +458,8 @@ async function saveAllergens() {
     });
     if (data && data.success) {
       toast(`✓ Fiche "${nom}" enregistrée`);
-      await if (window.__guardPassed !== false) { loadFiches(); }
+      await document.addEventListener('guardPassed', () => { loadFiches(); }, {once:true});
+if (window.__guardPassed === true) { loadFiches(); }
     } else {
       toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action saveAllergenes)'}`, true);
     }
@@ -517,7 +518,8 @@ async function loadFiches() {
   }
 }
 
-if (window.__guardPassed !== false) { loadFiches(); }
+document.addEventListener('guardPassed', () => { loadFiches(); }, {once:true});
+if (window.__guardPassed === true) { loadFiches(); }
 </script>
 </body>
 </html>
