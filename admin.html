@@ -726,8 +726,10 @@ async function toggleModule(userId, module, currentlyOn) {
   }
 
   const newState = !currentlyOn;
+  console.log('toggleModule', userId, module, currentlyOn, '->', newState);
   try {
     const result = await sbUpsertPermission(userId, module, newState);
+    console.log('result:', result);
     const error = null;
     if (error) throw error;
 
