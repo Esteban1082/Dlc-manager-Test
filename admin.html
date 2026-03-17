@@ -764,63 +764,10 @@ async function setAllModules(userId, active) {
   }
 }
 
-// ── Inviter un utilisateur ──
-let invSelected = new Set();
 
+// ── Inviter un utilisateur — guide vers Supabase ──
 function openInviteModal() {
-  document.getElementById('inv-email').value = '';
-  document.getElementById('inv-nom').value   = '';
-  document.getElementById('inv-role').value  = 'employe';
-  invSelected = new Set(DEFAULT_MODULES['employe']);
-  renderInvModules();
   document.getElementById('modal-invite').style.display = 'flex';
-}
-
-document.getElementById('inv-role').addEventListener('change', function() {
-  invSelected = new Set(DEFAULT_MODULES[this.value] || []);
-  renderInvModules();
-});
-
-function renderInvModules() {
-  document.getElementById('inv-modules').innerHTML = MODULES.map(m => `
-    <div class="module-toggle ${invSelected.has(m.id)?'on':''}" onclick="toggleInvModule('${m.id}')">
-      <span>${m.ico} ${m.label}</span>
-      <span class="module-check">${invSelected.has(m.id)?'✓':''}</span>
-    </div>`).join('');
-}
-
-function toggleInvModule(id) {
-  if (invSelected.has(id)) invSelected.delete(id);
-  else invSelected.add(id);
-  renderInvModules();
-}
-
-async function inviteUser() {
-  const email = document.getElementById('inv-email').value.trim();
-  const nom   = document.getElementById('inv-nom').value.trim();
-  const role  = document.getElementById('inv-role').value;
-  if (!email) { toast('⚠ Email obligatoire', true); return; }
-
-  try {
-    // Inviter via Supabase admin (nécessite service_role — on utilise signUp avec metadata)
-    const { data, error } = await sb.auth.admin?.inviteUserByEmail
-      ? await sb.auth.admin.inviteUserByEmail(email)
-      : { error: { message: 'invite_not_available' } };
-
-    // Si l'API admin n'est pas dispo depuis le client, on notifie Esteban de créer manuellement
-    if (error?.message === 'invite_not_available') {
-      toast('⚠ L\'invitation doit être envoyée depuis le dashboard Supabase → Authentication → Invite user', true);
-      closeModal('modal-invite');
-      return;
-    }
-    if (error) throw error;
-
-    toast(`✓ Invitation envoyée à ${email}`);
-    closeModal('modal-invite');
-    await loadUsers();
-  } catch(e) {
-    toast('⚠ ' + e.message, true);
-  }
 }
 
 // ── Modules overview ──
