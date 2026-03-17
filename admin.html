@@ -556,13 +556,15 @@ const MODULES = [
   { id:'temperatures', label:'Températures',  ico:'🌡️' },
   { id:'documents',    label:'Documents',     ico:'📁' },
   { id:'transferts',   label:'Transferts',    ico:'🔄' },
+  { id:'commandes',    label:'Commandes',     ico:'📋' },
+  { id:'donnees',      label:'Données',       ico:'🗂' },
 ];
 
 // Modules actifs par défaut selon le rôle
 const DEFAULT_MODULES = {
   employe: ['dlc','pertes','temperatures'],
-  manager: ['dlc','pertes','produits','allergenes','temperatures','documents','transferts'],
-  admin:   ['dlc','pertes','produits','allergenes','temperatures','documents','transferts'],
+  manager: ['dlc','pertes','produits','allergenes','temperatures','documents','transferts','commandes','donnees'],
+  admin:   ['dlc','pertes','produits','allergenes','temperatures','documents','transferts','commandes','donnees'],
 };
 
 // ── Toast ──
@@ -819,6 +821,8 @@ function moduleDesc(id) {
     temperatures: 'Relevés quotidiens par zone, détection hors norme',
     documents:    'Checklists, liens PDF, contacts utiles',
     transferts:   'Bons de transfert inter-rayons avec impression',
+    commandes:    'Bons de commande fournisseurs, envoi email direct',
+    donnees:      'Vue tableur de toutes les données, export CSV',
   }[id] || '';
 }
 
