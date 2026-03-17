@@ -415,23 +415,44 @@
 <!-- Modal inviter utilisateur -->
 <div class="modal-overlay" id="modal-invite" onclick="if(event.target.id==='modal-invite')closeModal('modal-invite')">
   <div class="modal">
-    <div class="modal-title">＋ Inviter un utilisateur</div>
-    <label class="form-label">Email *</label>
-    <input id="inv-email" class="form-input" type="email" placeholder="prenom@commerce.be">
-    <label class="form-label">Nom</label>
-    <input id="inv-nom" class="form-input" type="text" placeholder="Prénom Nom">
-    <label class="form-label">Rôle</label>
-    <select id="inv-role" class="form-input">
-      <option value="employe">Employé — modules quotidiens</option>
-      <option value="manager">Manager — tous modules + gestion zones</option>
-      <option value="admin">Admin — tout + gestion utilisateurs</option>
-    </select>
-    <label class="form-label">Modules activés</label>
-    <div id="inv-modules" style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:16px"></div>
-    <div style="display:flex;gap:10px">
-      <button class="btn btn-ghost" onclick="closeModal('modal-invite')" style="flex:1">Annuler</button>
-      <button class="btn btn-primary" onclick="inviteUser()" style="flex:1">Envoyer l'invitation</button>
+    <div class="modal-title">＋ Ajouter un utilisateur</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:20px">L'invitation se fait en 3 étapes rapides.</div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+      <div style="display:flex;gap:12px;padding:12px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center;font-weight:700;color:#000;flex-shrink:0">1</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">Inviter depuis Supabase</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Authentication → Users → Invite user → entre l'email</div>
+          <a href="https://supabase.com/dashboard/project/jeqptodorjzeyhapbmrz/auth/users" target="_blank"
+            style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:var(--amber);border-radius:8px;font-size:12px;font-weight:700;color:#000;text-decoration:none">
+            Ouvrir Supabase →
+          </a>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;padding:12px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted);flex-shrink:0">2</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">Il crée son mot de passe</div>
+          <div style="font-size:11px;color:var(--muted)">Il reçoit un email et clique le lien pour définir son mot de passe.</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;padding:12px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted);flex-shrink:0">3</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">Configurer depuis ce dashboard</div>
+          <div style="font-size:11px;color:var(--muted)">Son profil apparaît dans la liste. Clique dessus pour assigner le rôle et activer les modules.</div>
+        </div>
+      </div>
     </div>
+
+    <div style="background:rgba(232,160,69,.08);border:1px solid rgba(232,160,69,.2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--amber2);margin-bottom:16px">
+      💡 Après l'étape 1, reviens ici et clique sur "↻" pour rafraîchir la liste — le nouveau profil apparaîtra dès qu'il aura créé son mot de passe.
+    </div>
+
+    <button class="btn btn-ghost" onclick="closeModal('modal-invite')" style="width:100%">Fermer</button>
   </div>
 </div>
 
