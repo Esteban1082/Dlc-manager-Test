@@ -198,6 +198,10 @@ window.__guardPassed = undefined;
   }
   @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:none;opacity:1} }
 
+
+  .form-label-m { font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px;display:block; }
+  .form-input-m { width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;outline:none;font-family:'DM Mono',monospace; }
+  .form-input-m:focus { border-color:var(--amber); }
   .version-tag { position:fixed; bottom:10px; left:14px; font-size:10px; color:var(--border); z-index:50; }
 
   @media(max-width:600px) {
@@ -230,6 +234,7 @@ window.__guardPassed = undefined;
 <!-- Toolbar -->
 <div class="toolbar">
   <input class="toolbar-search" id="search-input" type="text" placeholder="🔍 Rechercher..." oninput="applyFilter()">
+  <button class="btn-sm btn-ghost-sm" id="btn-rapport" onclick="openRapport()" style="display:none">📊 Rapport de pertes</button>
   <button class="btn-sm btn-ghost-sm" onclick="exportCSV()">⬇ CSV</button>
   <button class="btn-sm btn-amber-sm" onclick="syncData()" id="btn-sync">↻ Sync</button>
   <button class="btn-sm btn-green-sm" id="btn-save" onclick="saveChanges()" style="display:none">💾 Sauvegarder</button>
@@ -250,8 +255,64 @@ window.__guardPassed = undefined;
   </table>
 </div>
 
+
+<!-- Modal Rapport de pertes -->
+<div class="modal-overlay" id="modal-rapport" onclick="if(event.target.id==='modal-rapport')closeModalDonnees('modal-rapport')">
+  <div class="modal" style="border-radius:16px;max-height:92vh;max-width:700px">
+    <div class="modal-title">📊 Rapport de pertes</div>
+
+    <!-- Sélection période -->
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:130px">
+        <label class="form-label-m">Date de début</label>
+        <input id="rapport-debut" class="form-input-m" type="date">
+      </div>
+      <div style="flex:1;min-width:130px">
+        <label class="form-label-m">Date de fin</label>
+        <input id="rapport-fin" class="form-input-m" type="date">
+      </div>
+      <button class="btn-sm btn-amber-sm" onclick="genererRapport()" style="align-self:flex-end;padding:10px 18px">Générer →</button>
+    </div>
+
+    <!-- Résultat -->
+    <div id="rapport-result" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div id="rapport-titre" style="font-size:13px;font-weight:600;color:var(--amber)"></div>
+        <button class="btn-sm btn-ghost-sm" onclick="exportRapportCSV()">⬇ Export CSV</button>
+      </div>
+      <div style="max-height:50vh;overflow-y:auto;border-radius:10px;border:1px solid var(--border)">
+        <table id="rapport-table" style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="position:sticky;top:0;background:var(--surface2)">
+              <th style="padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Article</th>
+              <th style="padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Patissier</th>
+              <th style="padding:10px 14px;text-align:right;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Qté totale</th>
+              <th style="padding:10px 14px;text-align:right;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Occurrences</th>
+            </tr>
+          </thead>
+          <tbody id="rapport-tbody"></tbody>
+        </table>
+      </div>
+      <div id="rapport-total" style="margin-top:10px;padding:10px 14px;background:rgba(232,160,69,.08);border:1px solid rgba(232,160,69,.2);border-radius:8px;font-size:12px;color:var(--amber);font-weight:600"></div>
+    </div>
+
+    <button class="btn-sm btn-ghost-sm" onclick="closeModalDonnees('modal-rapport')" style="width:100%;margin-top:12px;padding:10px">Fermer</button>
+  </div>
+</div>
+
+<!-- Modal Ticket Transfert -->
+<div class="modal-overlay" id="modal-ticket" onclick="if(event.target.id==='modal-ticket')closeModalDonnees('modal-ticket')">
+  <div class="modal" style="border-radius:16px;max-height:92vh;max-width:600px">
+    <div class="modal-title">🔄 Ticket de transfert</div>
+    <div id="ticket-content" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;max-height:65vh;overflow-y:auto"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn-sm btn-ghost-sm" onclick="closeModalDonnees('modal-ticket')" style="flex:1;padding:10px">Fermer</button>
+      <button class="btn-sm btn-amber-sm" onclick="imprimerTicket()" style="flex:1;padding:10px">🖨 Imprimer</button>
+    </div>
+  </div>
+</div>
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">données v1.0 · 17/03/2026 18:00</div>
+<div class="version-tag">données v1.2 · 17/03/2026 19:44</div>
 
 <script>
 // ══════════════════════════════════════
@@ -397,6 +458,7 @@ function switchTab(tabId, el) {
   currentTab = tabId;
   pendingEdits = {};
   document.getElementById('btn-save').style.display = 'none';
+  document.getElementById('btn-rapport').style.display = tabId === 'pertes' ? 'block' : 'none';
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   if (el) el.classList.add('active');
   document.getElementById('search-input').value = '';
@@ -487,6 +549,7 @@ function renderTable(rows) {
     document.getElementById('table-body').innerHTML = filteredData.map((row, i) =>
       `<tr id="row-${i}">${cfg.cols.map(c => renderCell(row, i, c)).join('')}
        <td class="col-actions">
+         ${currentTab === 'transferts' ? `<button class="view-btn" onclick="voirTicket(${i})" title="Voir le ticket">👁</button>` : ''}
          <button class="del-btn" onclick="confirmDelete(${i})" title="Supprimer">✕</button>
        </td>
       </tr>`
@@ -702,6 +765,179 @@ function exportCSV() {
   URL.revokeObjectURL(url);
   toast(`✓ ${rows.length} lignes exportées`);
 }
+
+
+// ══════════════════════════════════════
+// RAPPORT DE PERTES
+// ══════════════════════════════════════
+let rapportData = [];
+
+function openRapport() {
+  // Pré-remplir les dates (mois courant)
+  const now = new Date();
+  const debut = new Date(now.getFullYear(), now.getMonth(), 1);
+  document.getElementById('rapport-debut').value = debut.toISOString().split('T')[0];
+  document.getElementById('rapport-fin').value   = now.toISOString().split('T')[0];
+  document.getElementById('rapport-result').style.display = 'none';
+  document.getElementById('modal-rapport').style.display = 'flex';
+}
+
+function genererRapport() {
+  const debut = document.getElementById('rapport-debut').value;
+  const fin   = document.getElementById('rapport-fin').value;
+  if (!debut || !fin) { toast('⚠ Choisis les deux dates', true); return; }
+
+  const pertes = allData['pertes'] || [];
+  if (!pertes.length) { toast('⚠ Charge d'abord l'onglet Pertes', true); return; }
+
+  const dDebut = new Date(debut);
+  const dFin   = new Date(fin); dFin.setHours(23,59,59);
+
+  // Filtrer par période
+  const filtered = pertes.filter(p => {
+    const d = new Date(p.date);
+    return d >= dDebut && d <= dFin;
+  });
+
+  if (!filtered.length) {
+    toast('Aucune perte sur cette période', true);
+    return;
+  }
+
+  // Regrouper par article (name + brand)
+  const groups = {};
+  filtered.forEach(p => {
+    const key = (p.name || '?') + '||' + (p.brand || '');
+    if (!groups[key]) groups[key] = { name: p.name || '?', brand: p.brand || '—', qty: 0, count: 0 };
+    groups[key].qty   += parseInt(p.quantity) || 1;
+    groups[key].count += 1;
+  });
+
+  // Trier par quantité totale desc
+  rapportData = Object.values(groups).sort((a,b) => b.qty - a.qty);
+
+  const totalQty   = rapportData.reduce((s,r) => s + r.qty, 0);
+  const totalLines = filtered.length;
+
+  // Afficher
+  const debutFmt = new Date(debut).toLocaleDateString('fr-BE', {day:'numeric',month:'long',year:'numeric'});
+  const finFmt   = new Date(fin).toLocaleDateString('fr-BE',   {day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('rapport-titre').textContent =
+    `${rapportData.length} article(s) · ${debutFmt} → ${finFmt}`;
+
+  document.getElementById('rapport-tbody').innerHTML = rapportData.map(r => `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 14px">${r.name}</td>
+      <td style="padding:9px 14px;color:var(--muted)">${r.brand}</td>
+      <td style="padding:9px 14px;text-align:right;color:var(--amber);font-weight:700">${r.qty}</td>
+      <td style="padding:9px 14px;text-align:right;color:var(--muted)">${r.count}×</td>
+    </tr>`).join('');
+
+  document.getElementById('rapport-total').textContent =
+    `Total : ${totalQty} unité${totalQty>1?'s':''} perdues sur ${totalLines} entrée${totalLines>1?'s':''}`;
+
+  document.getElementById('rapport-result').style.display = 'block';
+}
+
+function exportRapportCSV() {
+  if (!rapportData.length) return;
+  const debut = document.getElementById('rapport-debut').value;
+  const fin   = document.getElementById('rapport-fin').value;
+  const lines = [
+    'Article;Patissier;Quantité totale;Occurrences',
+    ...rapportData.map(r => `"${r.name}";"${r.brand}";${r.qty};${r.count}`)
+  ];
+  const blob = new Blob(['﻿' + lines.join('
+')], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `rapport_pertes_${debut}_${fin}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`✓ ${rapportData.length} articles exportés`);
+}
+
+// ══════════════════════════════════════
+// TICKET TRANSFERT
+// ══════════════════════════════════════
+let ticketPrintHTML = '';
+
+function voirTicket(rowIdx) {
+  const row = filteredData[rowIdx];
+  if (!row) return;
+
+  const date = new Date(row.date).toLocaleDateString('fr-BE', {day:'numeric',month:'long',year:'numeric'});
+  let articles = [];
+  try { articles = JSON.parse(row.articles || '[]'); } catch(e) {}
+
+  const total = parseFloat(row.total || row.prix_total || 0);
+  const totalFmt = total > 0
+    ? total.toLocaleString('fr-BE', {style:'currency',currency:'EUR'})
+    : '—';
+
+  const html = `
+    <div style="font-family:'DM Mono',monospace;font-size:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--amber)">Bon de transfert</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">Pâtisserie Rob The Market</div>
+        </div>
+        <div style="text-align:right;font-size:11px;color:var(--muted)">
+          <div style="color:var(--text);font-weight:600">${date}</div>
+          <div style="margin-top:2px">→ ${row.rayon || '?'}</div>
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="padding:6px 10px;text-align:left;color:var(--muted);font-size:10px;letter-spacing:1px;text-transform:uppercase">Article</th>
+            <th style="padding:6px 10px;text-align:left;color:var(--muted);font-size:10px;letter-spacing:1px;text-transform:uppercase">Marque</th>
+            <th style="padding:6px 10px;text-align:center;color:var(--muted);font-size:10px;letter-spacing:1px;text-transform:uppercase">Qté</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${articles.map(a => `
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 10px">${a.nom || a.name || '?'}</td>
+              <td style="padding:8px 10px;color:var(--muted)">${a.marque || a.brand || '—'}</td>
+              <td style="padding:8px 10px;text-align:center;font-weight:700;color:var(--amber)">${a.qty || a.quantity || 1}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+
+      ${total > 0 ? `<div style="padding:10px;background:rgba(232,160,69,.08);border:1px solid rgba(232,160,69,.2);border-radius:8px;color:var(--amber);font-weight:700;text-align:right">Total : ${totalFmt}</div>` : ''}
+      ${row.note ? `<div style="margin-top:10px;padding:10px;background:var(--surface2);border-radius:8px;font-size:11px;color:var(--muted)">📝 ${row.note}</div>` : ''}
+    </div>
+  `;
+
+  ticketPrintHTML = html;
+  document.getElementById('ticket-content').innerHTML = html;
+  document.getElementById('modal-ticket').style.display = 'flex';
+}
+
+function imprimerTicket() {
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <style>
+      body { font-family: 'Courier New', monospace; font-size:11pt; color:#000; padding:20mm; }
+      table { width:100%; border-collapse:collapse; }
+      th, td { padding:6px 10px; border-bottom:1px solid #ccc; text-align:left; }
+      th { font-size:9pt; color:#666; }
+      .total { margin-top:12px; padding:8px; border:1px solid #ccc; font-weight:bold; text-align:right; }
+      h2 { margin-bottom:4px; }
+      .sub { color:#666; font-size:9pt; margin-bottom:16px; }
+    </style></head><body>
+    <h2>Bon de transfert — Pâtisserie Rob The Market</h2>
+    <div class="sub">${new Date().toLocaleDateString('fr-BE', {day:'numeric',month:'long',year:'numeric'})}</div>
+    ${ticketPrintHTML.replace(/style="[^"]*color:[^"]*var\([^)]+\)[^"]*"/g, '').replace(/style="[^"]*background:[^"]*var\([^)]+\)[^"]*"/g, '')}
+    </body></html>`);
+  w.document.close();
+  w.print();
+}
+
+function closeModalDonnees(id) { document.getElementById(id).style.display = 'none'; }
 
 // ══════════════════════════════════════
 // INIT
