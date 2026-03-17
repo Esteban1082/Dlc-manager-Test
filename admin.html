@@ -245,7 +245,7 @@
 </head>
 <body>
 
-<!-- Auth guard — pure fetch, pas de lib externe -->
+<!-- Auth guard — vérifie token + rôle localStorage -->
 <script>
 (async () => {
   const SB_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -254,7 +254,7 @@
   const token = localStorage.getItem('sl_access_token');
   if (!token) { window.location.replace('login.html?from=admin'); return; }
 
-  // Vérifier le token
+  // Vérifier que le token est valide
   const authResp = await fetch(`${SB_URL}/auth/v1/user`, {
     headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${token}` }
   });
@@ -265,14 +265,30 @@
   }
   const authUser = await authResp.json();
 
-  // Charger le profil
-  const profResp = await fetch(`${SB_URL}/rest/v1/profiles?id=eq.${authUser.id}&select=role,tenant_id,email,nom`, {
-    headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${token}` }
-  });
-  const profiles = await profResp.json();
-  const profile = Array.isArray(profiles) ? profiles[0] : null;
+  // Essayer de charger le profil depuis Supabase
+  let role = null;
+  let tenantId = null;
+  try {
+    const profResp = await fetch(
+      `${SB_URL}/rest/v1/profiles?id=eq.${authUser.id}&select=role,tenant_id,nom`,
+      { headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${token}` } }
+    );
+    const profiles = await profResp.json();
+    const profile = Array.isArray(profiles) && profiles.length > 0 ? profiles[0] : null;
+    if (profile) {
+      role = profile.role;
+      tenantId = profile.tenant_id;
+    }
+  } catch(e) {}
 
-  if (!profile || !['superadmin','admin'].includes(profile.role)) {
+  // Fallback sur localStorage si la lecture Supabase échoue
+  if (!role) {
+    const stored = JSON.parse(localStorage.getItem('sl_user') || '{}');
+    role = stored.role;
+    tenantId = stored.tenant_id;
+  }
+
+  if (!role || !['superadmin','admin'].includes(role)) {
     window.location.replace('index.html');
     return;
   }
@@ -280,9 +296,8 @@
   window._SL_USER = {
     id: authUser.id,
     email: authUser.email,
-    role: profile.role,
-    tenant_id: profile.tenant_id,
-    nom: profile.nom,
+    role,
+    tenant_id: tenantId,
   };
   localStorage.setItem('sl_user', JSON.stringify(window._SL_USER));
 })();
