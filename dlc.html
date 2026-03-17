@@ -497,7 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.11 · 17/03/2026 16:49
+  v2.11 · 17/03/2026 16:54
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -2197,8 +2197,20 @@ function renderPertes() {
 // ── Init ──
 render();
 preloadZXing();
-document.addEventListener('guardPassed', () => { setTimeout(fullSync, 500); }, {once:true});
-if (window.__guardPassed === true) { setTimeout(fullSync, 500); }
+function _runSyncWhenReady() {
+  if (window.__guardPassed === true) {
+    setTimeout(fullSync, 500);
+  } else if (window.__guardPassed === false) {
+    // Bloqué
+  } else {
+    setTimeout(_runSyncWhenReady, 50);
+  }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _runSyncWhenReady);
+} else {
+  _runSyncWhenReady();
+}
 </script>
 
 

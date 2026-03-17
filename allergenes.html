@@ -234,7 +234,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">allergenes v2.0 · 17/03/2026 16:49</div>
+<div class="version-tag">allergenes v2.0 · 17/03/2026 16:54</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -458,8 +458,22 @@ async function saveAllergens() {
     });
     if (data && data.success) {
       toast(`✓ Fiche "${nom}" enregistrée`);
-      await document.addEventListener('guardPassed', () => { loadFiches(); }, {once:true});
-if (window.__guardPassed === true) { loadFiches(); }
+      await // Attendre que le guard soit résolu ET que le DOM soit prêt
+function _runWhenReady() {
+  if (window.__guardPassed === true) {
+    loadFiches();
+  } else if (window.__guardPassed === false) {
+    // Bloqué — ne rien faire
+  } else {
+    // Guard encore en cours — réessayer
+    setTimeout(_runWhenReady, 50);
+  }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _runWhenReady);
+} else {
+  _runWhenReady();
+}
     } else {
       toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action saveAllergenes)'}`, true);
     }
@@ -518,8 +532,22 @@ async function loadFiches() {
   }
 }
 
-document.addEventListener('guardPassed', () => { loadFiches(); }, {once:true});
-if (window.__guardPassed === true) { loadFiches(); }
+// Attendre que le guard soit résolu ET que le DOM soit prêt
+function _runWhenReady() {
+  if (window.__guardPassed === true) {
+    loadFiches();
+  } else if (window.__guardPassed === false) {
+    // Bloqué — ne rien faire
+  } else {
+    // Guard encore en cours — réessayer
+    setTimeout(_runWhenReady, 50);
+  }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _runWhenReady);
+} else {
+  _runWhenReady();
+}
 </script>
 </body>
 </html>
