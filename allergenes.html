@@ -1,24 +1,44 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src * blob: data:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; style-src * 'unsafe-inline'; connect-src *; img-src * blob: data:; worker-src * blob:; media-src * blob:;">
 <script>
+// Guard — cache le contenu jusqu'à vérification permission
+document.documentElement.style.visibility = 'hidden';
+
 (async () => {
-  const pm_auth = localStorage.getItem('pm_auth') === '1';
-  const sl_auth = localStorage.getItem('sl_auth') === '1';
-  const token   = localStorage.getItem('sl_access_token');
-  const BLOCKED = '<div style=\"position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:DM Mono,monospace;text-align:center;padding:20px\"><div><div style=\"font-size:48px;margin-bottom:16px\">🔒</div><div style=\"font-family:Fraunces,serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px\">Accès restreint</div><div style=\"font-size:13px;color:#7a7a6e;margin-bottom:24px\">Connecte-toi depuis le hub</div><a href=\"index.html\" style=\"padding:14px 28px;background:#e8a045;border-radius:12px;font-family:Fraunces,serif;font-size:16px;font-weight:700;color:#000;text-decoration:none\">← Retour au hub</a></div></div>';
-  const NO_PERM = '<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:DM Mono,monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🚫</div><div style="font-family:Fraunces,serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">Module non activé</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">Parle à Esteban pour obtenir l\'accès</div><a href="index.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:Fraunces,serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>';
-  if (!pm_auth && !sl_auth) { document.body.innerHTML = BLOCKED; return; }
-  if (token && sl_auth) {
-    const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
-    if (['superadmin','admin'].includes(user.role)) return;
-    if (!user.id) return;
-    try {
-      const r = await fetch('https://jeqptodorjzeyhapbmrz.supabase.co/rest/v1/permissions?user_id=eq.' + user.id + '&module=eq.allergenes&actif=eq.true&select=id', { headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk', 'Authorization': 'Bearer ' + token } });
-      const perms = await r.json();
-      if (!Array.isArray(perms) || perms.length === 0) { document.body.innerHTML = NO_PERM; return; }
-    } catch(e) {}
+  const pm   = localStorage.getItem('pm_auth') === '1';
+  const sl   = localStorage.getItem('sl_auth') === '1';
+  const tok  = localStorage.getItem('sl_access_token');
+
+  function block(msg) {
+    document.documentElement.style.visibility = 'visible';
+    document.body.innerHTML = '<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:DM Mono,monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">' + msg + '</div><div style="font-family:Fraunces,serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">' + (msg==='🔒'?'Accès restreint':'Module non activé') + '</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">' + (msg==='🔒'?'Connecte-toi depuis le hub':'Parle à Esteban pour obtenir l\'accès') + '</div><a href=\"index.html\" style=\"padding:14px 28px;background:#e8a045;border-radius:12px;font-family:Fraunces,serif;font-size:16px;font-weight:700;color:#000;text-decoration:none\">← Retour au hub</a></div></div>';
   }
+  function allow() {
+    document.documentElement.style.visibility = 'visible';
+  }
+
+  if (!pm && !sl) { block('🔒'); return; }
+
+  if (tok && sl) {
+    const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
+    if (['superadmin','admin'].includes(user.role)) { allow(); return; }
+    if (!user.id) { allow(); return; }
+    try {
+      const r = await fetch(
+        'https://jeqptodorjzeyhapbmrz.supabase.co/rest/v1/permissions?user_id=eq.' + user.id + '&module=eq.allergenes&actif=eq.true&select=id',
+        { headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk', 'Authorization': 'Bearer ' + tok } }
+      );
+      const perms = await r.json();
+      if (!Array.isArray(perms) || perms.length === 0) { block('🚫'); return; }
+      allow();
+    } catch(e) { allow(); }
+    return;
+  }
+
+  // Connecté via PIN uniquement → accès libre
+  allow();
 })();
 </script>
 <meta charset="UTF-8">
@@ -197,7 +217,7 @@
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">allergenes v2.0 · 17/03/2026 14:32</div>
+<div class="version-tag">allergenes v2.0 · 17/03/2026 14:56</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
