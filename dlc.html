@@ -1,13 +1,35 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src * blob: data:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; style-src * 'unsafe-inline'; connect-src *; img-src * blob: data:; worker-src * blob:; media-src * blob:;">
 <script>
-// Vérification auth — affiche écran de blocage si non connecté
-document.addEventListener('DOMContentLoaded', () => {
-  if (localStorage.getItem('sl_auth') !== '1' && localStorage.getItem('pm_auth') !== '1') {
-    document.body.innerHTML = '<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:DM Mono,monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🔒</div><div style="font-family:Fraunces,serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">Accès restreint</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">Connecte-toi depuis le hub</div><a href="index.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:Fraunces,serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>';
+// Auth + permission guard
+(async () => {
+  const pm_auth = localStorage.getItem('pm_auth') === '1';
+  const sl_auth = localStorage.getItem('sl_auth') === '1';
+  const token   = localStorage.getItem('sl_access_token');
+
+  const BLOCKED = '<div style=\"position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:DM Mono,monospace;text-align:center;padding:20px\"><div><div style=\"font-size:48px;margin-bottom:16px\">🔒</div><div style=\"font-family:Fraunces,serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px\">Accès restreint</div><div style=\"font-size:13px;color:#7a7a6e;margin-bottom:24px\">Connecte-toi depuis le hub</div><a href=\"index.html\" style=\"padding:14px 28px;background:#e8a045;border-radius:12px;font-family:Fraunces,serif;font-size:16px;font-weight:700;color:#000;text-decoration:none\">← Retour au hub</a></div></div>';
+  const NO_PERM = '<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:DM Mono,monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🚫</div><div style="font-family:Fraunces,serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">Module non activé</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">Parle à Esteban pour obtenir l\'accès</div><a href="index.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:Fraunces,serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>';
+
+  if (!pm_auth && !sl_auth) { document.body.innerHTML = BLOCKED; return; }
+
+  if (token && sl_auth) {
+    const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
+    if (['superadmin','admin'].includes(user.role)) return;
+    if (!user.id) return;
+    try {
+      const r = await fetch(
+        'https://jeqptodorjzeyhapbmrz.supabase.co/rest/v1/permissions?user_id=eq.' + user.id + '&module=eq.dlc&actif=eq.true&select=id',
+        { headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk', 'Authorization': 'Bearer ' + token } }
+      );
+      const perms = await r.json();
+      if (!Array.isArray(perms) || perms.length === 0) {
+        document.body.innerHTML = NO_PERM; return;
+      }
+    } catch(e) { /* fail open */ }
   }
-});
+})();
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -448,7 +470,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.11 · 16/03/2026 21:46
+  v2.11 · 17/03/2026 14:32
 </div>
 
 <!-- Modal Ajout en lot -->
