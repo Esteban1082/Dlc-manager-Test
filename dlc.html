@@ -574,13 +574,29 @@ document.addEventListener('DOMContentLoaded', () => {
 <div class="modal-overlay" id="modal-nodlc" style="display:none" onclick="if(event.target.id==='modal-nodlc')closeNoDlc()">
   <div class="modal" style="max-width:540px">
     <div class="modal-title">⚠ Produits sans DLC</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Produits présents dans la base Sheets mais sans date enregistrée dans le Calendar.</div>
-    <input id="nodlc-search" type="text" placeholder="🔍 Filtrer…" oninput="renderNoDlcList()"
-      autocomplete="off" aria-label="Filtrer les produits sans DLC"
-      style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;margin-bottom:12px">
-    <div id="nodlc-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:14px">
+      <button id="nodlc-tab-liste" onclick="switchNodlcTab('liste')"
+        style="padding:8px 16px;background:none;border:none;border-bottom:2px solid var(--amber);color:var(--amber);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;font-weight:600">
+        📋 Liste
+      </button>
+      <button id="nodlc-tab-exclusions" onclick="switchNodlcTab('exclusions')"
+        style="padding:8px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer">
+        🚫 Exclusions <span id="nodlc-excl-count"></span>
+      </button>
+    </div>
+    <div id="nodlc-view-liste">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Articles sans date DLC. Exclure ceux qui sont jetes quotidiennement.</div>
+      <input id="nodlc-search" type="text" placeholder="🔍 Filtrer..." oninput="renderNoDlcList()"
+        autocomplete="off"
+        style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;margin-bottom:12px">
+      <div id="nodlc-list" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+    <div id="nodlc-view-exclusions" style="display:none">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Ces articles ne s&#39;affichent plus dans la liste Sans DLC.</div>
+      <div id="nodlc-excl-list" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    </div>
     <div class="modal-actions" style="margin-top:16px">
-      <button class="btn-cancel" onclick="closeNoDlc()" aria-label="Fermer la liste des produits sans DLC">Fermer</button>
+      <button class="btn-cancel" onclick="closeNoDlc()">Fermer</button>
     </div>
   </div>
 </div>
@@ -1433,17 +1449,23 @@ async function openNoDlc() {
 
 function switchNodlcTab(tab) {
   _nodlcTab = tab;
-  document.getElementById('nodlc-view-liste').style.display      = tab === 'liste'      ? 'block' : 'none';
-  document.getElementById('nodlc-view-exclusions').style.display = tab === 'exclusions' ? 'block' : 'none';
-  document.getElementById('nodlc-tab-liste').style.borderBottomColor      = tab === 'liste'      ? 'var(--amber)' : 'transparent';
-  document.getElementById('nodlc-tab-liste').style.color                  = tab === 'liste'      ? 'var(--amber)' : 'var(--muted)';
-  document.getElementById('nodlc-tab-exclusions').style.borderBottomColor = tab === 'exclusions' ? 'var(--amber)' : 'transparent';
-  document.getElementById('nodlc-tab-exclusions').style.color             = tab === 'exclusions' ? 'var(--amber)' : 'var(--muted)';
-  if (tab === 'liste') renderNoDlcList();
-  else {
-    // Charger les exclusions depuis Sheets si pas encore en cache
-    loadExclusions().then(() => renderExclusionsList());
+  var vListe  = document.getElementById('nodlc-view-liste');
+  var vExcl   = document.getElementById('nodlc-view-exclusions');
+  var tListe  = document.getElementById('nodlc-tab-liste');
+  var tExcl   = document.getElementById('nodlc-tab-exclusions');
+  if (!vListe || !vExcl || !tListe || !tExcl) {
+    // Réessayer dans 50ms si le modal n'est pas encore rendu
+    setTimeout(function() { switchNodlcTab(tab); }, 50);
+    return;
   }
+  vListe.style.display  = tab === 'liste'      ? 'block' : 'none';
+  vExcl.style.display   = tab === 'exclusions' ? 'block' : 'none';
+  tListe.style.borderBottomColor  = tab === 'liste'      ? 'var(--amber)' : 'transparent';
+  tListe.style.color              = tab === 'liste'      ? 'var(--amber)' : 'var(--muted)';
+  tExcl.style.borderBottomColor   = tab === 'exclusions' ? 'var(--amber)' : 'transparent';
+  tExcl.style.color               = tab === 'exclusions' ? 'var(--amber)' : 'var(--muted)';
+  if (tab === 'liste') renderNoDlcList();
+  else loadExclusions().then(function() { renderExclusionsList(); });
 }
 
 function renderNoDlcList() {
