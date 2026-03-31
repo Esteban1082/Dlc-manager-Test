@@ -1472,7 +1472,7 @@ function renderNoDlcList() {
   const q    = (document.getElementById('nodlc-search').value || '').toLowerCase().trim();
   const list = document.getElementById('nodlc-list');
   const excl = document.getElementById('nodlc-excl-count');
-  const exclusions = getExclusions();
+  const exclusions = _exclusionsCache || [];
   if (excl) excl.textContent = exclusions.length ? `(${exclusions.length})` : '';
 
   const items = q ? _missingProducts.filter(p =>
