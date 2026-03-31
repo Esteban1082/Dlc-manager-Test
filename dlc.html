@@ -497,7 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.11 · 17/03/2026 16:54
+  v2.12 · 31/03/2026 11:38
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -1392,31 +1392,67 @@ function openQuickScanner() {
 }
 // ── Produits sans DLC ──
 let _missingProducts = [];
+let _nodlcTab = 'liste';
 
-function updateNoDlcBadge() {
-  const tracked = new Set(products.map(p => p.name.toLowerCase().trim()));
+// Exclusions — articles jetés quotidiennement, stockées dans Sheets
+let _exclusionsCache = null;
+
+async function loadExclusions() {
+  if (_exclusionsCache !== null) return _exclusionsCache;
+  try {
+    const d = await api({ action: 'getExclusions' });
+    _exclusionsCache = d.success ? d.exclusions : [];
+  } catch(e) { _exclusionsCache = []; }
+  return _exclusionsCache;
+}
+
+async function updateNoDlcBadge() {
+  const tracked    = new Set(products.map(p => p.name.toLowerCase().trim()));
+  const exclList   = await loadExclusions();
+  const exclusions = new Set(exclList.map(e => e.toLowerCase().trim()));
   const count = sheetProducts.filter(p => {
     const nom = (p.nom_article || p.nom || '').toLowerCase().trim();
-    return nom && !tracked.has(nom);
+    return nom && !tracked.has(nom) && !exclusions.has(nom);
   }).length;
   const btn = document.getElementById('nodlc-btn');
   if (btn) btn.textContent = count > 0 ? `⚠ Sans DLC (${count})` : '⚠ Sans DLC';
 }
 
-function openNoDlc() {
-  const tracked = new Set(products.map(p => p.name.toLowerCase().trim()));
+async function openNoDlc() {
+  const tracked  = new Set(products.map(p => p.name.toLowerCase().trim()));
+  const exclList = await loadExclusions();
+  const exclusions = new Set(exclList.map(e => e.toLowerCase().trim()));
   _missingProducts = sheetProducts.filter(p => {
     const nom = (p.nom_article || p.nom || '').toLowerCase().trim();
-    return nom && !tracked.has(nom);
+    return nom && !tracked.has(nom) && !exclusions.has(nom);
   });
   document.getElementById('nodlc-search').value = '';
-  renderNoDlcList();
+  switchNodlcTab('liste');
   document.getElementById('modal-nodlc').style.display = 'flex';
+}
+
+function switchNodlcTab(tab) {
+  _nodlcTab = tab;
+  document.getElementById('nodlc-view-liste').style.display      = tab === 'liste'      ? 'block' : 'none';
+  document.getElementById('nodlc-view-exclusions').style.display = tab === 'exclusions' ? 'block' : 'none';
+  document.getElementById('nodlc-tab-liste').style.borderBottomColor      = tab === 'liste'      ? 'var(--amber)' : 'transparent';
+  document.getElementById('nodlc-tab-liste').style.color                  = tab === 'liste'      ? 'var(--amber)' : 'var(--muted)';
+  document.getElementById('nodlc-tab-exclusions').style.borderBottomColor = tab === 'exclusions' ? 'var(--amber)' : 'transparent';
+  document.getElementById('nodlc-tab-exclusions').style.color             = tab === 'exclusions' ? 'var(--amber)' : 'var(--muted)';
+  if (tab === 'liste') renderNoDlcList();
+  else {
+    // Charger les exclusions depuis Sheets si pas encore en cache
+    loadExclusions().then(() => renderExclusionsList());
+  }
 }
 
 function renderNoDlcList() {
   const q    = (document.getElementById('nodlc-search').value || '').toLowerCase().trim();
   const list = document.getElementById('nodlc-list');
+  const excl = document.getElementById('nodlc-excl-count');
+  const exclusions = getExclusions();
+  if (excl) excl.textContent = exclusions.length ? `(${exclusions.length})` : '';
+
   const items = q ? _missingProducts.filter(p =>
     (p.nom_article || '').toLowerCase().includes(q) ||
     (p.patissier   || '').toLowerCase().includes(q) ||
@@ -1434,21 +1470,97 @@ function renderNoDlcList() {
     const nom     = p.nom_article || p.nom || '';
     const marque  = p.patissier   || p.marque || '';
     const barcode = p.code_barres || '';
-    const safeName   = nom.replace(/'/g, "\\'");
-    const safeMarque = marque.replace(/'/g, "\\'");
-    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;
+    const safeName   = nom.replace(/'/g, "\'");
+    const safeMarque = marque.replace(/'/g, "\'");
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;
               background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
-      <div>
-        <div style="font-size:13px;font-weight:600;color:var(--text)">${nom}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom}</div>
         <div style="font-size:11px;color:var(--muted)">${marque}${barcode ? ' · ' + barcode : ''}</div>
       </div>
-      <button onclick="addDlcFromNodlc('${safeName}','${safeMarque}','${barcode}')" aria-label="Ajouter une DLC pour ${nom}"
-        style="flex-shrink:0;padding:6px 12px;min-height:44px;background:var(--amber);border:none;border-radius:6px;
-               font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:#000;cursor:pointer;white-space:nowrap">
-        ＋ Ajouter DLC
-      </button>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button onclick="exclureArticle('${safeName}')" title="Jeter quotidiennement — ne plus afficher"
+          style="padding:6px 10px;min-height:36px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;
+                 font-family:'DM Mono',monospace;font-size:11px;color:var(--red);cursor:pointer;white-space:nowrap">
+          🚫 Exclure
+        </button>
+        <button onclick="addDlcFromNodlc('${safeName}','${safeMarque}','${barcode}')" aria-label="Ajouter une DLC pour ${nom}"
+          style="padding:6px 10px;min-height:36px;background:var(--amber);border:none;border-radius:6px;
+                 font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:#000;cursor:pointer;white-space:nowrap">
+          ＋ DLC
+        </button>
+      </div>
     </div>`;
   }).join('');
+}
+
+async function exclureArticle(nom) {
+  const nomLower = nom.toLowerCase().trim();
+  // Retirer immédiatement de la liste affichée
+  _missingProducts = _missingProducts.filter(p =>
+    (p.nom_article || p.nom || '').toLowerCase().trim() !== nomLower
+  );
+  // Invalider le cache pour forcer le rechargement
+  if (_exclusionsCache) _exclusionsCache.push(nom);
+  else _exclusionsCache = [nom];
+  renderNoDlcList();
+  updateNoDlcBadge();
+  // Sauvegarder dans Sheets en arrière-plan
+  try {
+    await api({ action: 'saveExclusion', nom });
+  } catch(e) {
+    toast('⚠ Exclusion sauvegardée localement seulement', true);
+  }
+}
+
+function renderExclusionsList() {
+  const exclusions = _exclusionsCache || [];
+  const list = document.getElementById('nodlc-excl-list');
+  const excl = document.getElementById('nodlc-excl-count');
+  if (excl) excl.textContent = exclusions.length ? `(${exclusions.length})` : '';
+
+  if (!exclusions.length) {
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">Aucun article exclu pour l'instant.</div>';
+    return;
+  }
+
+  list.innerHTML = exclusions.map((nom, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;
+      background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+      <div>
+        <div style="font-size:13px;color:var(--text)">${nom}</div>
+        <div style="font-size:10px;color:var(--muted)">Jeter quotidien — exclu de la liste Sans DLC</div>
+      </div>
+      <button onclick="reintegrerArticle(${i})" title="Réintégrer dans la liste"
+        style="padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;
+               font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer">
+        ↩ Réintégrer
+      </button>
+    </div>`).join('');
+}
+
+async function reintegrerArticle(idx) {
+  const exclusions = _exclusionsCache || [];
+  const nom = exclusions[idx];
+  if (!nom) return;
+  // Retirer du cache
+  exclusions.splice(idx, 1);
+  _exclusionsCache = exclusions;
+  // Recharger les missing products
+  const tracked   = new Set(products.map(p => p.name.toLowerCase().trim()));
+  const exclusSet = new Set(exclusions.map(e => e.toLowerCase().trim()));
+  _missingProducts = sheetProducts.filter(p => {
+    const n = (p.nom_article || p.nom || '').toLowerCase().trim();
+    return n && !tracked.has(n) && !exclusSet.has(n);
+  });
+  updateNoDlcBadge();
+  renderExclusionsList();
+  // Supprimer dans Sheets en arrière-plan
+  try {
+    await api({ action: 'deleteExclusion', nom });
+  } catch(e) {
+    toast('⚠ Synchronisation échouée', true);
+  }
 }
 
 function closeNoDlc() { document.getElementById('modal-nodlc').style.display = 'none'; }
