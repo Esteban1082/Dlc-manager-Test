@@ -1427,8 +1427,8 @@ async function openNoDlc() {
     return nom && !tracked.has(nom) && !exclusions.has(nom);
   });
   document.getElementById('nodlc-search').value = '';
-  switchNodlcTab('liste');
   document.getElementById('modal-nodlc').style.display = 'flex';
+  switchNodlcTab('liste');
 }
 
 function switchNodlcTab(tab) {
