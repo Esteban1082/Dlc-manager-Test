@@ -497,7 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.12 · 31/03/2026 11:38
+  v2.13 · 05/05/2026 22:17
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -1875,6 +1875,11 @@ function renderProducts() {
   active.sort((a, b) => daysUntil(a.dlc) - daysUntil(b.dlc));
   const groups = { red:[], yellow:[], green:[], grey:[] };
   active.forEach(p => groups[statusClass(daysUntil(p.dlc))].push(p));
+  groups.red.sort((a, b) =>
+    a.brand.localeCompare(b.brand, 'fr', { sensitivity: 'base' }) ||
+    daysUntil(a.dlc) - daysUntil(b.dlc) ||
+    a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
+  );
   const labels = { red:'🔴 À retirer immédiatement', yellow:'🟡 À surveiller', green:'🟢 Sous contrôle', grey:'⚪ Longue conservation' };
 
   let html = '';

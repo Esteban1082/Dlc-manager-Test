@@ -66,12 +66,19 @@
     font-size:11px;
   }
   .user-info { color:var(--muted); margin-bottom:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sidebar-actions { display:flex; flex-direction:column; gap:8px; }
   .btn-logout {
     width:100%; padding:8px; background:transparent;
     border:1px solid var(--border); border-radius:8px;
     font-family:'DM Mono',monospace; font-size:11px;
     color:var(--muted);
   }
+  .btn-logout.btn-hub {
+    display:flex; align-items:center; justify-content:center;
+    text-decoration:none; color:var(--amber);
+    border-color:rgba(232,160,69,.35);
+  }
+  .btn-logout.btn-hub:hover { border-color:var(--amber); color:var(--amber2); }
   .btn-logout:hover { border-color:var(--red); color:var(--red); }
 
   /* ── Main ── */
@@ -328,7 +335,10 @@
     </nav>
     <div class="sidebar-footer">
       <div class="user-info" id="sidebar-email">—</div>
-      <button class="btn-logout" onclick="logout()">↩ Déconnexion</button>
+      <div class="sidebar-actions">
+        <a class="btn-logout btn-hub" href="hub.html">← Hub principal</a>
+        <button class="btn-logout" onclick="logout()">↩ Déconnexion</button>
+      </div>
     </div>
   </aside>
 
@@ -406,6 +416,9 @@
     <button class="bnav-item" id="bnav-tenants" onclick="showView('tenants',this); syncBottomNav('tenants')">
       <span class="bnav-ico">🏪</span>Clients
     </button>
+    <button class="bnav-item" onclick="window.location.href='hub.html'">
+      <span class="bnav-ico">←</span>Hub
+    </button>
     <button class="bnav-item" onclick="logout()">
       <span class="bnav-ico">↩</span>Quitter
     </button>
@@ -479,6 +492,9 @@
 </div>
 
 <div class="toast-container" id="toast-container"></div>
+<div class="version-tag" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:80;letter-spacing:1px;opacity:.4">
+  admin v1.1 · 05/05/2026 22:17
+</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
