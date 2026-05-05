@@ -222,10 +222,12 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">pertes v1.1 · 17/03/2026 16:54</div>
+<div class="version-tag">pertes v1.2 · 05/05/2026 23:15</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
 
 let sheetProducts = [];
 let pertesData = [];
@@ -233,6 +235,8 @@ let pertesFilter = 'semaine';
 let selectedPerte = null;
 let _apiCallId = 0;
 let html5Scanner = null;
+let dataSource = 'apps';
+let produitsSource = 'apps';
 
 function api(params) {
   return new Promise((resolve, reject) => {
@@ -246,6 +250,76 @@ function api(params) {
     script.src = API_URL + '?' + p.toString();
     document.head.appendChild(script);
   });
+}
+
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('sl_user') || '{}'); }
+  catch(e) { return {}; }
+}
+
+function canUseSupabase() {
+  const user = getStoredUser();
+  return !!(localStorage.getItem('sl_access_token') && user.tenant_id);
+}
+
+async function sbFetch(path, options={}) {
+  const token = localStorage.getItem('sl_access_token');
+  const r = await fetch(SUPABASE_URL + path, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(options.headers || {})
+    }
+  });
+  const text = await r.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
+  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  return data;
+}
+
+function normalizePerteRow(r) {
+  return {
+    id: r.id || null,
+    name: r.name || r.nom || '',
+    brand: r.brand || r.marque || '',
+    barcode: String(r.barcode || r.code_barres || '').trim(),
+    quantity: String(r.quantity || r.quantite || 1),
+    date: r.date || r.date_perte || ''
+  };
+}
+
+async function loadProducts() {
+  if (canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      const rows = await sbFetch(`/rest/v1/produits?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,nom,marque,code_barres,categorie&order=nom.asc`);
+      if (Array.isArray(rows) && rows.length > 0) {
+        produitsSource = 'supabase';
+        sheetProducts = rows;
+        return;
+      }
+    } catch(e) {
+      console.warn('[pertes] Produits Supabase indisponibles, fallback Apps Script:', e.message);
+    }
+  }
+  produitsSource = 'apps';
+  const d = await api({ action:'getProducts' });
+  if (d.success) sheetProducts = d.products || [];
+}
+
+async function loadPertesFromSupabase() {
+  const user = getStoredUser();
+  const rows = await sbFetch(`/rest/v1/pertes?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,nom,marque,code_barres,quantite,date_perte,created_at&order=date_perte.desc,created_at.desc`);
+  return (rows || []).map(normalizePerteRow);
+}
+
+async function loadPertesFromAppsScript() {
+  const data = await api({ action:'getPertes' });
+  return (data.success && data.pertes) ? data.pertes.map(normalizePerteRow) : [];
 }
 
 function toast(msg, isError = false) {
@@ -347,6 +421,30 @@ async function enregistrerPerte() {
   const qty = parseInt(document.getElementById('pertes-qty').value) || 1;
   const { nom, marque, barcode } = selectedPerte;
   toast(`⏳ Enregistrement de ${qty} × ${nom}…`);
+  if (dataSource === 'supabase' && canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      await sbFetch('/rest/v1/pertes', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenant_id: user.tenant_id,
+          nom,
+          marque,
+          code_barres: barcode || null,
+          quantite: qty,
+          date_perte: new Date().toISOString().slice(0, 10),
+          created_by: user.id || null
+        })
+      });
+      toast(`✓ Perte enregistrée — ${qty} × ${nom}`);
+      clearPertesSelection();
+      pertesData = [];
+      loadPertes();
+    } catch(e) {
+      toast(`⚠ ${e.message}`, true);
+    }
+    return;
+  }
   try {
     const data = await api({ action:'logPerte', name:nom, brand:marque, barcode, quantity:String(qty) });
     if (data && data.success) {
@@ -371,9 +469,22 @@ function setPertesFilter(f, btn) {
 async function loadPertes() {
   const list = document.getElementById('pertes-list');
   list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
+  if (canUseSupabase()) {
+    try {
+      const rows = await loadPertesFromSupabase();
+      if (rows.length > 0) {
+        dataSource = 'supabase';
+        pertesData = rows;
+        renderPertes();
+        return;
+      }
+    } catch(e) {
+      console.warn('[pertes] Supabase indisponible, fallback Apps Script:', e.message);
+    }
+  }
   try {
-    const data = await api({ action:'getPertes' });
-    pertesData = (data.success && data.pertes) ? data.pertes : [];
+    dataSource = 'apps';
+    pertesData = await loadPertesFromAppsScript();
     renderPertes();
   } catch(e) {
     list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur réseau</div>';
@@ -400,7 +511,7 @@ function renderPertes() {
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
       <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--text)">${noms.size}</div>
-      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Produits distincts</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Produits distincts · ${dataSource === 'supabase' ? 'Supabase' : 'Sheets'}</div>
     </div>`;
 
   const list = document.getElementById('pertes-list');
@@ -502,8 +613,7 @@ async function closeScanner() {
 async function init() {
   preloadScanner();
   try {
-    const d = await api({ action:'getProducts' });
-    if (d.success) sheetProducts = d.products;
+    await loadProducts();
   } catch(e) {}
   loadPertes();
 }

@@ -1,5 +1,5 @@
-// StoreLine Service Worker v1.0
-const CACHE_NAME = 'storeline-v1';
+// StoreLine Service Worker v1.2
+const CACHE_NAME = 'storeline-v3';
 
 // Fichiers à mettre en cache pour le mode offline
 const STATIC_ASSETS = [
@@ -9,6 +9,8 @@ const STATIC_ASSETS = [
   '/dlc.html',
   '/pertes.html',
   '/produits.html',
+  '/import-produits.html',
+  '/import-pertes.html',
   '/allergenes.html',
   '/temperatures.html',
   '/documents.html',
