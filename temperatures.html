@@ -209,10 +209,12 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">temperatures v1.2 · 17/03/2026 16:54</div>
+<div class="version-tag">temperatures v1.3 · 05/05/2026 23:35</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
 let _apiCallId = 0;
 let zones = [
   { id:'frigo1',    nom:'Frigo vitrine',    min:0,   max:4   },
@@ -221,6 +223,8 @@ let zones = [
 ];
 let histoData = [];
 let histoFilter = 'semaine';
+let dataSource = 'apps';
+let zonesSource = 'local';
 
 function api(params) {
   return new Promise((resolve, reject) => {
@@ -236,6 +240,78 @@ function api(params) {
   });
 }
 
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('sl_user') || '{}'); }
+  catch(e) { return {}; }
+}
+
+function canUseSupabase() {
+  const user = getStoredUser();
+  return !!(localStorage.getItem('sl_access_token') && user.tenant_id);
+}
+
+async function sbFetch(path, options={}) {
+  const token = localStorage.getItem('sl_access_token');
+  const r = await fetch(SUPABASE_URL + path, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(options.headers || {})
+    }
+  });
+  const text = await r.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
+  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  return data;
+}
+
+function normalizeZone(row) {
+  return {
+    id: row.id || row.nom || ('zone_' + Math.random().toString(36).slice(2)),
+    nom: row.nom || '',
+    min: Number(row.temp_min ?? row.min ?? -99),
+    max: Number(row.temp_max ?? row.max ?? 99),
+    actif: row.actif !== false
+  };
+}
+
+function normalizeTempRow(row) {
+  return {
+    id: row.zone_id || row.id || '',
+    nom: row.zone_nom || row.nom || '',
+    temp: String(row.valeur ?? row.temp ?? ''),
+    date: row.date_releve || row.date || '',
+    heure: row.heure || ''
+  };
+}
+
+async function loadZonesFromSupabase() {
+  const user = getStoredUser();
+  const rows = await sbFetch(`/rest/v1/zones?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&actif=eq.true&select=id,nom,temp_min,temp_max,ordre,actif&order=ordre.asc,nom.asc`);
+  return (rows || []).map(normalizeZone);
+}
+
+async function loadZones() {
+  if (canUseSupabase()) {
+    try {
+      const rows = await loadZonesFromSupabase();
+      if (rows.length > 0) {
+        zonesSource = 'supabase';
+        zones = rows;
+        return;
+      }
+    } catch(e) {
+      console.warn('[temperatures] Zones Supabase indisponibles, fallback local:', e.message);
+    }
+  }
+  zonesSource = 'local';
+  loadZonesLocal();
+}
+
 function toast(msg, isError=false) {
   const c = document.getElementById('toast-container');
   const t = document.createElement('div');
@@ -248,9 +324,10 @@ function toast(msg, isError=false) {
 
 const todayStr = new Date().toISOString().split('T')[0];
 
-function init() {
+async function init() {
   document.getElementById('today-label').textContent =
     new Date().toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  await loadZones();
   renderAppareils();
   loadHisto();
 }
@@ -303,6 +380,41 @@ async function saveAllTemps() {
   if (!entries.length) { toast('⚠ Entre au moins une température', true); return; }
 
   toast('⏳ Enregistrement…');
+  if (canUseSupabase()) {
+    const user = getStoredUser();
+    const rows = entries.map(e => {
+      const zone = zones.find(z => z.id === e.id || z.nom === e.nom);
+      const val = parseFloat(e.temp);
+      const horsNorme = zone && !isNaN(val) ? (val < zone.min || val > zone.max) : false;
+      const zoneId = zone && /^[0-9a-f-]{36}$/i.test(String(zone.id)) ? zone.id : null;
+      return {
+        tenant_id: user.tenant_id,
+        zone_id: zoneId,
+        zone_nom: e.nom,
+        valeur: val,
+        date_releve: e.date,
+        heure: new Date().toTimeString().slice(0, 8),
+        hors_norme: horsNorme,
+        created_by: user.id || null
+      };
+    });
+    try {
+      await sbFetch('/rest/v1/temperatures', { method:'POST', body: JSON.stringify(rows) });
+      dataSource = 'supabase';
+      toast(`✓ Relevé enregistré — ${entries.length} appareil${entries.length > 1 ? 's' : ''}`);
+      zones.forEach(a => {
+        const inp = document.getElementById('temp-' + a.id);
+        if (inp) inp.value = '';
+        document.getElementById('card-' + a.id).className = 'appliance-card';
+        document.getElementById('status-' + a.id).textContent = '';
+      });
+      loadHisto();
+      return;
+    } catch(e) {
+      toast(`⚠ ${e.message}`, true);
+      return;
+    }
+  }
   try {
     const data = await api({ action:'saveTemperatures', entries:JSON.stringify(entries) });
     if (data && data.success) {
@@ -332,9 +444,24 @@ function setHistoFilter(f, btn) {
 }
 
 async function loadHisto() {
+  if (canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      const rows = await sbFetch(`/rest/v1/temperatures?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,zone_id,zone_nom,valeur,date_releve,heure,hors_norme,created_at&order=date_releve.desc,created_at.desc`);
+      if (Array.isArray(rows) && rows.length > 0) {
+        dataSource = 'supabase';
+        histoData = rows.map(normalizeTempRow);
+        renderHisto();
+        return;
+      }
+    } catch(e) {
+      console.warn('[temperatures] Supabase indisponible, fallback Apps Script:', e.message);
+    }
+  }
   try {
+    dataSource = 'apps';
     const data = await api({ action:'getTemperatures' });
-    histoData = (data.success && data.temperatures) ? data.temperatures : [];
+    histoData = (data.success && data.temperatures) ? data.temperatures.map(normalizeTempRow) : [];
     renderHisto();
   } catch(e) {}
 }
@@ -351,7 +478,7 @@ function renderHisto() {
 
   const list = document.getElementById('histo-list');
   if (!filtered.length) {
-    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucun relevé dans cette période</div>';
+    list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">Aucun relevé dans cette période${dataSource === 'supabase' ? '<br><span style="font-size:11px">Source : Supabase</span>' : ''}</div>`;
     return;
   }
 
@@ -367,7 +494,7 @@ function renderHisto() {
       return !isNaN(v) && (v < a.min || v > a.max);
     });
     html += `<div style="font-size:11px;color:${hasWarn?'var(--red)':'var(--muted)'};letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px;display:flex;align-items:center;gap:8px">
-      ${hasWarn ? '⚠' : '✓'} ${label}
+      ${hasWarn ? '⚠' : '✓'} ${label}${dataSource === 'supabase' ? ' · Supabase' : ''}
       <span style="flex:1;height:1px;background:var(--border);display:block"></span>
     </div>`;
     html += items.map(h => {
@@ -419,9 +546,28 @@ function addZone() {
   if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
   const id = 'app_' + Date.now();
   const newZone = { id, nom, min: isNaN(min) ? -99 : min, max: isNaN(max) ? 99 : max };
+  if (canUseSupabase() && zonesSource === 'supabase') {
+    const user = getStoredUser();
+    sbFetch('/rest/v1/zones', {
+      method: 'POST',
+      body: JSON.stringify({
+        tenant_id: user.tenant_id,
+        nom,
+        temp_min: newZone.min,
+        temp_max: newZone.max,
+        ordre: zones.length,
+        actif: true
+      })
+    }).then(loadZones).then(() => {
+      renderAppareils();
+      renderZonesManage();
+      document.getElementById('new-zone-name').value = '';
+      toast(`✓ "${nom}" ajouté`);
+    }).catch(e => toast(`⚠ ${e.message}`, true));
+    return;
+  }
   zones.push(newZone);
-  saveZonesLocal();
-  saveZoneToSheets(newZone);
+  if (zonesSource !== 'supabase') saveZonesLocal();
   renderAppareils();
   renderZonesManage();
   document.getElementById('new-zone-name').value = '';
@@ -429,6 +575,16 @@ function addZone() {
 }
 
 function removeZone(id) {
+  if (canUseSupabase() && zonesSource === 'supabase' && /^[0-9a-f-]{36}$/i.test(String(id))) {
+    sbFetch(`/rest/v1/zones?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ actif:false })
+    }).then(loadZones).then(() => {
+      renderAppareils();
+      renderZonesManage();
+    }).catch(e => toast(`⚠ ${e.message}`, true));
+    return;
+  }
   zones = zones.filter(a => a.id !== id);
   saveZonesLocal();
   renderAppareils();
