@@ -188,6 +188,8 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
       <input id="add-barcode" class="form-input" type="text" placeholder="Ex : 5400141234567" style="flex:1;margin-bottom:0">
       <button onclick="openProduitScanner()" style="padding:11px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:20px;cursor:pointer;transition:all .15s" title="Scanner">📷</button>
     </div>
+    <label class="form-label">Categorie</label>
+    <input id="add-categorie" class="form-input" type="text" placeholder="Ex : Patisserie" value="Pâtisserie">
     <div id="produit-scanner-wrap" style="display:none;margin-bottom:12px;border-radius:10px;overflow:hidden;background:#000;min-height:160px"></div>
     <div style="display:flex;gap:10px;margin-top:0">
       <button onclick="closeAddModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
@@ -232,14 +234,17 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">produits v1.6 · 05/05/2026 22:31</div>
+<div class="version-tag">produits v1.7 · 05/05/2026 22:55</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
 let sheetProducts = [];
 let _apiCallId = 0;
 let filtreMarque = '';
 let triMode = 'nom';
+let dataSource = 'apps';
 
 function api(params) {
   return new Promise((resolve, reject) => {
@@ -253,6 +258,68 @@ function api(params) {
     script.src = API_URL + '?' + p.toString();
     document.head.appendChild(script);
   });
+}
+
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('sl_user') || '{}'); }
+  catch(e) { return {}; }
+}
+
+function canUseSupabase() {
+  const user = getStoredUser();
+  return !!(localStorage.getItem('sl_access_token') && user.tenant_id);
+}
+
+async function sbFetch(path, options={}) {
+  const token = localStorage.getItem('sl_access_token');
+  const r = await fetch(SUPABASE_URL + path, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(options.headers || {})
+    }
+  });
+  const text = await r.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
+  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  return data;
+}
+
+async function loadProductsFromSupabase() {
+  const user = getStoredUser();
+  if (!user.tenant_id) return [];
+  return await sbFetch(`/rest/v1/produits?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,tenant_id,nom,marque,code_barres,categorie,created_at,updated_at&order=nom.asc`);
+}
+
+async function loadProductsFromAppsScript() {
+  const d = await api({ action:'getProducts' });
+  if (!d.success) throw new Error(d.error || 'Erreur Apps Script');
+  return d.products || [];
+}
+
+async function refreshProducts() {
+  if (canUseSupabase()) {
+    try {
+      const supaProducts = await loadProductsFromSupabase();
+      if (Array.isArray(supaProducts) && supaProducts.length > 0) {
+        dataSource = 'supabase';
+        sheetProducts = supaProducts;
+        buildMarqueFilters();
+        renderList();
+        return;
+      }
+    } catch(e) {
+      console.warn('[produits] Supabase indisponible, fallback Apps Script:', e.message);
+    }
+  }
+  dataSource = 'apps';
+  sheetProducts = await loadProductsFromAppsScript();
+  buildMarqueFilters();
+  renderList();
 }
 
 function toast(msg, isError = false) {
@@ -309,7 +376,8 @@ function renderList() {
   else items.sort((a,b) => { const fa=getProduitFields(a), fb=getProduitFields(b); return fa.marque.localeCompare(fb.marque, 'fr') || fa.nom.localeCompare(fb.nom, 'fr'); });
 
   const filterInfo = filtreMarque ? ` · ${filtreMarque}` : '';
-  statsEl.textContent = `${items.length} / ${sheetProducts.length} produit${sheetProducts.length !== 1 ? 's' : ''}${filterInfo}`;
+  const sourceInfo = dataSource === 'supabase' ? ' · Supabase' : ' · Sheets';
+  statsEl.textContent = `${items.length} / ${sheetProducts.length} produit${sheetProducts.length !== 1 ? 's' : ''}${filterInfo}${sourceInfo}`;
 
   const list = document.getElementById('produits-list');
   if (!items.length) {
@@ -330,7 +398,7 @@ function renderList() {
       </div>
       <button onclick="openEditModal(${idx})"
         style="flex-shrink:0;padding:7px 10px;background:transparent;border:1px solid rgba(232,160,69,.35);border-radius:7px;font-size:14px;color:var(--amber);">✎</button>
-      <button onclick="deleteProduct('${sN}','${sM}')"
+      <button onclick="deleteProduct('${sN}','${sM}',${idx})"
         style="flex-shrink:0;padding:7px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:7px;font-size:14px;color:var(--red);">🗑</button>
     </div>`;
   }).join('');
@@ -357,6 +425,7 @@ function closeEditModal() { document.getElementById('modal-edit').style.display 
 
 async function saveProductEdit() {
   const index = parseInt(document.getElementById('edit-index').value, 10);
+  const current = sheetProducts[index];
   const nom = document.getElementById('edit-nom').value.trim();
   const marque = document.getElementById('edit-marque').value.trim();
   const barcode = document.getElementById('edit-barcode').value.trim();
@@ -368,6 +437,19 @@ async function saveProductEdit() {
   if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
   closeEditModal();
   toast(`⏳ Mise à jour de "${nom}"…`);
+  if (dataSource === 'supabase' && current && current.id) {
+    try {
+      await sbFetch(`/rest/v1/produits?id=eq.${encodeURIComponent(current.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ nom, marque, code_barres: barcode || null, categorie: categorie || null })
+      });
+      toast(`✓ "${nom}" modifié`);
+      await refreshProducts();
+    } catch(e) {
+      toast(`⚠ ${e.message}`, true);
+    }
+    return;
+  }
   try {
     const data = await api({
       action:'updateProduct',
@@ -397,6 +479,7 @@ async function saveProductEdit() {
 // ── Ajout ──
 function openAddModal() {
   ['add-nom','add-marque','add-barcode'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('add-categorie').value = 'Pâtisserie';
   document.getElementById('modal-add').style.display = 'flex';
   setTimeout(() => document.getElementById('add-nom').focus(), 100);
 }
@@ -406,11 +489,33 @@ async function addProduct() {
   const nom    = document.getElementById('add-nom').value.trim();
   const marque = document.getElementById('add-marque').value.trim();
   const barcode= document.getElementById('add-barcode').value.trim();
+  const categorie = document.getElementById('add-categorie').value.trim();
   if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
   toast('⏳ Enregistrement…');
   closeAddModal();
+  if (dataSource === 'supabase' && canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      await sbFetch('/rest/v1/produits', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenant_id: user.tenant_id,
+          nom,
+          marque,
+          code_barres: barcode || null,
+          categorie: categorie || null,
+          created_by: user.id || null
+        })
+      });
+      toast(`✓ "${nom}" ajouté à la base`);
+      await refreshProducts();
+    } catch(e) {
+      toast(`⚠ ${e.message}`, true);
+    }
+    return;
+  }
   try {
-    const data = await api({ action:'addProduct', name:nom, brand:marque, barcode });
+    const data = await api({ action:'addProduct', name:nom, brand:marque, barcode, categorie });
     if (data && data.success) {
       toast(`✓ "${nom}" ajouté à la base`);
       const d2 = await api({ action:'getProducts' });
@@ -431,9 +536,20 @@ function askConfirm(msg, cb) {
 }
 function closeConfirm() { document.getElementById('modal-confirm').style.display = 'none'; }
 
-async function deleteProduct(nom, marque) {
+async function deleteProduct(nom, marque, index) {
   askConfirm(`Supprimer "${nom}" de la base produits ?`, async () => {
     toast(`⏳ Suppression de "${nom}"…`);
+    const current = sheetProducts[index];
+    if (dataSource === 'supabase' && current && current.id) {
+      try {
+        await sbFetch(`/rest/v1/produits?id=eq.${encodeURIComponent(current.id)}`, { method:'DELETE' });
+        await refreshProducts();
+        toast(`✓ "${nom}" supprimé`);
+      } catch(e) {
+        toast(`⚠ ${e.message}`, true);
+      }
+      return;
+    }
     try {
       const data = await api({ action:'deleteProduct', name:nom, brand:marque });
       if (data && data.success) {
@@ -454,9 +570,7 @@ async function deleteProduct(nom, marque) {
 async function init() {
   document.getElementById('produits-list').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
   try {
-    const d = await api({ action:'getProducts' });
-    if (d.success) { sheetProducts = d.products; buildMarqueFilters(); renderList(); }
-    else { document.getElementById('produits-list').innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur de chargement</div>'; }
+    await refreshProducts();
   } catch(e) {
     document.getElementById('produits-list').innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Hors ligne</div>';
   }
