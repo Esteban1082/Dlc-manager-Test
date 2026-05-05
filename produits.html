@@ -197,6 +197,29 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <!-- Modal confirmation suppression -->
+<div class="modal-overlay" id="modal-edit" onclick="if(event.target.id==='modal-edit')closeEditModal()">
+  <div class="modal">
+    <div class="modal-title">Modifier le produit</div>
+    <input id="edit-index" type="hidden">
+    <input id="edit-old-nom" type="hidden">
+    <input id="edit-old-marque" type="hidden">
+    <input id="edit-old-barcode" type="hidden">
+    <label class="form-label">Nom de l'article *</label>
+    <input id="edit-nom" class="form-input" type="text" placeholder="Ex : Tarte au citron">
+    <label class="form-label">Patissier / Marque</label>
+    <input id="edit-marque" class="form-input" type="text" placeholder="Ex : Maison">
+    <label class="form-label">Code-barres</label>
+    <input id="edit-barcode" class="form-input" type="text" placeholder="Ex : 5400141234567">
+    <label class="form-label">Categorie</label>
+    <input id="edit-categorie" class="form-input" type="text" placeholder="Ex : Patisserie">
+    <div style="display:flex;gap:10px;margin-top:0">
+      <button onclick="closeEditModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
+      <button onclick="saveProductEdit()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmation suppression -->
 <div class="modal-overlay" id="modal-confirm" onclick="">
   <div class="modal">
     <div class="modal-title" style="color:var(--red)">⚠ Confirmer</div>
@@ -209,7 +232,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">produits v1.5 · 17/03/2026 16:54</div>
+<div class="version-tag">produits v1.6 · 05/05/2026 22:31</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -247,10 +270,12 @@ function getProduitFields(p) {
   const nomKey    = keys.find(k => /nom_article|^nom$|^name$|article|designation|libelle/i.test(k));
   const marqueKey = keys.find(k => /patissier|marque|brand|fournisseur|fabricant/i.test(k));
   const barcodeKey= keys.find(k => /code_barres|barcode|ean|upc|^code$/i.test(k));
+  const categorieKey = keys.find(k => /categorie|category|famille|rayon/i.test(k));
   return {
     nom:     (nomKey     ? String(p[nomKey]     || '') : '').trim(),
     marque:  (marqueKey  ? String(p[marqueKey]  || '') : '').trim(),
     barcode: (barcodeKey ? String(p[barcodeKey] || '') : '').trim(),
+    categorie: (categorieKey ? String(p[categorieKey] || '') : '').trim(),
   };
 }
 
@@ -295,17 +320,78 @@ function renderList() {
     return;
   }
   list.innerHTML = items.map(p => {
-    const { nom, marque, barcode } = getProduitFields(p);
+    const { nom, marque, barcode, categorie } = getProduitFields(p);
     const sN = nom.replace(/'/g, "\\'"), sM = marque.replace(/'/g, "\\'");
+    const idx = sheetProducts.indexOf(p);
     return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0">
         <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom || '<span style="color:var(--muted);font-style:italic">Sans nom</span>'}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${marque}${barcode ? ' · ' + barcode : ''}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${marque}${barcode ? ' · ' + barcode : ''}${categorie ? ' · ' + categorie : ''}</div>
       </div>
+      <button onclick="openEditModal(${idx})"
+        style="flex-shrink:0;padding:7px 10px;background:transparent;border:1px solid rgba(232,160,69,.35);border-radius:7px;font-size:14px;color:var(--amber);">✎</button>
       <button onclick="deleteProduct('${sN}','${sM}')"
         style="flex-shrink:0;padding:7px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:7px;font-size:14px;color:var(--red);">🗑</button>
     </div>`;
   }).join('');
+}
+
+// ── Edition ──
+function openEditModal(index) {
+  const p = sheetProducts[index];
+  if (!p) { toast('⚠ Produit introuvable', true); return; }
+  const f = getProduitFields(p);
+  document.getElementById('edit-index').value = index;
+  document.getElementById('edit-old-nom').value = f.nom;
+  document.getElementById('edit-old-marque').value = f.marque;
+  document.getElementById('edit-old-barcode').value = f.barcode;
+  document.getElementById('edit-nom').value = f.nom;
+  document.getElementById('edit-marque').value = f.marque;
+  document.getElementById('edit-barcode').value = f.barcode;
+  document.getElementById('edit-categorie').value = f.categorie;
+  document.getElementById('modal-edit').style.display = 'flex';
+  setTimeout(() => document.getElementById('edit-nom').focus(), 100);
+}
+
+function closeEditModal() { document.getElementById('modal-edit').style.display = 'none'; }
+
+async function saveProductEdit() {
+  const index = parseInt(document.getElementById('edit-index').value, 10);
+  const nom = document.getElementById('edit-nom').value.trim();
+  const marque = document.getElementById('edit-marque').value.trim();
+  const barcode = document.getElementById('edit-barcode').value.trim();
+  const categorie = document.getElementById('edit-categorie').value.trim();
+  const oldName = document.getElementById('edit-old-nom').value;
+  const oldBrand = document.getElementById('edit-old-marque').value;
+  const oldBarcode = document.getElementById('edit-old-barcode').value;
+
+  if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
+  closeEditModal();
+  toast(`⏳ Mise à jour de "${nom}"…`);
+  try {
+    const data = await api({
+      action:'updateProduct',
+      oldName, oldBrand, oldBarcode,
+      name:nom, brand:marque, barcode, categorie
+    });
+    if (data && data.success) {
+      toast(`✓ "${nom}" modifié`);
+      const d2 = await api({ action:'getProducts' });
+      if (d2.success) {
+        sheetProducts = d2.products;
+        buildMarqueFilters();
+        renderList();
+      } else if (sheetProducts[index]) {
+        sheetProducts[index] = { ...sheetProducts[index], nom_article:nom, patissier:marque, code_barres:barcode, categorie };
+        buildMarqueFilters();
+        renderList();
+      }
+    } else {
+      toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action updateProduct)'}`, true);
+    }
+  } catch(e) {
+    toast('⚠ Erreur réseau', true);
+  }
 }
 
 // ── Ajout ──
