@@ -234,10 +234,12 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">allergenes v2.0 · 17/03/2026 16:54</div>
+<div class="version-tag">allergenes v2.1 · 05/05/2026 23:55</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
 
 // Les 14 allergènes réglementaires EU
 const ALLERGENS = [
@@ -273,6 +275,7 @@ let editingId = null;
 let editStates = new Map();
 let filterMode = 'tous';
 let filterSelected = new Set();
+let dataSource = 'apps';
 
 function api(params) {
   return new Promise((resolve, reject) => {
@@ -286,6 +289,73 @@ function api(params) {
     script.src = API_URL + '?' + p.toString();
     document.head.appendChild(script);
   });
+}
+
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('sl_user') || '{}'); }
+  catch(e) { return {}; }
+}
+
+function canUseSupabase() {
+  const user = getStoredUser();
+  return !!(localStorage.getItem('sl_access_token') && user.tenant_id);
+}
+
+async function sbFetch(path, options={}) {
+  const token = localStorage.getItem('sl_access_token');
+  const r = await fetch(SUPABASE_URL + path, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(options.headers || {})
+    }
+  });
+  const text = await r.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
+  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  return data;
+}
+
+function normalizeState(v) {
+  const s = String(v ?? '').trim().toLowerCase();
+  if (['oui','yes','true','1','x','present','présent'].includes(s)) return 'oui';
+  if (['non','no','false','0','absent'].includes(s)) return 'non';
+  return 'inconnu';
+}
+
+function rowToFiche(f, i=0) {
+  const states = {};
+  ALLERGENS.forEach(a => {
+    if (f.states && f.states[a.id]) states[a.id] = normalizeState(f.states[a.id]);
+    else if (f[a.id] !== undefined) states[a.id] = normalizeState(f[a.id]);
+    else if (f.allergenes && String(f.allergenes).includes(a.id)) states[a.id] = 'oui';
+    else {
+      const sheetCol = ALLERGENS_SHEETS.find(s => s.id === a.id);
+      states[a.id] = sheetCol ? 'non' : 'inconnu';
+    }
+  });
+  return {
+    id: f.id || 'row_' + i,
+    nom: f.nom_gateau || f.nom || '',
+    patissier: f.patissier || '',
+    ingredients: f.ingredients || '',
+    states,
+  };
+}
+
+function ficheToSupabasePayload(nom, patissier, statesObj) {
+  const user = getStoredUser();
+  const payload = {
+    tenant_id: user.tenant_id,
+    nom_gateau: nom,
+    patissier: patissier || null,
+  };
+  ALLERGENS.forEach(a => payload[a.id] = statesObj[a.id] || 'inconnu');
+  return payload;
 }
 
 function toast(msg, isError=false) {
@@ -344,8 +414,9 @@ function renderList() {
   }
 
   const filterInfo = filterSelected.size > 0 && filterMode !== 'tous' ? ' · filtre actif' : '';
+  const sourceInfo = dataSource === 'supabase' ? ' · Supabase' : ' · Sheets';
   document.getElementById('stats').textContent =
-    `${items.length} / ${fiches.length} fiche${fiches.length !== 1 ? 's' : ''}${filterInfo}`;
+    `${items.length} / ${fiches.length} fiche${fiches.length !== 1 ? 's' : ''}${filterInfo}${sourceInfo}`;
 
   const list = document.getElementById('list');
   if (!items.length) {
@@ -449,6 +520,27 @@ async function saveAllergens() {
   editStates.forEach((v, k) => statesObj[k] = v);
   toast('⏳ Enregistrement…');
   closeEditModal();
+  if (dataSource === 'supabase' && canUseSupabase()) {
+    try {
+      const payload = ficheToSupabasePayload(nom, patissier, statesObj);
+      if (editingId && !String(editingId).startsWith('row_')) {
+        await sbFetch(`/rest/v1/allergenes?id=eq.${encodeURIComponent(editingId)}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload)
+        });
+      } else {
+        await sbFetch('/rest/v1/allergenes', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+      }
+      toast(`✓ Fiche "${nom}" enregistrée`);
+      await loadFiches();
+    } catch(e) {
+      toast(`⚠ ${e.message}`, true);
+    }
+    return;
+  }
   try {
     const data = await api({
       action: editingId ? 'updateAllergenes' : 'saveAllergenes',
@@ -458,22 +550,7 @@ async function saveAllergens() {
     });
     if (data && data.success) {
       toast(`✓ Fiche "${nom}" enregistrée`);
-      await // Attendre que le guard soit résolu ET que le DOM soit prêt
-function _runWhenReady() {
-  if (window.__guardPassed === true) {
-    loadFiches();
-  } else if (window.__guardPassed === false) {
-    // Bloqué — ne rien faire
-  } else {
-    // Guard encore en cours — réessayer
-    setTimeout(_runWhenReady, 50);
-  }
-}
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', _runWhenReady);
-} else {
-  _runWhenReady();
-}
+      await loadFiches();
     } else {
       toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action saveAllergenes)'}`, true);
     }
@@ -483,6 +560,17 @@ if (document.readyState === 'loading') {
 async function deleteFiche(id) {
   const f = fiches.find(x => x.id === id);
   if (!f || !confirm(`Supprimer la fiche "${f.nom}" ?`)) return;
+  if (dataSource === 'supabase' && !String(id).startsWith('row_')) {
+    try {
+      await sbFetch(`/rest/v1/allergenes?id=eq.${encodeURIComponent(id)}`, { method:'DELETE' });
+      fiches = fiches.filter(x => x.id !== id);
+      renderList();
+      toast('✓ Fiche supprimée');
+    } catch(e) {
+      toast(`⚠ ${e.message}`, true);
+    }
+    return;
+  }
   try {
     const data = await api({ action:'deleteAllergenes', id });
     if (data && data.success) {
@@ -499,33 +587,32 @@ async function deleteFiche(id) {
 async function loadFiches() {
   const list = document.getElementById('list');
   list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
+  if (canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      const rows = await sbFetch(`/rest/v1/allergenes?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=*&order=nom_gateau.asc`);
+      if (Array.isArray(rows) && rows.length > 0) {
+        dataSource = 'supabase';
+        fiches = rows.map(rowToFiche);
+        renderList();
+        return;
+      }
+    } catch(e) {
+      console.warn('[allergenes] Supabase indisponible, fallback Apps Script:', e.message);
+    }
+  }
   try {
+    dataSource = 'apps';
     const data = await api({ action:'getAllergenes' });
     let raw = [];
     if (data.success && data.fiches) raw = data.fiches;
+    else if (data.success && data.allergenes) raw = data.allergenes;
+    else if (data.success) {
+      const maybeArray = Object.values(data).find(Array.isArray);
+      if (maybeArray) raw = maybeArray;
+    }
 
-    fiches = raw.map((f, i) => {
-      // Construire l'objet states depuis les données Sheets ou sauvegardées
-      const states = {};
-      ALLERGENS.forEach(a => {
-        if (f.states && f.states[a.id]) {
-          states[a.id] = f.states[a.id]; // données sauvegardées avec les 3 états
-        } else if (f.allergenes && f.allergenes.includes(a.id)) {
-          states[a.id] = 'oui'; // données Sheets (présent = oui)
-        } else {
-          // Colonnes Sheets connues → non, autres → inconnu
-          const sheetCol = ALLERGENS_SHEETS.find(s => s.id === a.id);
-          states[a.id] = sheetCol ? 'non' : 'inconnu';
-        }
-      });
-      return {
-        id: f.id || 'row_' + i,
-        nom: f.nom || '',
-        patissier: f.patissier || '',
-        ingredients: f.ingredients || '',
-        states,
-      };
-    });
+    fiches = raw.map(rowToFiche);
     renderList();
   } catch(e) {
     list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Impossible de charger — vérifie Apps Script</div>';
