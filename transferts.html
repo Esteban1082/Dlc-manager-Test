@@ -410,10 +410,12 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">transferts v1.7 · 17/03/2026 16:54</div>
+<div class="version-tag">transferts v1.8 · 05/05/2026 23:08</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
 
 // ── Stockage local ──
 function lsGet(k, def) { try { const v = localStorage.getItem('pm_tr_'+k); return v ? JSON.parse(v) : def; } catch(e) { return def; } }
@@ -424,11 +426,14 @@ let sheetProducts = [];
 let panier        = [];   // [{nom, marque, barcode, qty}]
 let rayonActuel   = '';
 let rayons        = lsGet('rayons', ['Traiteur','Boulangerie','Fromagerie','Poissonnerie','Cave / Vins']);
+let rayonRows     = [];
 let histoData     = [];
 let histoFilter   = 'semaine';
 let _apiCallId    = 0;
 let html5Scanner  = null;
 let currentBon    = null; // bon en cours pour impression
+let dataSource    = 'apps';
+let rayonsSource  = 'local';
 
 // ── API ──
 function api(params) {
@@ -443,6 +448,99 @@ function api(params) {
     script.src = API_URL + '?' + p.toString();
     document.head.appendChild(script);
   });
+}
+
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('sl_user') || '{}'); }
+  catch(e) { return {}; }
+}
+
+function canUseSupabase() {
+  const user = getStoredUser();
+  return !!(localStorage.getItem('sl_access_token') && user.tenant_id);
+}
+
+async function sbFetch(path, options={}) {
+  const token = localStorage.getItem('sl_access_token');
+  const r = await fetch(SUPABASE_URL + path, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(options.headers || {})
+    }
+  });
+  const text = await r.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
+  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  return data;
+}
+
+async function loadProductsFromSupabase() {
+  const user = getStoredUser();
+  return await sbFetch(`/rest/v1/produits?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,nom,marque,code_barres,categorie&order=nom.asc`);
+}
+
+async function loadProducts() {
+  if (canUseSupabase()) {
+    try {
+      const rows = await loadProductsFromSupabase();
+      if (Array.isArray(rows) && rows.length > 0) {
+        sheetProducts = rows;
+        return;
+      }
+    } catch(e) {
+      console.warn('[transferts] Produits Supabase indisponibles, fallback Apps Script:', e.message);
+    }
+  }
+  const d = await api({ action:'getProducts' });
+  if (d.success) sheetProducts = d.products || [];
+}
+
+function normalizeRayon(row) {
+  return {
+    id: row.id || row.nom || ('rayon_' + Math.random().toString(36).slice(2)),
+    nom: row.nom || String(row || ''),
+    actif: row.actif !== false
+  };
+}
+
+async function loadRayons() {
+  if (canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      const rows = await sbFetch(`/rest/v1/rayons?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&actif=eq.true&select=id,nom,actif,ordre&order=ordre.asc,nom.asc`);
+      if (Array.isArray(rows) && rows.length > 0) {
+        rayonsSource = 'supabase';
+        rayonRows = rows.map(normalizeRayon);
+        rayons = rayonRows.map(r => r.nom);
+        return;
+      }
+    } catch(e) {
+      console.warn('[transferts] Rayons Supabase indisponibles, fallback local:', e.message);
+    }
+  }
+  rayonsSource = 'local';
+  rayonRows = rayons.map(normalizeRayon);
+}
+
+function normalizeTransfertRow(row) {
+  let articles = row.articles || [];
+  try { articles = typeof articles === 'string' ? JSON.parse(articles) : articles; } catch(e) { articles = []; }
+  const prix = row.prix_total ?? row.prix ?? row.total ?? 0;
+  return {
+    id: row.id || ('tr_' + Math.random().toString(36).slice(2)),
+    date: row.date_transfert || row.date || '',
+    heure: row.heure || '',
+    rayon: row.rayon_dest || row.rayon || '',
+    articles: Array.isArray(articles) ? articles : [],
+    prix,
+    note: row.note || '',
+    bonBarcode: row.bon_barcode || row.bonBarcode || ''
+  };
 }
 
 function toast(msg, isError=false) {
@@ -509,20 +607,54 @@ function renderRayonManage() {
     : '<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Aucun rayon configuré.</div>';
 }
 
-function addRayon() {
+async function addRayon() {
   const nom = document.getElementById('new-rayon-input').value.trim();
   if (!nom || rayons.includes(nom)) return;
+  if (canUseSupabase() && rayonsSource === 'supabase') {
+    const user = getStoredUser();
+    try {
+      const inserted = await sbFetch('/rest/v1/rayons', {
+        method:'POST',
+        body: JSON.stringify({ tenant_id:user.tenant_id, nom, actif:true, ordre:rayons.length })
+      });
+      const row = Array.isArray(inserted) ? inserted[0] : null;
+      rayonRows.push(normalizeRayon(row || { nom }));
+      rayons.push(nom);
+      buildRayonSelect();
+      renderRayonManage();
+      document.getElementById('new-rayon-input').value = '';
+      toast(`✓ "${nom}" ajouté`);
+    } catch(e) {
+      toast(`⚠ ${e.message}`, true);
+    }
+    return;
+  }
   rayons.push(nom);
   lsSet('rayons', rayons);
+  rayonRows = rayons.map(normalizeRayon);
   buildRayonSelect();
   renderRayonManage();
   document.getElementById('new-rayon-input').value = '';
   toast(`✓ "${nom}" ajouté`);
 }
 
-function deleteRayon(nom) {
+async function deleteRayon(nom) {
+  const row = rayonRows.find(r => r.nom === nom);
+  if (canUseSupabase() && rayonsSource === 'supabase' && row && /^[0-9a-f-]{36}$/i.test(String(row.id))) {
+    try {
+      await sbFetch(`/rest/v1/rayons?id=eq.${encodeURIComponent(row.id)}`, {
+        method:'PATCH',
+        body: JSON.stringify({ actif:false })
+      });
+      toast(`✓ "${nom}" masqué`);
+    } catch(e) {
+      toast(`⚠ ${e.message}`, true);
+      return;
+    }
+  }
   rayons = rayons.filter(r => r !== nom);
-  lsSet('rayons', rayons);
+  rayonRows = rayonRows.filter(r => r.nom !== nom);
+  if (rayonsSource !== 'supabase') lsSet('rayons', rayons);
   if (rayonActuel === nom) { rayonActuel = ''; document.getElementById('rayon-select').value = ''; renderBadge(); }
   buildRayonSelect();
   renderRayonManage();
@@ -721,6 +853,35 @@ async function confirmerTransfert() {
   closeValiderModal();
   toast('⏳ Enregistrement…');
 
+  if (canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      await sbFetch('/rest/v1/transferts', {
+        method:'POST',
+        body: JSON.stringify({
+          tenant_id: user.tenant_id,
+          date_transfert: today,
+          heure: new Date().toTimeString().slice(0, 8),
+          rayon_dest: rayonActuel,
+          articles: panier,
+          prix_total: prix,
+          note: note || null,
+          bon_barcode: bonBarcode || null,
+          created_by: user.id || null
+        })
+      });
+      dataSource = 'supabase';
+      toast(`✓ Transfert enregistré — ${fmtEur(prix)}`);
+      currentBon = bon;
+      showBon(bon);
+      panier = [];
+      renderPanier();
+      return;
+    } catch(e) {
+      toast(`⚠ Supabase : ${e.message}`, true);
+    }
+  }
+
   try {
     const data = await api({
       action:   'saveTransfert',
@@ -818,10 +979,25 @@ function setHistoFilter(f, btn) {
 
 async function loadHistorique() {
   const list = document.getElementById('histo-list');
+  if (canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      const rows = await sbFetch(`/rest/v1/transferts?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,date_transfert,heure,rayon_dest,articles,prix_total,note,bon_barcode,created_at&order=date_transfert.desc,created_at.desc`);
+      if (Array.isArray(rows) && rows.length > 0) {
+        dataSource = 'supabase';
+        histoData = rows.map(normalizeTransfertRow);
+        renderHistorique();
+        return;
+      }
+    } catch(e) {
+      console.warn('[transferts] Supabase indisponible, fallback Apps Script:', e.message);
+    }
+  }
   list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
   try {
+    dataSource = 'apps';
     const data = await api({ action:'getTransferts' });
-    histoData = (data.success && data.transferts) ? data.transferts : [];
+    histoData = (data.success && data.transferts) ? data.transferts.map(normalizeTransfertRow) : [];
     renderHistorique();
   } catch(e) {
     list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur réseau</div>';
@@ -848,7 +1024,7 @@ function renderHistorique() {
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
       <div style="font-family:'Fraunces',serif;font-size:26px;font-weight:900;color:var(--text)">${filtered.length}</div>
-      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Transfert${filtered.length>1?'s':''}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Transfert${filtered.length>1?'s':''} Â· ${dataSource === 'supabase' ? 'Supabase' : 'Sheets'}</div>
     </div>`;
 
   const list = document.getElementById('histo-list');
@@ -992,10 +1168,10 @@ async function closeScanner() {
 // ══════════════════════════════════════
 async function init() {
   preloadScanner();
+  await loadRayons();
   buildRayonSelect();
   try {
-    const d = await api({ action:'getProducts' });
-    if (d.success) sheetProducts = d.products;
+    await loadProducts();
   } catch(e) {}
 }
 
