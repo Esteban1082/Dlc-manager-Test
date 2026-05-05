@@ -497,7 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.13 · 05/05/2026 22:17
+  v2.14 · 05/05/2026 23:08
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -690,12 +690,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
 
 const today = new Date(); today.setHours(0,0,0,0);
 let products      = [];
 let sheetProducts = [];
 let nextId        = 1;
 let currentFilter = 'all';
+let dataSource    = 'apps';
+let produitsSource = 'apps';
+let exclusionsSource = 'apps';
 
 // ── Helpers ──
 const daysUntil  = dateStr => { const d = new Date(dateStr); d.setHours(0,0,0,0); return Math.round((d - today) / 86400000); };
@@ -722,6 +727,23 @@ function startAutoSync() {
     // Ne sync pas si une opération est déjà en cours
     const dot = document.getElementById('sync-dot');
     if (dot && dot.classList.contains('loading')) return;
+    if (dataSource === 'supabase' && canUseSupabase()) {
+      try {
+        products = await loadDlcFromSupabase();
+        nextId = products.length + 1;
+        setSyncStatus('connected', `Supabase · ${products.length}`, true);
+        render();
+        updateNoDlcBadge();
+        const cr = document.getElementById('controle-rapide');
+        if (cr && cr.style.display !== 'none') {
+          updateCrStats();
+          updateCrToday();
+        }
+        return;
+      } catch(e) {
+        console.warn('[dlc] Auto-sync Supabase indisponible:', e.message);
+      }
+    }
     try {
       const calData = await api({ action: 'getEvents' });
       if (calData.success) {
@@ -795,13 +817,108 @@ function api(params) {
   });
 }
 
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('sl_user') || '{}'); }
+  catch(e) { return {}; }
+}
+
+function canUseSupabase() {
+  const user = getStoredUser();
+  return !!(localStorage.getItem('sl_access_token') && user.tenant_id);
+}
+
+async function sbFetch(path, options={}) {
+  const token = localStorage.getItem('sl_access_token');
+  const r = await fetch(SUPABASE_URL + path, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(options.headers || {})
+    }
+  });
+  const text = await r.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
+  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  return data;
+}
+
+function normalizeDlcRow(row, index) {
+  const rawId = row.id || '';
+  const isUuid = /^[0-9a-f-]{36}$/i.test(String(rawId));
+  return {
+    id: isUuid ? index + 1 : (rawId || index + 1),
+    dbId: isUuid ? rawId : '',
+    brand: row.marque || row.brand || '',
+    name: row.nom || row.name || '',
+    barcode: row.code_barres || row.barcode || '',
+    dlc: row.dlc_date || row.dlc || '',
+    eventId: row.source_event_id || row.eventId || '',
+    archived: row.actif === false || row.archived === true,
+  };
+}
+
+async function loadProductsFromSupabase() {
+  const user = getStoredUser();
+  const rows = await sbFetch(`/rest/v1/produits?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,nom,marque,code_barres,categorie&order=nom.asc`);
+  return (rows || []).map(p => ({
+    ...p,
+    nom_article: p.nom,
+    patissier: p.marque,
+    code_barres: p.code_barres || ''
+  }));
+}
+
+async function loadDlcFromSupabase() {
+  const user = getStoredUser();
+  const rows = await sbFetch(`/rest/v1/dlc?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&actif=eq.true&select=id,nom,marque,code_barres,dlc_date,actif,source_event_id&order=dlc_date.asc,marque.asc,nom.asc`);
+  return (rows || []).map(normalizeDlcRow);
+}
+
+async function loadExclusionsFromSupabase() {
+  const user = getStoredUser();
+  const rows = await sbFetch(`/rest/v1/dlc_exclusions?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&actif=eq.true&select=id,nom&order=nom.asc`);
+  return (rows || []).map(r => r.nom).filter(Boolean);
+}
+
 // ── Chargement initial ──
 let syncRetries = 0;
 async function fullSync() {
+  if (canUseSupabase()) {
+    try {
+      const [supaProducts, supaDlc] = await Promise.all([
+        loadProductsFromSupabase(),
+        loadDlcFromSupabase()
+      ]);
+      if (supaProducts.length > 0) {
+        produitsSource = 'supabase';
+        sheetProducts = supaProducts;
+      }
+      if (supaDlc.length > 0) {
+        produitsSource = 'supabase';
+        dataSource = 'supabase';
+        sheetProducts = supaProducts;
+        products = supaDlc;
+        nextId = products.length + 1;
+        syncRetries = 0;
+        setSyncStatus('connected', `Supabase · ${products.length}`, true);
+        toast(`✓ ${products.length} DLC chargée${products.length > 1 ? 's' : ''} depuis Supabase`);
+        updateNoDlcBadge();
+        startAutoSync();
+        render();
+        return;
+      }
+    } catch(e) {
+      console.warn('[dlc] Supabase indisponible, fallback Apps Script:', e.message);
+    }
+  }
   setSyncStatus('loading', 'Synchronisation…');
   try {
     const [sheetsData, calData] = await Promise.all([
-      api({ action: 'getProducts' }),
+      produitsSource === 'supabase' ? Promise.resolve({ success:true, products:sheetProducts }) : api({ action: 'getProducts' }),
       api({ action: 'getEvents' })
     ]);
 
@@ -926,6 +1043,34 @@ async function addProduct() {
   closeModal();
   toast(`⏳ Ajout de "${name}" dans Google Calendar…`);
 
+  if (canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      const inserted = await sbFetch('/rest/v1/dlc', {
+        method:'POST',
+        body: JSON.stringify({
+          tenant_id: user.tenant_id,
+          nom: name,
+          marque: brand,
+          code_barres: barcode || null,
+          dlc_date: dlc,
+          actif: true,
+          created_by: user.id || null
+        })
+      });
+      const row = Array.isArray(inserted) ? inserted[0] : null;
+      products.push(normalizeDlcRow(row || { nom:name, marque:brand, code_barres:barcode, dlc_date:dlc }, nextId++));
+      dataSource = 'supabase';
+      nextId = products.length + 1;
+      render();
+      updateNoDlcBadge();
+      openLot(brand, name);
+      return;
+    } catch(e) {
+      toast(`⚠ Supabase : ${e.message}`, true);
+    }
+  }
+
   try {
     const data = await api({ action: 'createEvent', brand, name, dlc, barcode });
     if (data.success) {
@@ -946,10 +1091,20 @@ async function verifyProduct(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
   products = products.filter(x => x.id !== id);
+  if (dataSource === 'supabase' && canUseSupabase() && p.dbId) {
+    sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, {
+      method:'PATCH',
+      body: JSON.stringify({ actif:false })
+    }).catch(e => toast(`⚠ Supabase : ${e.message}`, true));
+  }
   // v2.9 : log silencieux du retrait
   api({ action: 'logRetrait', brand: p.brand, name: p.name, dlc: p.dlc, barcode: p.barcode || '' }).catch(() => {});
   render();
   updateNoDlcBadge();
+  if (dataSource === 'supabase' && canUseSupabase() && p.dbId) {
+    toast(`✓ "${p.name}" retiré`);
+    return;
+  }
   if (p.eventId) {
     try {
       const res = await api({ action: 'deleteEvent', eventId: p.eventId });
@@ -1158,11 +1313,18 @@ function crVerify(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
   products = products.filter(x => x.id !== id);
+  if (dataSource === 'supabase' && canUseSupabase() && p.dbId) {
+    sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, {
+      method:'PATCH',
+      body: JSON.stringify({ actif:false })
+    }).catch(e => toast(`⚠ Supabase : ${e.message}`, true));
+  }
   // v2.9 : log silencieux du retrait
   api({ action: 'logRetrait', brand: p.brand, name: p.name, dlc: p.dlc, barcode: p.barcode || '' }).catch(() => {});
   render(); updateCrStats(); updateCrToday(); updateNoDlcBadge();
   document.getElementById('cr-result-inner').innerHTML =
     `<div style="text-align:center;padding:20px;color:var(--green);font-family:'Fraunces',serif;font-size:18px">✓ "${p.name}" retiré !</div>`;
+  if (dataSource === 'supabase' && canUseSupabase() && p.dbId) return;
   if (p.eventId) {
     api({ action: 'deleteEvent', eventId: p.eventId })
       .then(res => { if (!res.success) toast(`⚠ Calendar : ${res.error || 'erreur'}`, true); })
@@ -1191,6 +1353,14 @@ function toutRetirer() {
   askConfirm(`Retirer les ${urgents.length} article${urgents.length > 1 ? 's' : ''} périmés aujourd'hui ?`, async () => {
     for (const p of urgents) {
       products = products.filter(x => x.id !== p.id);
+      if (dataSource === 'supabase' && canUseSupabase() && p.dbId) {
+        try {
+          await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, {
+            method:'PATCH',
+            body: JSON.stringify({ actif:false })
+          });
+        } catch(e) {}
+      }
       if (p.eventId) { try { await api({ action: 'deleteEvent', eventId: p.eventId }); } catch(e) {} }
     }
     render(); updateCrStats(); updateCrToday();
@@ -1230,6 +1400,22 @@ async function confirmEditDate() {
 
   closeEditDate();
   toast(`⏳ Mise à jour de "${p.name}"…`);
+
+  if (dataSource === 'supabase' && canUseSupabase() && p.dbId) {
+    try {
+      await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, {
+        method:'PATCH',
+        body: JSON.stringify({ dlc_date:newDlc })
+      });
+      p.dlc = newDlc;
+      toast(`✓ Date mise à jour -> ${fmtDate(newDlc)}`);
+      render();
+      return;
+    } catch(e) {
+      toast(`⚠ Supabase : ${e.message}`, true);
+      return;
+    }
+  }
 
   try {
     const data = await api({ action: 'updateEvent', eventId: p.eventId, dlc: newDlc });
@@ -1415,6 +1601,15 @@ let _exclusionsCache = null;
 
 async function loadExclusions() {
   if (_exclusionsCache !== null) return _exclusionsCache;
+  if (canUseSupabase()) {
+    try {
+      _exclusionsCache = await loadExclusionsFromSupabase();
+      exclusionsSource = 'supabase';
+      return _exclusionsCache;
+    } catch(e) {
+      console.warn('[dlc] Exclusions Supabase indisponibles, fallback Apps Script:', e.message);
+    }
+  }
   try {
     const d = await api({ action: 'getExclusions' });
     _exclusionsCache = d.success ? d.exclusions : [];
@@ -1528,6 +1723,20 @@ async function exclureArticle(nom) {
   renderNoDlcList();
   updateNoDlcBadge();
   // Sauvegarder dans Sheets en arrière-plan
+  if (canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      await sbFetch('/rest/v1/dlc_exclusions', {
+        method:'POST',
+        body: JSON.stringify({ tenant_id:user.tenant_id, nom, actif:true, created_by:user.id || null })
+      });
+      exclusionsSource = 'supabase';
+      return;
+    } catch(e) {
+      toast(`⚠ Supabase : ${e.message}`, true);
+    }
+  }
+
   try {
     await api({ action: 'saveExclusion', nom });
   } catch(e) {
@@ -1578,6 +1787,20 @@ async function reintegrerArticle(idx) {
   updateNoDlcBadge();
   renderExclusionsList();
   // Supprimer dans Sheets en arrière-plan
+  if (canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      await sbFetch(`/rest/v1/dlc_exclusions?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&nom=eq.${encodeURIComponent(nom)}`, {
+        method:'PATCH',
+        body: JSON.stringify({ actif:false })
+      });
+      exclusionsSource = 'supabase';
+      return;
+    } catch(e) {
+      toast(`⚠ Supabase : ${e.message}`, true);
+    }
+  }
+
   try {
     await api({ action: 'deleteExclusion', nom });
   } catch(e) {
@@ -1603,6 +1826,29 @@ async function saveToSheets() {
   if (!name) { toast('⚠ Remplis au moins le nom du produit', true); return; }
 
   toast(`⏳ Enregistrement de "${name}" dans Sheets…`);
+  if (canUseSupabase()) {
+    const user = getStoredUser();
+    try {
+      await sbFetch('/rest/v1/produits', {
+        method:'POST',
+        body: JSON.stringify({
+          tenant_id:user.tenant_id,
+          nom:name,
+          marque:brand,
+          code_barres:barcode || null,
+          categorie:'Pâtisserie',
+          created_by:user.id || null
+        })
+      });
+      produitsSource = 'supabase';
+      sheetProducts = await loadProductsFromSupabase();
+      toast(`✓ "${name}" ajouté dans la base produits`);
+      return;
+    } catch(e) {
+      toast(`⚠ Supabase : ${e.message}`, true);
+    }
+  }
+
   try {
     const data = await api({ action: 'addProduct', brand, name, barcode });
     if (data.success) {
@@ -2079,6 +2325,26 @@ function addDlcFromBase(nom, marque, barcode) {
 async function deleteProductFromBase(nom, marque) {
   askConfirm(`Supprimer "${nom}" de la base produits ?`, async () => {
     toast(`⏳ Suppression de "${nom}"…`);
+    if (produitsSource === 'supabase' && canUseSupabase()) {
+      const current = sheetProducts.find(p => {
+        const f = getProduitFields(p);
+        return f.nom.toLowerCase() === nom.toLowerCase() && f.marque.toLowerCase() === marque.toLowerCase();
+      });
+      if (current && current.id) {
+        try {
+          await sbFetch(`/rest/v1/produits?id=eq.${encodeURIComponent(current.id)}`, { method:'DELETE' });
+          sheetProducts = sheetProducts.filter(p => p.id !== current.id);
+          renderProduitsBase();
+          updateNoDlcBadge();
+          toast(`✓ "${nom}" supprimé de la base`);
+          return;
+        } catch(e) {
+          toast(`⚠ Supabase : ${e.message}`, true);
+          return;
+        }
+      }
+    }
+
     try {
       const data = await api({ action: 'deleteProduct', name: nom, brand: marque });
       if (data && data.success) {
