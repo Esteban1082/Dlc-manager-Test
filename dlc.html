@@ -60,7 +60,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Suivi DLC – Pâtisserie Manager</title>
+<title>Suivi DLC – StoreLine</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
 <script>
 (function(){
@@ -479,7 +479,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <header>
   <div class="logo">
     <span class="logo-title">DLC Manager</span>
-    <span class="logo-sub">Rob The Market · Pâtisserie</span>
+    <span class="logo-sub">StoreLine</span>
   </div>
   <div class="header-right">
     <div class="sync-status" onclick="fullSync()" title="Cliquer pour synchroniser" aria-label="Synchroniser les données">
@@ -546,7 +546,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.15 · 06/05/2026 11:21
+  v2.17 · 06/05/2026 11:37
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -1885,7 +1885,7 @@ async function saveToSheets() {
           nom:name,
           marque:brand,
           code_barres:barcode || null,
-          categorie:'Pâtisserie',
+          categorie:'Rayon',
           created_by:user.id || null
         })
       });

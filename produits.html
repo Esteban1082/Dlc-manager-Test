@@ -60,7 +60,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Base produits – Pâtisserie Manager</title>
+<title>Base produits – StoreLine</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
 <script>
 (function(){
@@ -180,7 +180,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <header>
   <div>
     <div class="logo-title">📋 Base produits</div>
-    <div class="logo-sub">Pâtisserie Manager</div>
+    <div class="logo-sub">StoreLine</div>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <a class="back-btn" href="index.html">← Hub</a>
@@ -207,14 +207,14 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
       <select id="tri-select" onchange="setTri(this.value)"
         style="width:100%;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;appearance:none;cursor:pointer;transition:border-color .15s">
         <option value="nom">↑ Trier par nom</option>
-        <option value="marque">↑ Trier par patissier</option>
+        <option value="marque">↑ Trier par fournisseur</option>
       </select>
       <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none">▾</span>
     </div>
     <div style="flex:1;min-width:140px;position:relative">
       <select id="marque-select" onchange="setMarqueFilter(this.value)"
         style="width:100%;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;appearance:none;cursor:pointer;transition:border-color .15s">
-        <option value="">Tous les patissiers</option>
+        <option value="">Tous les fournisseurs</option>
       </select>
       <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none">▾</span>
     </div>
@@ -230,7 +230,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     <div class="modal-title">＋ Nouveau produit</div>
     <label class="form-label">Nom de l'article *</label>
     <input id="add-nom" class="form-input" type="text" placeholder="Ex : Tarte au citron">
-    <label class="form-label">Patissier / Marque</label>
+    <label class="form-label">Marque / fournisseur</label>
     <input id="add-marque" class="form-input" type="text" placeholder="Ex : Maison">
     <label class="form-label">Code-barres (optionnel)</label>
     <div style="display:flex;gap:8px;margin-bottom:12px">
@@ -238,7 +238,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
       <button onclick="openProduitScanner()" style="padding:11px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:20px;cursor:pointer;transition:all .15s" title="Scanner">📷</button>
     </div>
     <label class="form-label">Categorie</label>
-    <input id="add-categorie" class="form-input" type="text" placeholder="Ex : Patisserie" value="Pâtisserie">
+    <input id="add-categorie" class="form-input" type="text" placeholder="Ex : Rayon frais" value="Rayon frais">
     <div id="produit-scanner-wrap" style="display:none;margin-bottom:12px;border-radius:10px;overflow:hidden;background:#000;min-height:160px"></div>
     <div style="display:flex;gap:10px;margin-top:0">
       <button onclick="closeAddModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
@@ -257,12 +257,12 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     <input id="edit-old-barcode" type="hidden">
     <label class="form-label">Nom de l'article *</label>
     <input id="edit-nom" class="form-input" type="text" placeholder="Ex : Tarte au citron">
-    <label class="form-label">Patissier / Marque</label>
+    <label class="form-label">Marque / fournisseur</label>
     <input id="edit-marque" class="form-input" type="text" placeholder="Ex : Maison">
     <label class="form-label">Code-barres</label>
     <input id="edit-barcode" class="form-input" type="text" placeholder="Ex : 5400141234567">
     <label class="form-label">Categorie</label>
-    <input id="edit-categorie" class="form-input" type="text" placeholder="Ex : Patisserie">
+    <input id="edit-categorie" class="form-input" type="text" placeholder="Ex : Rayon frais">
     <div style="display:flex;gap:10px;margin-top:0">
       <button onclick="closeEditModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
       <button onclick="saveProductEdit()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:#000;">Enregistrer</button>
@@ -283,7 +283,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">produits v1.8 · 06/05/2026 11:21</div>
+<div class="version-tag">produits v1.10 · 06/05/2026 11:37</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -409,7 +409,7 @@ function buildMarqueFilters() {
   const marques = [...new Set(sheetProducts.map(p => getProduitFields(p).marque).filter(Boolean))].sort();
   const sel = document.getElementById('marque-select');
   if (!sel) return;
-  sel.innerHTML = '<option value="">Tous les patissiers</option>' +
+  sel.innerHTML = '<option value="">Tous les fournisseurs</option>' +
     marques.map(m => `<option value="${m.replace(/"/g,'&quot;')}" ${filtreMarque===m?'selected':''}>${m}</option>`).join('');
 }
 
@@ -528,7 +528,7 @@ async function saveProductEdit() {
 // ── Ajout ──
 function openAddModal() {
   ['add-nom','add-marque','add-barcode'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('add-categorie').value = 'Pâtisserie';
+  document.getElementById('add-categorie').value = 'Rayon frais';
   document.getElementById('modal-add').style.display = 'flex';
   setTimeout(() => document.getElementById('add-nom').focus(), 100);
 }

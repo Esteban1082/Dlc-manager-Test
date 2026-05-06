@@ -202,7 +202,7 @@ window.__guardPassed = undefined;
 <header>
   <div>
     <div class="logo-title">📋 Commandes</div>
-    <div class="logo-sub">StoreLine · Rob The Market</div>
+    <div class="logo-sub">StoreLine · Commerce</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center">
     <button onclick="openSettings()" style="padding:7px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;font-size:18px;color:var(--muted)" title="Paramètres">⚙</button>
@@ -266,12 +266,12 @@ window.__guardPassed = undefined;
   <div class="modal">
     <div class="modal-title">⚙ Paramètres</div>
     <div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px">
-      <button class="btn btn-primary" id="stab-rtm" onclick="switchSettingsTab('rtm')" style="flex:1;font-size:12px">🏪 Rob The Market</button>
+      <button class="btn btn-primary" id="stab-rtm" onclick="switchSettingsTab('rtm')" style="flex:1;font-size:12px">🏪 Commerce</button>
       <button class="btn btn-ghost" id="stab-fourn" onclick="switchSettingsTab('fourn')" style="flex:1;font-size:12px">👤 Fournisseurs</button>
     </div>
     <div id="stab-rtm-content">
       <label class="form-label">Nom du commerce</label>
-      <input id="rtm-nom" class="form-input" type="text" placeholder="Rob The Market">
+      <input id="rtm-nom" class="form-input" type="text" placeholder="Commerce">
       <label class="form-label">Adresse</label>
       <input id="rtm-adresse" class="form-input" type="text" placeholder="28, bd. De la Woluwe — 1150 Bruxelles">
       <label class="form-label">Téléphone</label>
@@ -348,7 +348,7 @@ window.__guardPassed = undefined;
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">commandes v1.2 · 06/05/2026 11:21</div>
+<div class="version-tag">commandes v1.4 · 06/05/2026 11:37</div>
 
 <script>
 const LS = 'pm_cmd_';
@@ -360,7 +360,7 @@ function lsSet(k,v){ try{localStorage.setItem(LS+k,JSON.stringify(v));}catch(e){
 // ── État ──
 let fournisseurs = lsGet('fournisseurs',[]);
 let historique   = lsGet('historique',[]);
-let rtm          = lsGet('rtm',{nom:'Rob The Market · Pâtisserie',adresse:'28, bd. De la Woluwe — 1150 Bruxelles',tel:'02/761 01 74',email:'patisserie@robthemarket.be'});
+let rtm          = lsGet('rtm',{nom:'Mon commerce',adresse:'',tel:'',email:''});
 let fournActuel  = null;
 let jourActuel   = '';
 let qtes         = {}; // {key: {jour: qty}}

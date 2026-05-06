@@ -347,7 +347,7 @@ window.__guardPassed = undefined;
           <thead>
             <tr style="position:sticky;top:0;background:var(--surface2)">
               <th style="padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Article</th>
-              <th style="padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Patissier</th>
+              <th style="padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Fournisseur</th>
               <th style="padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Code-barres</th>
               <th style="padding:10px 14px;text-align:right;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Qté totale</th>
               <th style="padding:10px 14px;text-align:right;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Occurrences</th>
@@ -375,7 +375,7 @@ window.__guardPassed = undefined;
   </div>
 </div>
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">données v1.4 · 06/05/2026 11:21</div>
+<div class="version-tag">données v1.6 · 06/05/2026 11:37</div>
 
 <script>
 // ══════════════════════════════════════
@@ -392,7 +392,7 @@ const TABS = {
     parseData: d => d.success && d.products ? d.products : [],
     cols: [
       { key:'nom_article',  label:'Nom',         editable:false },
-      { key:'patissier',    label:'Patissier',   editable:false },
+      { key:'patissier',    label:'Fournisseur',   editable:false },
       { key:'code_barres',  label:'Code-barres', editable:false },
       { key:'categorie',    label:'Catégorie',   editable:false },
     ],
@@ -404,7 +404,7 @@ const TABS = {
     parseData: d => d.success && d.pertes ? d.pertes : (Array.isArray(d) ? d : []),
     cols: [
       { key:'name',      label:'Article',    editable:false },
-      { key:'brand',     label:'Patissier',  editable:false },
+      { key:'brand',     label:'Fournisseur',  editable:false },
       { key:'quantity',  label:'Quantité',   editable:false },
       { key:'barcode',   label:'Code-barres',editable:false },
       { key:'date',      label:'Date',       editable:false, type:'date' },
@@ -439,7 +439,7 @@ const TABS = {
     },
     cols: [
       { key:'nom',        label:'Gâteau',    editable:false },
-      { key:'patissier',  label:'Patissier', editable:false },
+      { key:'patissier',  label:'Fournisseur', editable:false },
       { key:'gluten',     label:'Gluten',    editable:false, type:'allergen' },
       { key:'lait',       label:'Lait',      editable:false, type:'allergen' },
       { key:'oeufs',      label:'Œufs',      editable:false, type:'allergen' },
@@ -654,7 +654,7 @@ function renderCell(row, rowIdx, col) {
   if (col.type === 'price_smart') {
     // Essayer toutes les clés possibles pour le prix
     let total = parseFloat(row.total || row.prix_total || row.price || row.prix || 0);
-    // Si toujours 0 ou NaN, décoder depuis le barcode du bon (format Rob The Market)
+    // Si toujours 0 ou NaN, décoder depuis le barcode du bon (format magasin)
     if (!total && row.bonBarcode) {
       const stripped = String(row.bonBarcode).slice(0, -1).slice(-7);
       const c = parseInt(stripped, 10);
@@ -931,7 +931,7 @@ function exportRapportCSV() {
   const debut = document.getElementById('rapport-debut').value;
   const fin   = document.getElementById('rapport-fin').value;
   const lines = [
-    'Article;Patissier;Code-barres;Quantite totale;Occurrences',
+    'Article;Fournisseur;Code-barres;Quantite totale;Occurrences',
     ...rapportData.map(r => `"${r.name}";"${r.brand}";"${r.barcode || ''}";${r.qty};${r.count}`)
   ];
   const blob = new Blob(['\ufeff' + lines.join('\n')], {type:'text/csv;charset=utf-8;'});
@@ -967,7 +967,7 @@ function voirTicket(rowIdx) {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
         <div>
           <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--amber)">Bon de transfert</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:3px">Pâtisserie Rob The Market</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">StoreLine</div>
         </div>
         <div style="text-align:right;font-size:11px;color:var(--muted)">
           <div style="color:var(--text);font-weight:600">${date}</div>
@@ -1015,7 +1015,7 @@ function imprimerTicket() {
       h2 { margin-bottom:4px; }
       .sub { color:#666; font-size:9pt; margin-bottom:16px; }
     </style></head><body>
-    <h2>Bon de transfert — Pâtisserie Rob The Market</h2>
+    <h2>Bon de transfert — StoreLine</h2>
     <div class="sub">${new Date().toLocaleDateString('fr-BE', {day:'numeric',month:'long',year:'numeric'})}</div>
     ${ticketPrintHTML.replace(/style="[^"]*color:[^"]*var\([^)]+\)[^"]*"/g, '').replace(/style="[^"]*background:[^"]*var\([^)]+\)[^"]*"/g, '')}
     </body></html>`);

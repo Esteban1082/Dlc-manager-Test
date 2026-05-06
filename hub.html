@@ -4,7 +4,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src * blob: data:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; style-src * 'unsafe-inline'; connect-src *; img-src * blob: data:; worker-src * blob:; media-src * blob:;">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pâtisserie Manager – Rob The Market</title>
+<title>StoreLine – Gestion magasin</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
 <script>
 (function(){
@@ -158,8 +158,8 @@
 <div id="lock-screen" style="position:fixed;inset:0;z-index:9999;background:var(--bg);display:none;align-items:center;justify-content:center;">
   <div style="text-align:center;width:340px;padding:20px">
     <div style="font-family:'Fraunces',serif;font-size:48px;font-weight:900;color:var(--amber);margin-bottom:8px">🏪</div>
-    <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--amber);margin-bottom:6px">Pâtisserie Manager</div>
-    <div style="font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:40px">Rob The Market</div>
+    <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--amber);margin-bottom:6px">StoreLine</div>
+    <div style="font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:40px">Gestion magasin</div>
     <input id="pwd-input" type="password" placeholder="• • • •"
       autocomplete="off"
       style="width:100%;box-sizing:border-box;padding:18px 20px;background:var(--surface);border:2px solid var(--border);border-radius:14px;color:var(--text);font-family:'DM Mono',monospace;font-size:28px;text-align:center;letter-spacing:12px;outline:none;margin-bottom:8px;transition:border-color .2s"
@@ -173,8 +173,8 @@
 
 <header>
   <div>
-    <div class="logo-title">🏪 Pâtisserie Manager</div>
-    <div class="logo-sub">Rob The Market</div>
+    <div class="logo-title">🏪 StoreLine</div>
+    <div class="logo-sub">Gestion magasin</div>
   </div>
   <div style="display:flex;align-items:center;gap:12px">
     <div class="date-display">
@@ -188,7 +188,7 @@
 
 <div class="hero">
   <div class="hero-title">Outils internes</div>
-  <div class="hero-sub">Développés en interne · StoreLine · Rob The Market</div>
+  <div class="hero-sub">Espace de travail - StoreLine</div>
 </div>
 
 <div class="grid">
@@ -269,7 +269,7 @@
 
 </div>
 
-<div class="version-tag">hub v1.10 · 06/05/2026 11:21</div>
+<div class="version-tag">hub v1.12 · 06/05/2026 11:37</div>
 
 <script>
 // ── Auth : check immédiat avant le rendu ──
@@ -338,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (slUser.email) {
       const sub = document.querySelector('.hero-sub');
-      if (sub) sub.textContent = slUser.email + ' · Pâtisserie Rob The Market';
+      if (sub) sub.textContent = slUser.email + ' - StoreLine';
     }
   }
 });

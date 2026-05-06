@@ -60,7 +60,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Transferts – Pâtisserie Manager</title>
+<title>Transferts – StoreLine</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
 <script>
 (function(){
@@ -283,7 +283,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <header>
   <div>
     <div class="logo-title">🔄 Transferts</div>
-    <div class="logo-sub">Pâtisserie Manager</div>
+    <div class="logo-sub">StoreLine</div>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <a class="back-btn" href="index.html">← Hub</a>
@@ -459,7 +459,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">transferts v1.9 · 06/05/2026 11:21</div>
+<div class="version-tag">transferts v1.11 · 06/05/2026 11:37</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -975,7 +975,7 @@ function showBon(bon) {
 
   document.getElementById('bon-content').innerHTML = `
     <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:900;color:var(--amber);margin-bottom:4px">Bon de transfert</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">Rob The Market · Pâtisserie</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">StoreLine - Transfert</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;font-size:12px">
       <div><span style="color:var(--muted)">Date : </span><strong>${fmtDate(bon.date)} ${bon.heure}</strong></div>
       <div><span style="color:var(--muted)">Rayon : </span><strong style="color:var(--blue)">${bon.rayon}</strong></div>
