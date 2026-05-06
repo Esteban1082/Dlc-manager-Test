@@ -62,6 +62,14 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Documents – Pâtisserie Manager</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem('sl_theme') || localStorage.getItem('sl_admin_theme') || 'dark';
+    if (t === 'light') document.documentElement.dataset.theme = 'light';
+  } catch(e) {}
+})();
+</script>
 <style>
   *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
   :root {
@@ -69,6 +77,31 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     --text:#f0ede4; --muted:#7a7a6e; --amber:#e8a045;
     --red:#ff4040; --green:#4cdb8a; --yellow:#f5c842; --blue:#4db8ff;
   }
+  /* StoreLine theme */
+  html[data-theme="light"] {
+    --bg:#f7f3eb; --surface:#fffdf8; --surface2:#f0e8dc;
+    --border:#e0d6c7; --border2:#c9bca9;
+    --text:#211d18; --muted:#766b5f;
+    --amber:#b96f22; --amber2:#d9913d;
+    --red:#c93636; --red-bg:rgba(201,54,54,.10);
+    --yellow:#b98916; --yellow-bg:rgba(185,137,22,.12);
+    --green:#167a4a; --green-bg:rgba(22,122,74,.10);
+    --blue:#1f75a8; --purple:#7c55c7;
+    --grey:#8d8378; --grey-bg:rgba(141,131,120,.12);
+  }
+  body { transition:background .18s ease,color .18s ease; }
+  .theme-toggle-global {
+    position:fixed; top:12px; right:12px; z-index:1200;
+    min-width:70px; height:34px; border-radius:999px; padding:0 12px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--surface); color:var(--amber);
+    border:1px solid var(--border); box-shadow:0 10px 24px rgba(0,0,0,.18);
+    font-size:11px;font-weight:700; cursor:pointer; line-height:1;
+  }
+  .theme-toggle-global:hover { border-color:var(--amber); color:var(--amber2); transform:translateY(-1px); }
+  html[data-theme="light"] .theme-toggle-global { box-shadow:0 10px 24px rgba(84,62,37,.12); }
+  @media(max-width:640px){ .theme-toggle-global { top:auto; right:12px; bottom:72px; } }
+
   body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
   button { transition:all .15s; cursor:pointer; }
   button:active { transform:scale(0.97); }
@@ -139,6 +172,22 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </style>
 </head>
 <body>
+<button class="theme-toggle-global" id="theme-toggle-global" onclick="toggleStoreLineTheme()" title="Mode clair / sombre" aria-label="Mode clair ou sombre">Clair</button>
+<script>
+(function(){
+  function applyStoreLineTheme(theme) {
+    var next = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('sl_theme', next); localStorage.setItem('sl_admin_theme', next); } catch(e) {}
+    var btn = document.getElementById('theme-toggle-global');
+    if (btn) btn.textContent = next === 'light' ? 'Sombre' : 'Clair';
+  }
+  window.toggleStoreLineTheme = function() {
+    applyStoreLineTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+  };
+  applyStoreLineTheme(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+})();
+</script>
 
 <header>
   <div>
@@ -205,7 +254,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     <textarea id="cl-tasks" style="width:100%;padding:11px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;resize:vertical;min-height:120px;margin-bottom:14px;" placeholder="Nettoyer le plan de travail&#10;Vérifier les températures&#10;Contrôler les DLC"></textarea>
     <div style="display:flex;gap:10px">
       <button onclick="closeChecklistModal()" style="flex:1;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
-      <button onclick="saveChecklist()" style="flex:1;padding:11px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Créer</button>
+      <button onclick="saveChecklist()" style="flex:1;padding:11px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:#000;">Créer</button>
     </div>
   </div>
 </div>
@@ -227,7 +276,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     </select>
     <div style="display:flex;gap:10px">
       <button onclick="closeDocModal()" style="flex:1;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
-      <button onclick="saveDoc()" style="flex:1;padding:11px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Ajouter</button>
+      <button onclick="saveDoc()" style="flex:1;padding:11px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:#000;">Ajouter</button>
     </div>
   </div>
 </div>
@@ -246,13 +295,13 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     <input id="contact-note" class="form-input" placeholder="Ex : Disponible lun-ven 9h-17h">
     <div style="display:flex;gap:10px">
       <button onclick="closeContactModal()" style="flex:1;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
-      <button onclick="saveContact()" style="flex:1;padding:11px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Ajouter</button>
+      <button onclick="saveContact()" style="flex:1;padding:11px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:#000;">Ajouter</button>
     </div>
   </div>
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">documents v2.0 · 17/03/2026 16:54</div>
+<div class="version-tag">documents v2.1 · 06/05/2026 11:21</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";

@@ -62,6 +62,14 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Suivi DLC – Pâtisserie Manager</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem('sl_theme') || localStorage.getItem('sl_admin_theme') || 'dark';
+    if (t === 'light') document.documentElement.dataset.theme = 'light';
+  } catch(e) {}
+})();
+</script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -81,6 +89,31 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     --grey-bg:   rgba(110,110,100,.10);
     --amber:     #e8a045;
   }
+  /* StoreLine theme */
+  html[data-theme="light"] {
+    --bg:#f7f3eb; --surface:#fffdf8; --surface2:#f0e8dc;
+    --border:#e0d6c7; --border2:#c9bca9;
+    --text:#211d18; --muted:#766b5f;
+    --amber:#b96f22; --amber2:#d9913d;
+    --red:#c93636; --red-bg:rgba(201,54,54,.10);
+    --yellow:#b98916; --yellow-bg:rgba(185,137,22,.12);
+    --green:#167a4a; --green-bg:rgba(22,122,74,.10);
+    --blue:#1f75a8; --purple:#7c55c7;
+    --grey:#8d8378; --grey-bg:rgba(141,131,120,.12);
+  }
+  body { transition:background .18s ease,color .18s ease; }
+  .theme-toggle-global {
+    position:fixed; top:12px; right:12px; z-index:1200;
+    min-width:70px; height:34px; border-radius:999px; padding:0 12px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--surface); color:var(--amber);
+    border:1px solid var(--border); box-shadow:0 10px 24px rgba(0,0,0,.18);
+    font-size:11px;font-weight:700; cursor:pointer; line-height:1;
+  }
+  .theme-toggle-global:hover { border-color:var(--amber); color:var(--amber2); transform:translateY(-1px); }
+  html[data-theme="light"] .theme-toggle-global { box-shadow:0 10px 24px rgba(84,62,37,.12); }
+  @media(max-width:640px){ .theme-toggle-global { top:auto; right:12px; bottom:72px; } }
+
 
   body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; overflow-x:hidden; }
 
@@ -143,7 +176,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 
   .btn-add {
     padding:10px 20px; background:var(--amber); color:#000; border:none; border-radius:8px;
-    font-family:'Fraunces',serif; font-size:15px; font-weight:600;
+    font-family:'Fraunces',serif; font-size:11px;font-weight:700; font-weight:600;
     cursor:pointer; transition:all .15s; display:flex; align-items:center; gap:8px;
   }
   .btn-add:hover { background:#f0b050; transform:translateY(-1px); }
@@ -280,7 +313,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     gap:12px; opacity:.5; transition:opacity .2s;
   }
   .archive-card:hover { opacity:.8; }
-  .archive-name { font-family:'Fraunces',serif; font-size:15px; font-weight:600; text-decoration:line-through; color:var(--muted); }
+  .archive-name { font-family:'Fraunces',serif; font-size:11px;font-weight:700; font-weight:600; text-decoration:line-through; color:var(--muted); }
   .archive-meta { font-size:11px; color:var(--grey); }
   .archive-tag  { font-size:10px; padding:3px 8px; border-radius:4px; background:var(--grey-bg); color:var(--grey); }
 
@@ -359,7 +392,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     header { padding:10px 14px; }
     .logo-title { font-size:18px; }
     .logo-sub   { display:none; }
-    #clock      { font-size:15px; }
+    #clock      { font-size:11px;font-weight:700; }
     #date-str   { display:none; }
     .sync-status { padding:4px 10px; font-size:10px; }
     #sync-time   { display:none; }
@@ -410,6 +443,22 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
+<button class="theme-toggle-global" id="theme-toggle-global" onclick="toggleStoreLineTheme()" title="Mode clair / sombre" aria-label="Mode clair ou sombre">Clair</button>
+<script>
+(function(){
+  function applyStoreLineTheme(theme) {
+    var next = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('sl_theme', next); localStorage.setItem('sl_admin_theme', next); } catch(e) {}
+    var btn = document.getElementById('theme-toggle-global');
+    if (btn) btn.textContent = next === 'light' ? 'Sombre' : 'Clair';
+  }
+  window.toggleStoreLineTheme = function() {
+    applyStoreLineTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+  };
+  applyStoreLineTheme(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+})();
+</script>
 
 <!-- Bouton retour hub -->
 <script>
@@ -497,7 +546,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.14 · 05/05/2026 23:08
+  v2.15 · 06/05/2026 11:21
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -1222,7 +1271,7 @@ function crLookup() {
         <div style="font-family:'Fraunces',serif;font-size:32px;font-weight:700;color:${colors[cls]}">${fmtDate(p.dlc)}</div>
         <div style="font-size:16px;color:${colors[cls]};margin-top:6px;margin-bottom:24px">${statusLabel(days)}</div>
         <div style="display:flex;gap:10px">
-          <button onclick="crVerify(${p.id})" aria-label="Marquer vérifié" style="flex:1;padding:14px;min-height:48px;background:var(--green);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;cursor:pointer">✓ Retiré</button>
+          <button onclick="crVerify(${p.id})" aria-label="Marquer vérifié" style="flex:1;padding:14px;min-height:48px;background:var(--green);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:#000;cursor:pointer">✓ Retiré</button>
           <button onclick="closeControleRapide();openEditDate(${p.id})" aria-label="Changer la date" style="flex:1;padding:14px;min-height:48px;background:var(--surface);border:1px solid var(--amber);border-radius:10px;font-family:'DM Mono',monospace;font-size:13px;color:var(--amber);cursor:pointer">📅 Changer date</button>
         </div>
       </div>`;
@@ -1239,7 +1288,7 @@ function crLookup() {
             return `<div style="display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:8px;padding:10px 12px;border:1px solid var(--border)">
               <span style="font-size:20px">${icons[cls]}</span>
               <div style="flex:1">
-                <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:${colors[cls]}">${fmtDate(p.dlc)}</div>
+                <div style="font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:${colors[cls]}">${fmtDate(p.dlc)}</div>
                 <div style="font-size:11px;color:${colors[cls]}">${statusLabel(days)}</div>
               </div>
               <button onclick="crVerify(${p.id})" aria-label="Retirer"
@@ -1256,7 +1305,7 @@ function crLookup() {
         <div style="font-size:40px;margin-bottom:12px">🔍</div>
         <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:8px">Aucune DLC trouvée</div>
         <div style="font-size:13px;color:var(--muted);margin-bottom:20px">Ce produit n'a pas de date enregistrée.</div>
-        <button onclick="closeControleRapide();openModal()" aria-label="Ajouter une DLC" style="padding:12px 24px;min-height:48px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;cursor:pointer">＋ Ajouter une DLC</button>
+        <button onclick="closeControleRapide();openModal()" aria-label="Ajouter une DLC" style="padding:12px 24px;min-height:48px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:#000;cursor:pointer">＋ Ajouter une DLC</button>
       </div>`;
   }
   document.getElementById('cr-search').value = '';
@@ -1514,7 +1563,7 @@ function quickLookup() {
           <div style="display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:8px;padding:10px 12px;border:1px solid var(--border)">
             <span style="font-size:18px">${icons[cls]}</span>
             <div style="flex:1;text-align:left">
-              <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:${colors[cls]}">${fmtDate(p.dlc)}</div>
+              <div style="font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:${colors[cls]}">${fmtDate(p.dlc)}</div>
               <div style="font-size:11px;color:${colors[cls]}">${statusLabel(days)}</div>
             </div>
             <button onclick="closeQuick();openEditDate(${p.id})" aria-label="Changer la date"
@@ -2304,7 +2353,7 @@ function renderProduitsBase() {
     return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
-          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom || '<span style="color:var(--muted);font-style:italic">Sans nom</span>'}</div>
+          <div style="font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom || '<span style="color:var(--muted);font-style:italic">Sans nom</span>'}</div>
           ${hasDlc ? '<span style="font-size:9px;padding:2px 7px;border-radius:4px;background:rgba(76,219,138,.15);color:var(--green);flex-shrink:0;letter-spacing:.5px">DLC ✓</span>' : ''}
         </div>
         <div style="font-size:11px;color:var(--muted)">${marque}${barcode ? ' · ' + barcode : ''}</div>
@@ -2584,7 +2633,7 @@ function renderPertes() {
       const qty = parseInt(h.quantity) || 1;
       return `<div style="background:var(--red-bg);border:1px solid rgba(255,64,64,.25);border-radius:10px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
         <div style="flex:1;min-width:0">
-          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name || ''}</div>
+          <div style="font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name || ''}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:2px">${h.brand || ''}${h.barcode ? ' · ' + h.barcode : ''}</div>
         </div>
         <div style="flex-shrink:0;text-align:center;min-width:42px">
