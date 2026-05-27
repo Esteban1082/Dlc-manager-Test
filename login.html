@@ -278,7 +278,7 @@
   <a class="forgot-link" onclick="forgotPassword()">Mot de passe oublié ?</a>
 </div>
 
-<div class="version">StoreLine v1.1 · 06/05/2026 11:21</div>
+<div class="version">StoreLine v1.2 · 19/05/2026 23:01</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -298,14 +298,60 @@ async function sbAuth(email, password) {
 }
 
 async function sbGetProfile(userId, accessToken) {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=role,tenant_id`, {
-    headers: {
-      'apikey': SUPABASE_ANON,
-      'Authorization': `Bearer ${accessToken}`,
-    },
-  });
-  const data = await r.json();
-  return Array.isArray(data) ? data[0] : null;
+  let profile = null;
+
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=role,tenant_id`, {
+      headers: {
+        'apikey': SUPABASE_ANON,
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
+    if (r.ok) {
+      const data = await r.json();
+      profile = Array.isArray(data) ? data[0] : null;
+    } else {
+      console.warn('Profile direct read blocked:', r.status);
+    }
+  } catch(e) {
+    console.warn('Profile direct read failed:', e);
+  }
+
+  if (!profile?.role || !profile?.tenant_id) {
+    const [role, tenantId] = await Promise.all([
+      sbRpcScalar('my_role', accessToken),
+      sbRpcScalar('my_tenant_id', accessToken),
+    ]);
+    profile = {
+      role: profile?.role || role || 'employe',
+      tenant_id: profile?.tenant_id || tenantId || null,
+    };
+  }
+
+  return profile;
+}
+
+async function sbRpcScalar(functionName, accessToken) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON,
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: '{}',
+    });
+    if (!r.ok) {
+      console.warn(`RPC ${functionName} blocked:`, r.status);
+      return null;
+    }
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
+  } catch(e) {
+    console.warn(`RPC ${functionName} failed:`, e);
+    return null;
+  }
 }
 
 // ── UI ──

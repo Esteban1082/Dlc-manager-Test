@@ -269,10 +269,12 @@
 
 </div>
 
-<div class="version-tag">hub v1.12 · 06/05/2026 11:37</div>
+<div class="version-tag">hub v1.13 · 19/05/2026 23:01</div>
 
 <script>
 // ── Auth : check immédiat avant le rendu ──
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
 const PWD_HASH = "15197cf7214b58e67cae565e573ffd9aa44bcb81f8ee5d7185dfe8da0a16ef43";
 
 function isAuth() { return localStorage.getItem('sl_auth') === '1' || localStorage.getItem('pm_auth') === '1'; }
@@ -323,12 +325,79 @@ function logout() {
   window.location.replace('index.html');
 }
 
+async function sbRpcScalar(functionName, accessToken) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON,
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: '{}',
+    });
+    if (!r.ok) return null;
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
+  } catch(e) {
+    console.warn(`RPC ${functionName} failed:`, e);
+    return null;
+  }
+}
+
+async function repairSupabaseSessionIfNeeded() {
+  const token = localStorage.getItem('sl_access_token');
+  const storedUser = JSON.parse(localStorage.getItem('sl_user') || '{}');
+  if (!token || storedUser.tenant_id) return storedUser;
+
+  try {
+    const userResp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` },
+    });
+    if (!userResp.ok) return storedUser;
+    const authUser = await userResp.json();
+
+    let profile = null;
+    const profileResp = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${authUser.id}&select=role,tenant_id`, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` },
+    });
+    if (profileResp.ok) {
+      const data = await profileResp.json();
+      profile = Array.isArray(data) ? data[0] : null;
+    }
+
+    if (!profile?.role || !profile?.tenant_id) {
+      const [role, tenantId] = await Promise.all([
+        sbRpcScalar('my_role', token),
+        sbRpcScalar('my_tenant_id', token),
+      ]);
+      profile = {
+        role: profile?.role || role || storedUser.role || 'employe',
+        tenant_id: profile?.tenant_id || tenantId || null,
+      };
+    }
+
+    const repairedUser = {
+      id: authUser.id || storedUser.id,
+      email: authUser.email || storedUser.email,
+      role: profile?.role || storedUser.role || 'employe',
+      tenant_id: profile?.tenant_id || storedUser.tenant_id || null,
+    };
+    localStorage.setItem('sl_user', JSON.stringify(repairedUser));
+    return repairedUser;
+  } catch(e) {
+    console.warn('Session repair failed:', e);
+    return storedUser;
+  }
+}
+
 // Afficher le bouton déco seulement si connecté via Supabase
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   // Connexion Supabase (StoreLine)
   const slToken = localStorage.getItem('sl_access_token');
-  const slUser  = JSON.parse(localStorage.getItem('sl_user') || '{}');
+  let slUser  = JSON.parse(localStorage.getItem('sl_user') || '{}');
   if (slToken) {
+    slUser = await repairSupabaseSessionIfNeeded();
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) logoutBtn.style.display = 'block';
     // Bouton Admin visible pour superadmin et admin
