@@ -283,7 +283,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">produits v1.12 · 27/05/2026 23:18</div>
+<div class="version-tag">produits v1.13 · 27/05/2026 23:32</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -318,6 +318,73 @@ function canUseSupabase() {
   return !!localStorage.getItem('sl_access_token');
 }
 
+async function sbRpcScalar(functionName, accessToken) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON,
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: '{}',
+    });
+    if (!r.ok) return null;
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
+  } catch(e) {
+    return null;
+  }
+}
+
+async function ensureSupabaseUserReady() {
+  const token = localStorage.getItem('sl_access_token');
+  let stored = getStoredUser();
+  if (!token || stored.tenant_id) return stored;
+
+  try {
+    const authResp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` },
+    });
+    const authUser = authResp.ok ? await authResp.json() : {};
+    let profile = null;
+    const userId = authUser.id || stored.id;
+
+    if (userId) {
+      const profileResp = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=role,tenant_id`, {
+        headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` },
+      });
+      if (profileResp.ok) {
+        const data = await profileResp.json();
+        profile = Array.isArray(data) ? data[0] : null;
+      }
+    }
+
+    if (!profile?.role || !profile?.tenant_id) {
+      const [role, tenantId] = await Promise.all([
+        sbRpcScalar('my_role', token),
+        sbRpcScalar('my_tenant_id', token),
+      ]);
+      profile = {
+        role: profile?.role || role || stored.role || 'employe',
+        tenant_id: profile?.tenant_id || tenantId || null,
+      };
+    }
+
+    stored = {
+      id: userId || stored.id,
+      email: authUser.email || stored.email,
+      role: profile?.role || stored.role || 'employe',
+      tenant_id: profile?.tenant_id || stored.tenant_id || null,
+    };
+    localStorage.setItem('sl_user', JSON.stringify(stored));
+  } catch(e) {
+    console.warn('[supabase] Session repair failed:', e.message);
+  }
+
+  return stored;
+}
+
 async function sbFetch(path, options={}) {
   const token = localStorage.getItem('sl_access_token');
   const r = await fetch(SUPABASE_URL + path, {
@@ -338,7 +405,7 @@ async function sbFetch(path, options={}) {
 }
 
 async function loadProductsFromSupabase() {
-  const user = getStoredUser();
+  const user = await ensureSupabaseUserReady();
   if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
   return await sbFetch(`/rest/v1/produits?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,tenant_id,nom,marque,code_barres,categorie,created_at,updated_at&order=nom.asc`);
 }

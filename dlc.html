@@ -546,7 +546,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.19 · 27/05/2026 23:18
+  v2.20 · 27/05/2026 23:32
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -875,6 +875,73 @@ function canUseSupabase() {
   return !!localStorage.getItem('sl_access_token');
 }
 
+async function sbRpcScalar(functionName, accessToken) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON,
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: '{}',
+    });
+    if (!r.ok) return null;
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
+  } catch(e) {
+    return null;
+  }
+}
+
+async function ensureSupabaseUserReady() {
+  const token = localStorage.getItem('sl_access_token');
+  let stored = getStoredUser();
+  if (!token || stored.tenant_id) return stored;
+
+  try {
+    const authResp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` },
+    });
+    const authUser = authResp.ok ? await authResp.json() : {};
+    let profile = null;
+    const userId = authUser.id || stored.id;
+
+    if (userId) {
+      const profileResp = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=role,tenant_id`, {
+        headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` },
+      });
+      if (profileResp.ok) {
+        const data = await profileResp.json();
+        profile = Array.isArray(data) ? data[0] : null;
+      }
+    }
+
+    if (!profile?.role || !profile?.tenant_id) {
+      const [role, tenantId] = await Promise.all([
+        sbRpcScalar('my_role', token),
+        sbRpcScalar('my_tenant_id', token),
+      ]);
+      profile = {
+        role: profile?.role || role || stored.role || 'employe',
+        tenant_id: profile?.tenant_id || tenantId || null,
+      };
+    }
+
+    stored = {
+      id: userId || stored.id,
+      email: authUser.email || stored.email,
+      role: profile?.role || stored.role || 'employe',
+      tenant_id: profile?.tenant_id || stored.tenant_id || null,
+    };
+    localStorage.setItem('sl_user', JSON.stringify(stored));
+  } catch(e) {
+    console.warn('[supabase] Session repair failed:', e.message);
+  }
+
+  return stored;
+}
+
 async function sbFetch(path, options={}) {
   const token = localStorage.getItem('sl_access_token');
   const r = await fetch(SUPABASE_URL + path, {
@@ -910,7 +977,7 @@ function normalizeDlcRow(row, index) {
 }
 
 async function loadProductsFromSupabase() {
-  const user = getStoredUser();
+  const user = await ensureSupabaseUserReady();
   if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
   const rows = await sbFetch(`/rest/v1/produits?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,nom,marque,code_barres,categorie&order=nom.asc`);
   return (rows || []).map(p => ({
@@ -922,14 +989,14 @@ async function loadProductsFromSupabase() {
 }
 
 async function loadDlcFromSupabase() {
-  const user = getStoredUser();
+  const user = await ensureSupabaseUserReady();
   if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
   const rows = await sbFetch(`/rest/v1/dlc?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&actif=eq.true&select=id,nom,marque,code_barres,dlc_date,actif,source_event_id&order=dlc_date.asc,marque.asc,nom.asc`);
   return (rows || []).map(normalizeDlcRow);
 }
 
 async function loadExclusionsFromSupabase() {
-  const user = getStoredUser();
+  const user = await ensureSupabaseUserReady();
   if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
   const rows = await sbFetch(`/rest/v1/dlc_exclusions?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&actif=eq.true&select=id,nom&order=nom.asc`);
   return (rows || []).map(r => r.nom).filter(Boolean);
