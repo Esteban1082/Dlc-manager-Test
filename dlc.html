@@ -546,7 +546,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.18 · 27/05/2026 23:01
+  v2.19 · 27/05/2026 23:18
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -872,8 +872,7 @@ function getStoredUser() {
 }
 
 function canUseSupabase() {
-  const user = getStoredUser();
-  return !!(localStorage.getItem('sl_access_token') && user.tenant_id);
+  return !!localStorage.getItem('sl_access_token');
 }
 
 async function sbFetch(path, options={}) {
@@ -912,6 +911,7 @@ function normalizeDlcRow(row, index) {
 
 async function loadProductsFromSupabase() {
   const user = getStoredUser();
+  if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
   const rows = await sbFetch(`/rest/v1/produits?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,nom,marque,code_barres,categorie&order=nom.asc`);
   return (rows || []).map(p => ({
     ...p,
@@ -923,12 +923,14 @@ async function loadProductsFromSupabase() {
 
 async function loadDlcFromSupabase() {
   const user = getStoredUser();
+  if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
   const rows = await sbFetch(`/rest/v1/dlc?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&actif=eq.true&select=id,nom,marque,code_barres,dlc_date,actif,source_event_id&order=dlc_date.asc,marque.asc,nom.asc`);
   return (rows || []).map(normalizeDlcRow);
 }
 
 async function loadExclusionsFromSupabase() {
   const user = getStoredUser();
+  if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
   const rows = await sbFetch(`/rest/v1/dlc_exclusions?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&actif=eq.true&select=id,nom&order=nom.asc`);
   return (rows || []).map(r => r.nom).filter(Boolean);
 }

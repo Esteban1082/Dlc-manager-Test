@@ -271,7 +271,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">pertes v1.6 · 27/05/2026 23:01</div>
+<div class="version-tag">pertes v1.7 · 27/05/2026 23:18</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -307,8 +307,7 @@ function getStoredUser() {
 }
 
 function canUseSupabase() {
-  const user = getStoredUser();
-  return !!(localStorage.getItem('sl_access_token') && user.tenant_id);
+  return !!localStorage.getItem('sl_access_token');
 }
 
 async function sbFetch(path, options={}) {
@@ -345,6 +344,7 @@ async function loadProducts() {
   if (canUseSupabase()) {
     const user = getStoredUser();
     try {
+      if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
       const rows = await sbFetch(`/rest/v1/produits?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,nom,marque,code_barres,categorie&order=nom.asc`);
       produitsSource = 'supabase';
       sheetProducts = Array.isArray(rows) ? rows : [];
@@ -363,6 +363,7 @@ async function loadProducts() {
 
 async function loadPertesFromSupabase() {
   const user = getStoredUser();
+  if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
   const rows = await sbFetch(`/rest/v1/pertes?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,nom,marque,code_barres,quantite,date_perte,created_at&order=date_perte.desc,created_at.desc`);
   return (rows || []).map(normalizePerteRow);
 }

@@ -283,7 +283,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">produits v1.11 · 27/05/2026 23:01</div>
+<div class="version-tag">produits v1.12 · 27/05/2026 23:18</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -315,8 +315,7 @@ function getStoredUser() {
 }
 
 function canUseSupabase() {
-  const user = getStoredUser();
-  return !!(localStorage.getItem('sl_access_token') && user.tenant_id);
+  return !!localStorage.getItem('sl_access_token');
 }
 
 async function sbFetch(path, options={}) {
@@ -340,7 +339,7 @@ async function sbFetch(path, options={}) {
 
 async function loadProductsFromSupabase() {
   const user = getStoredUser();
-  if (!user.tenant_id) return [];
+  if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
   return await sbFetch(`/rest/v1/produits?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,tenant_id,nom,marque,code_barres,categorie,created_at,updated_at&order=nom.asc`);
 }
 
