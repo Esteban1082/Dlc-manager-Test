@@ -258,7 +258,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">temperatures v1.6 · 06/05/2026 11:37</div>
+<div class="version-tag">temperatures v1.7 · 27/05/2026 23:01</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -348,13 +348,14 @@ async function loadZones() {
   if (canUseSupabase()) {
     try {
       const rows = await loadZonesFromSupabase();
-      if (rows.length > 0) {
-        zonesSource = 'supabase';
-        zones = rows;
-        return;
-      }
+      zonesSource = 'supabase';
+      zones = rows;
+      return;
     } catch(e) {
-      console.warn('[temperatures] Zones Supabase indisponibles, fallback local:', e.message);
+      console.warn('[temperatures] Zones Supabase indisponibles:', e.message);
+      zonesSource = 'supabase';
+      zones = [];
+      return;
     }
   }
   zonesSource = 'local';
@@ -497,14 +498,17 @@ async function loadHisto() {
     const user = getStoredUser();
     try {
       const rows = await sbFetch(`/rest/v1/temperatures?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,zone_id,zone_nom,valeur,date_releve,heure,hors_norme,created_at&order=date_releve.desc,created_at.desc`);
-      if (Array.isArray(rows) && rows.length > 0) {
-        dataSource = 'supabase';
-        histoData = rows.map(normalizeTempRow);
-        renderHisto();
-        return;
-      }
+      dataSource = 'supabase';
+      histoData = (Array.isArray(rows) ? rows : []).map(normalizeTempRow);
+      renderHisto();
+      return;
     } catch(e) {
-      console.warn('[temperatures] Supabase indisponible, fallback Apps Script:', e.message);
+      console.warn('[temperatures] Supabase indisponible:', e.message);
+      dataSource = 'supabase';
+      histoData = [];
+      renderHisto();
+      toast('Impossible de charger les temperatures Supabase', true);
+      return;
     }
   }
   try {

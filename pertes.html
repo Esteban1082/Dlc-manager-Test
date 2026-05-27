@@ -271,7 +271,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">pertes v1.5 · 06/05/2026 11:37</div>
+<div class="version-tag">pertes v1.6 · 27/05/2026 23:01</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -346,13 +346,14 @@ async function loadProducts() {
     const user = getStoredUser();
     try {
       const rows = await sbFetch(`/rest/v1/produits?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,nom,marque,code_barres,categorie&order=nom.asc`);
-      if (Array.isArray(rows) && rows.length > 0) {
-        produitsSource = 'supabase';
-        sheetProducts = rows;
-        return;
-      }
+      produitsSource = 'supabase';
+      sheetProducts = Array.isArray(rows) ? rows : [];
+      return;
     } catch(e) {
-      console.warn('[pertes] Produits Supabase indisponibles, fallback Apps Script:', e.message);
+      console.warn('[pertes] Produits Supabase indisponibles:', e.message);
+      produitsSource = 'supabase';
+      sheetProducts = [];
+      return;
     }
   }
   produitsSource = 'apps';
@@ -521,14 +522,17 @@ async function loadPertes() {
   if (canUseSupabase()) {
     try {
       const rows = await loadPertesFromSupabase();
-      if (rows.length > 0) {
-        dataSource = 'supabase';
-        pertesData = rows;
-        renderPertes();
-        return;
-      }
+      dataSource = 'supabase';
+      pertesData = rows;
+      renderPertes();
+      return;
     } catch(e) {
-      console.warn('[pertes] Supabase indisponible, fallback Apps Script:', e.message);
+      console.warn('[pertes] Supabase indisponible:', e.message);
+      dataSource = 'supabase';
+      pertesData = [];
+      renderPertes();
+      toast('Impossible de charger les pertes Supabase', true);
+      return;
     }
   }
   try {

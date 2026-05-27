@@ -459,7 +459,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">transferts v1.11 · 06/05/2026 11:37</div>
+<div class="version-tag">transferts v1.12 · 27/05/2026 23:01</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -537,12 +537,12 @@ async function loadProducts() {
   if (canUseSupabase()) {
     try {
       const rows = await loadProductsFromSupabase();
-      if (Array.isArray(rows) && rows.length > 0) {
-        sheetProducts = rows;
-        return;
-      }
+      sheetProducts = Array.isArray(rows) ? rows : [];
+      return;
     } catch(e) {
-      console.warn('[transferts] Produits Supabase indisponibles, fallback Apps Script:', e.message);
+      console.warn('[transferts] Produits Supabase indisponibles:', e.message);
+      sheetProducts = [];
+      return;
     }
   }
   const d = await api({ action:'getProducts' });
@@ -562,14 +562,16 @@ async function loadRayons() {
     const user = getStoredUser();
     try {
       const rows = await sbFetch(`/rest/v1/rayons?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&actif=eq.true&select=id,nom,actif,ordre&order=ordre.asc,nom.asc`);
-      if (Array.isArray(rows) && rows.length > 0) {
-        rayonsSource = 'supabase';
-        rayonRows = rows.map(normalizeRayon);
-        rayons = rayonRows.map(r => r.nom);
-        return;
-      }
+      rayonsSource = 'supabase';
+      rayonRows = (Array.isArray(rows) ? rows : []).map(normalizeRayon);
+      rayons = rayonRows.map(r => r.nom);
+      return;
     } catch(e) {
-      console.warn('[transferts] Rayons Supabase indisponibles, fallback local:', e.message);
+      console.warn('[transferts] Rayons Supabase indisponibles:', e.message);
+      rayonsSource = 'supabase';
+      rayonRows = [];
+      rayons = [];
+      return;
     }
   }
   rayonsSource = 'local';
@@ -1032,14 +1034,17 @@ async function loadHistorique() {
     const user = getStoredUser();
     try {
       const rows = await sbFetch(`/rest/v1/transferts?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,date_transfert,heure,rayon_dest,articles,prix_total,note,bon_barcode,created_at&order=date_transfert.desc,created_at.desc`);
-      if (Array.isArray(rows) && rows.length > 0) {
-        dataSource = 'supabase';
-        histoData = rows.map(normalizeTransfertRow);
-        renderHistorique();
-        return;
-      }
+      dataSource = 'supabase';
+      histoData = (Array.isArray(rows) ? rows : []).map(normalizeTransfertRow);
+      renderHistorique();
+      return;
     } catch(e) {
-      console.warn('[transferts] Supabase indisponible, fallback Apps Script:', e.message);
+      console.warn('[transferts] Supabase indisponible:', e.message);
+      dataSource = 'supabase';
+      histoData = [];
+      renderHistorique();
+      toast('Impossible de charger les transferts Supabase', true);
+      return;
     }
   }
   list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';

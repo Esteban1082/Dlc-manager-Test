@@ -546,7 +546,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.17 · 06/05/2026 11:37
+  v2.18 · 27/05/2026 23:01
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -942,26 +942,29 @@ async function fullSync() {
         loadProductsFromSupabase(),
         loadDlcFromSupabase()
       ]);
-      if (supaProducts.length > 0) {
-        produitsSource = 'supabase';
-        sheetProducts = supaProducts;
-      }
-      if (supaDlc.length > 0) {
-        produitsSource = 'supabase';
-        dataSource = 'supabase';
-        sheetProducts = supaProducts;
-        products = supaDlc;
-        nextId = products.length + 1;
-        syncRetries = 0;
+      produitsSource = 'supabase';
+      dataSource = 'supabase';
+      sheetProducts = Array.isArray(supaProducts) ? supaProducts : [];
+      products = Array.isArray(supaDlc) ? supaDlc : [];
+      nextId = products.length + 1;
+      syncRetries = 0;
         setSyncStatus('connected', `Supabase · ${products.length}`, true);
         toast(`✓ ${products.length} DLC chargée${products.length > 1 ? 's' : ''} depuis Supabase`);
         updateNoDlcBadge();
         startAutoSync();
         render();
         return;
-      }
     } catch(e) {
-      console.warn('[dlc] Supabase indisponible, fallback Apps Script:', e.message);
+      console.warn('[dlc] Supabase indisponible:', e.message);
+      produitsSource = 'supabase';
+      dataSource = 'supabase';
+      sheetProducts = [];
+      products = [];
+      syncRetries = 0;
+      setSyncStatus('error', 'Erreur Supabase', true);
+      toast('Impossible de charger les DLC Supabase', true);
+      render();
+      return;
     }
   }
   setSyncStatus('loading', 'Synchronisation…');
@@ -1656,7 +1659,10 @@ async function loadExclusions() {
       exclusionsSource = 'supabase';
       return _exclusionsCache;
     } catch(e) {
-      console.warn('[dlc] Exclusions Supabase indisponibles, fallback Apps Script:', e.message);
+      console.warn('[dlc] Exclusions Supabase indisponibles:', e.message);
+      _exclusionsCache = [];
+      exclusionsSource = 'supabase';
+      return _exclusionsCache;
     }
   }
   try {

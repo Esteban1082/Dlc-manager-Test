@@ -283,7 +283,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">allergenes v2.4 · 06/05/2026 11:37</div>
+<div class="version-tag">allergenes v2.5 · 27/05/2026 23:01</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -640,14 +640,17 @@ async function loadFiches() {
     const user = getStoredUser();
     try {
       const rows = await sbFetch(`/rest/v1/allergenes?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=*&order=nom_gateau.asc`);
-      if (Array.isArray(rows) && rows.length > 0) {
-        dataSource = 'supabase';
-        fiches = rows.map(rowToFiche);
-        renderList();
-        return;
-      }
+      dataSource = 'supabase';
+      fiches = (Array.isArray(rows) ? rows : []).map(rowToFiche);
+      renderList();
+      return;
     } catch(e) {
-      console.warn('[allergenes] Supabase indisponible, fallback Apps Script:', e.message);
+      console.warn('[allergenes] Supabase indisponible:', e.message);
+      dataSource = 'supabase';
+      fiches = [];
+      renderList();
+      toast('Impossible de charger les allergenes Supabase', true);
+      return;
     }
   }
   try {
