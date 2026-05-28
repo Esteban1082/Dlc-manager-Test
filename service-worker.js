@@ -1,5 +1,5 @@
 // StoreLine Service Worker v2.0
-const CACHE_NAME = 'storeline-v15';
+const CACHE_NAME = 'storeline-v17';
 
 // Fichiers à mettre en cache pour le mode offline
 const STATIC_ASSETS = [
@@ -30,8 +30,20 @@ const STATIC_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS.map(url => new Request(url, { cache: 'reload' })))
-        .catch(err => console.warn('Cache partiel:', err));
+      return Promise.allSettled(
+        STATIC_ASSETS.map(url =>
+          cache.add(new Request(url, { cache: 'reload' })).then(
+            () => ({ url, ok:true }),
+            err => ({ url, ok:false, err })
+          )
+        )
+      ).then(results => {
+        const failed = results
+          .map(r => r.value)
+          .filter(r => r && !r.ok)
+          .map(r => r.url);
+        if (failed.length) console.warn('Cache partiel:', failed);
+      });
     })
   );
   self.skipWaiting();

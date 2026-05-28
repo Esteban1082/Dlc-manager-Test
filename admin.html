@@ -169,6 +169,48 @@
   }
   .user-email  { font-size:13px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .user-meta   { font-size:10px; color:var(--muted); margin-top:2px; }
+  .users-toolbar {
+    display:grid; grid-template-columns:2fr repeat(3,minmax(130px,1fr));
+    gap:10px; margin-bottom:14px;
+  }
+  .users-stats {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+    gap:8px; margin-bottom:14px;
+  }
+  .mini-stat {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:10px 12px;
+  }
+  .mini-stat-val { font-family:'Fraunces',serif; font-size:20px; font-weight:900; color:var(--amber); }
+  .mini-stat-lbl { font-size:9px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-top:2px; }
+  .user-quick {
+    display:grid; grid-template-columns:minmax(120px,190px) minmax(160px,240px) auto;
+    gap:8px; align-items:center; margin-left:auto;
+  }
+  .quick-select {
+    margin:0; padding:8px 30px 8px 10px; font-size:11px; border-radius:8px;
+  }
+  .tenant-pill {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:3px 8px; border:1px solid var(--border); border-radius:999px;
+    color:var(--muted); font-size:10px; margin-top:4px;
+  }
+  .tenant-pill.missing {
+    color:var(--red); border-color:rgba(255,91,91,.35); background:rgba(255,91,91,.08);
+  }
+  .user-card.needs-tenant {
+    border-color:rgba(255,91,91,.45);
+  }
+  .user-warning {
+    margin:10px 16px 0; padding:9px 10px;
+    border:1px solid rgba(255,91,91,.35); border-radius:9px;
+    color:var(--red); background:rgba(255,91,91,.08); font-size:11px;
+  }
+  @media (max-width:760px) {
+    .users-toolbar { grid-template-columns:1fr; }
+    .user-card-header { align-items:flex-start; flex-wrap:wrap; }
+    .user-quick { grid-template-columns:1fr; width:100%; margin-left:50px; }
+  }
 
   .role-badge {
     flex-shrink:0; padding:3px 10px; border-radius:20px;
@@ -433,9 +475,32 @@
       <!-- ══ UTILISATEURS ══ -->
       <div class="view" id="view-users">
         <div class="section-header">
-          <div></div>
+          <div>
+            <div class="section-title">Comptes enregistrés</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:3px">Magasin, rôle, état et modules au même endroit.</div>
+          </div>
           <button class="btn btn-primary" onclick="openInviteModal()">＋ Inviter un utilisateur</button>
         </div>
+        <div class="users-toolbar">
+          <input id="user-search" class="form-input" placeholder="Rechercher email, nom, magasin..." oninput="renderUsers()">
+          <select id="user-role-filter" class="form-input" onchange="renderUsers()">
+            <option value="">Tous les rôles</option>
+            <option value="superadmin">Superadmin</option>
+            <option value="admin">Admin</option>
+            <option value="manager">Manager</option>
+            <option value="employe">Employé</option>
+          </select>
+          <select id="user-tenant-filter" class="form-input" onchange="renderUsers()">
+            <option value="">Tous les magasins</option>
+          </select>
+          <select id="user-status-filter" class="form-input" onchange="renderUsers()">
+            <option value="">Tous les statuts</option>
+            <option value="active">Actifs</option>
+            <option value="inactive">Inactifs</option>
+            <option value="missing-tenant">Sans magasin</option>
+          </select>
+        </div>
+        <div id="users-stats" class="users-stats"></div>
         <div id="users-list" class="loading">⏳ Chargement...</div>
       </div>
 
@@ -556,7 +621,7 @@
 
 <div class="toast-container" id="toast-container"></div>
 <div class="version-tag" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:80;letter-spacing:1px;opacity:.4">
-  admin v1.3 · 06/05/2026 11:21
+  admin v1.5 · 28/05/2026 00:14
 </div>
 
 <script>
@@ -781,42 +846,120 @@ async function loadUsers() {
 
     if (error) throw error;
     allUsers = profiles || [];
+    renderUserTenantFilter();
     renderUsers();
   } catch(e) {
     document.getElementById('users-list').innerHTML = `<div class="loading" style="color:var(--red)">⚠ ${e.message}</div>`;
   }
 }
 
+function renderUserTenantFilter() {
+  const select = document.getElementById('user-tenant-filter');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = `
+    <option value="">Tous les magasins</option>
+    <option value="__none">Sans magasin</option>
+    ${allTenants.map(t => `<option value="${t.id}">${escapeHtml(t.nom)}${t.actif?'':' (inactif)'}</option>`).join('')}
+  `;
+  select.value = [...select.options].some(o => o.value === current) ? current : '';
+}
+
+function getFilteredUsers() {
+  const q = (document.getElementById('user-search')?.value || '').trim().toLowerCase();
+  const role = document.getElementById('user-role-filter')?.value || '';
+  const tenant = document.getElementById('user-tenant-filter')?.value || '';
+  const status = document.getElementById('user-status-filter')?.value || '';
+  return allUsers.filter(u => {
+    const tenantLabel = tenantName(u.tenant_id).toLowerCase();
+    const haystack = [u.email, u.nom, u.role, tenantLabel].join(' ').toLowerCase();
+    if (q && !haystack.includes(q)) return false;
+    if (role && u.role !== role) return false;
+    if (tenant === '__none' && u.tenant_id) return false;
+    if (tenant && tenant !== '__none' && u.tenant_id !== tenant) return false;
+    if (status === 'active' && !u.actif) return false;
+    if (status === 'inactive' && u.actif) return false;
+    if (status === 'missing-tenant' && u.tenant_id) return false;
+    return true;
+  });
+}
+
+function renderUsersStats(users) {
+  const el = document.getElementById('users-stats');
+  if (!el) return;
+  const active = allUsers.filter(u => u.actif).length;
+  const missingTenant = allUsers.filter(u => !u.tenant_id && u.role !== 'superadmin').length;
+  const admins = allUsers.filter(u => ['admin','superadmin'].includes(u.role)).length;
+  el.innerHTML = `
+    <div class="mini-stat"><div class="mini-stat-val">${users.length}</div><div class="mini-stat-lbl">Affichés</div></div>
+    <div class="mini-stat"><div class="mini-stat-val">${active}</div><div class="mini-stat-lbl">Actifs</div></div>
+    <div class="mini-stat"><div class="mini-stat-val">${admins}</div><div class="mini-stat-lbl">Admins</div></div>
+    <div class="mini-stat"><div class="mini-stat-val" style="color:${missingTenant?'var(--red)':'var(--green)'}">${missingTenant}</div><div class="mini-stat-lbl">Sans magasin</div></div>
+  `;
+}
+
+function roleOptions(current) {
+  const roles = isSuperadmin() ? ['employe','manager','admin','superadmin'] : ['employe','manager','admin'];
+  return roles.map(r => `<option value="${r}" ${current===r?'selected':''}>${r}</option>`).join('');
+}
+
+function tenantOptions(current) {
+  return `
+    <option value="">Aucun magasin</option>
+    ${allTenants.map(t => `<option value="${t.id}" ${current===t.id?'selected':''}>${escapeHtml(t.nom)}${t.actif?'':' (inactif)'}</option>`).join('')}
+  `;
+}
+
 function renderUsers() {
   const el = document.getElementById('users-list');
+  const users = getFilteredUsers();
+  renderUsersStats(users);
   if (!allUsers.length) {
     el.innerHTML = '<div class="loading">Aucun utilisateur. Invitez quelqu\'un !</div>';
     return;
   }
-  el.innerHTML = allUsers.map(u => {
+  if (!users.length) {
+    el.innerHTML = '<div class="loading">Aucun compte ne correspond aux filtres.</div>';
+    return;
+  }
+  el.innerHTML = users.map(u => {
     const perms  = u.permissions || [];
     const isExp  = expandedUser === u.id;
     const modSet = new Set(perms.filter(p => p.actif).map(p => p.module));
+    const activeCount = perms.filter(p=>p.actif).length;
+    const needsTenant = !u.tenant_id && u.role !== 'superadmin';
     return `
-    <div class="user-card" id="ucard-${u.id}">
+    <div class="user-card ${needsTenant?'needs-tenant':''}" id="ucard-${u.id}">
       <div class="user-card-header" onclick="toggleUser('${u.id}')">
         <div class="user-avatar" style="color:var(--amber)">${(u.email||'?')[0].toUpperCase()}</div>
         <div style="flex:1;min-width:0">
-          <div class="user-email">${u.email}</div>
-          <div class="user-meta">${u.nom || '—'} · ${tenantName(u.tenant_id)} · ${perms.filter(p=>p.actif).length} module${perms.filter(p=>p.actif).length>1?'s':''} actif${perms.filter(p=>p.actif).length>1?'s':''}</div>
+          <div class="user-email">${escapeHtml(u.email)}</div>
+          <div class="user-meta">${escapeHtml(u.nom || '—')} · ${activeCount} module${activeCount>1?'s':''} actif${activeCount>1?'s':''}</div>
+          <div class="tenant-pill ${needsTenant?'missing':''}">${needsTenant?'⚠ ':''}${escapeHtml(tenantName(u.tenant_id))}</div>
         </div>
         <div class="status-dot ${u.actif?'active':'inactive'}"></div>
         <span class="role-badge role-${u.role}">${u.role}</span>
+        <div class="user-quick" onclick="event.stopPropagation()">
+          <select class="form-input quick-select" onchange="changeRole('${u.id}',this.value)">
+            ${roleOptions(u.role)}
+          </select>
+          ${isSuperadmin() ? `
+          <select class="form-input quick-select" onchange="changeTenant('${u.id}',this.value)">
+            ${tenantOptions(u.tenant_id)}
+          </select>` : `
+          <div style="font-size:11px;color:var(--muted)">${escapeHtml(tenantName(u.tenant_id))}</div>`}
+          <button class="btn ${u.actif?'btn-ghost':'btn-green'}" onclick="activateUser('${u.id}',${!u.actif})">${u.actif?'Désactiver':'Activer'}</button>
+        </div>
         <span style="color:var(--muted);margin-left:6px;font-size:12px">${isExp?'▲':'▼'}</span>
       </div>
+      ${needsTenant ? `<div class="user-warning">Ce compte a des permissions, mais aucun magasin. Assigne un magasin ici pour éviter l'erreur "Tenant Supabase manquant".</div>` : ''}
       ${isExp ? `
       <div class="user-detail">
         <div class="modules-title">Client / tenant</div>
         ${isSuperadmin() ? `
         <div class="tenant-tools">
           <select class="form-input" onchange="changeTenant('${u.id}',this.value)">
-            <option value="">Aucun client</option>
-            ${allTenants.map(t => `<option value="${t.id}" ${u.tenant_id===t.id?'selected':''}>${escapeHtml(t.nom)}${t.actif?'':' (inactif)'}</option>`).join('')}
+            ${tenantOptions(u.tenant_id)}
           </select>
           <button class="btn btn-ghost" onclick="showView('tenants')">Voir les clients</button>
         </div>` : `
@@ -834,7 +977,7 @@ function renderUsers() {
         </div>
         <div class="modules-title">Rôle</div>
         <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-          ${['employe','manager','admin'].map(r => `
+          ${(isSuperadmin() ? ['employe','manager','admin','superadmin'] : ['employe','manager','admin']).map(r => `
             <button class="btn ${u.role===r?'btn-primary':'btn-ghost'}" onclick="changeRole('${u.id}','${r}')">${r}</button>
           `).join('')}
         </div>
