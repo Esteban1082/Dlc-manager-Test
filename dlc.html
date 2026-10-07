@@ -439,6 +439,11 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     margin-bottom:8px; margin-top:16px; display:flex; align-items:center; gap:8px;
   }
   .histo-section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  /* ── Blocs DLC selector ── */
+  .bloc-pill { padding:6px 14px; border-radius:20px; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; transition:all .15s; white-space:nowrap; flex-shrink:0; }
+  .bloc-pill.active { background:var(--bloc-color, var(--amber)); border-color:var(--bloc-color, var(--amber)); color:#000; font-weight:700; }
+  .bloc-pill:hover:not(.active) { border-color:var(--bloc-color, var(--amber)); color:var(--text); }
 </style>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" crossorigin="anonymous"></script>
 </head>
@@ -525,6 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <div class="main">
   <div class="toolbar">
     <div class="toolbar-left" style="flex-wrap:wrap;gap:6px">
+      <div id="bloc-selector-wrap" style="display:none;gap:8px;flex-wrap:nowrap;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none"></div>
       <button class="filter-btn active" onclick="setFilter('all',this)" aria-label="Afficher tous les produits">Tous</button>
       <button class="filter-btn" onclick="setFilter('red',this)" aria-label="Filtrer les produits urgents">🔴 Urgents</button>
       <button class="filter-btn" onclick="setFilter('yellow',this)" aria-label="Filtrer les produits bientôt périmés">🟡 Bientôt</button>
@@ -546,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.20 · 27/05/2026 23:32
+  dlc v3.0 · 07/10/2026 18:11
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -750,6 +756,12 @@ let currentFilter = 'all';
 let dataSource    = 'apps';
 let produitsSource = 'apps';
 let exclusionsSource = 'apps';
+
+// ── v3.0 : Blocs DLC ──
+let _userBlocs      = [];   // blocs assignés à l'utilisateur courant
+let _blocMarques    = [];   // marques aplaties depuis les blocs
+let _searchLibre    = true; // si false : recherche restreinte au bloc
+let _blocFilter     = null; // null = tous, 'BLOC_ID' = filtré
 
 // ── Helpers ──
 const daysUntil  = dateStr => { const d = new Date(dateStr); d.setHours(0,0,0,0); return Math.round((d - today) / 86400000); };
@@ -1021,6 +1033,7 @@ async function fullSync() {
         toast(`✓ ${products.length} DLC chargée${products.length > 1 ? 's' : ''} depuis Supabase`);
         updateNoDlcBadge();
         startAutoSync();
+        loadUserBlocs(); // charger les blocs en arrière-plan
         render();
         return;
     } catch(e) {
@@ -1074,6 +1087,65 @@ async function fullSync() {
       toast('⚠ Connexion impossible — clique sur Sync pour réessayer', true);
     }
   }
+}
+
+// ── v3.0 : Chargement des blocs utilisateur ──
+async function loadUserBlocs() {
+  if (!canUseSupabase()) return;
+  try {
+    const user = await ensureSupabaseUserReady();
+    // Admins/superadmin voient tout — pas de filtre bloc
+    if (['superadmin','admin','manager'].includes(user.role)) {
+      _searchLibre = true;
+      _userBlocs   = [];
+      _blocMarques = [];
+      return;
+    }
+    // Récupérer les blocs assignés à cet utilisateur
+    const rows = await sbFetch(
+      `/rest/v1/dlc_blocs_users?user_id=eq.${encodeURIComponent(user.id)}&select=bloc_id,dlc_blocs(id,nom,couleur,actif,dlc_blocs_marques(marque))`
+    );
+    // Récupérer dlc_search_libre depuis le profil
+    const profileRows = await sbFetch(
+      `/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=dlc_search_libre`
+    );
+    _searchLibre = profileRows?.[0]?.dlc_search_libre !== false;
+    _userBlocs   = (rows || []).map(r => r.dlc_blocs).filter(b => b && b.actif);
+    _blocMarques = _userBlocs.flatMap(b => (b.dlc_blocs_marques || []).map(m => m.marque.toLowerCase().trim()));
+    renderBlocSelector();
+  } catch(e) {
+    console.warn('[dlc] Blocs indisponibles:', e.message);
+  }
+}
+
+function renderBlocSelector() {
+  const container = document.getElementById('bloc-selector-wrap');
+  if (!container) return;
+  if (!_userBlocs.length) { container.style.display = 'none'; return; }
+  container.style.display = 'flex';
+  container.innerHTML = `
+    <button class="bloc-pill ${_blocFilter===null?'active':''}" onclick="setBlocFilter(null)">Tous</button>
+    ${_userBlocs.map(b => `<button class="bloc-pill ${_blocFilter===b.id?'active':''}" onclick="setBlocFilter('${b.id}')" style="--bloc-color:${b.couleur||'#e8a045'}">${b.nom}</button>`).join('')}`;
+}
+
+function setBlocFilter(blocId) {
+  _blocFilter = blocId;
+  renderBlocSelector();
+  render();
+}
+
+function applyBlocFilter(products) {
+  // Pas de blocs assignés → tout voir
+  if (!_userBlocs.length) return products;
+  // Un bloc sélectionné → filtrer sur ce bloc uniquement
+  if (_blocFilter) {
+    const bloc = _userBlocs.find(b => b.id === _blocFilter);
+    if (!bloc) return products;
+    const marques = (bloc.dlc_blocs_marques || []).map(m => m.marque.toLowerCase().trim());
+    return products.filter(p => marques.includes((p.brand||'').toLowerCase().trim()));
+  }
+  // Tous les blocs → filtre sur les marques de tous les blocs assignés
+  return products.filter(p => _blocMarques.includes((p.brand||'').toLowerCase().trim()));
 }
 
 // ── Recherche produit (Sheets) ──
@@ -1320,7 +1392,9 @@ function crLookup() {
   const q = document.getElementById('cr-search').value.trim().toLowerCase();
   if (!q) return;
 
-  const matches = products.filter(p =>
+  let crPool = products;
+  if (!_searchLibre && _blocMarques.length) crPool = products.filter(p => _blocMarques.includes((p.brand||'').toLowerCase().trim()));
+  const matches = crPool.filter(p =>
     p.name.toLowerCase().includes(q) ||
     p.brand.toLowerCase().includes(q) ||
     (p.barcode && p.barcode.includes(q))
@@ -1591,7 +1665,9 @@ function quickLookup() {
   const q = document.getElementById('quick-search').value.trim().toLowerCase();
   if (!q) { toast('⚠ Tape un nom ou un code-barres', true); return; }
 
-  const matches = products.filter(p =>
+  let crPool = products;
+  if (!_searchLibre && _blocMarques.length) crPool = products.filter(p => _blocMarques.includes((p.brand||'').toLowerCase().trim()));
+  const matches = crPool.filter(p =>
     p.name.toLowerCase().includes(q) ||
     p.brand.toLowerCase().includes(q) ||
     (p.barcode && p.barcode.includes(q))
@@ -2220,6 +2296,7 @@ function renderProducts() {
   const list = document.getElementById('product-list');
 
   let active = products.filter(p => !p.archived);
+  active = applyBlocFilter(active);  // v3.0 : filtre blocs
   if (currentFilter !== 'all') active = active.filter(p => statusClass(daysUntil(p.dlc)) === currentFilter);
 
   if (!active.length) {

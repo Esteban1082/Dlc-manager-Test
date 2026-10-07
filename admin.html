@@ -352,6 +352,18 @@
     .bottom-nav { display:block; }
     .topbar { padding: 14px 16px; }
   }
+
+  /* ── Blocs DLC ── */
+  .bloc-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden; margin-bottom:14px; }
+  .bloc-card-header { display:flex; align-items:center; gap:12px; padding:14px 16px; }
+  .bloc-color-dot { width:14px; height:14px; border-radius:50%; flex-shrink:0; }
+  .bloc-name { font-family:"Fraunces",serif; font-size:16px; font-weight:700; }
+  .bloc-desc { font-size:11px; color:var(--muted); margin-top:2px; }
+  .bloc-actions { display:flex; gap:8px; flex-wrap:wrap; padding:0 16px 14px; }
+  .bloc-marques { display:flex; gap:6px; flex-wrap:wrap; padding:0 16px 10px; }
+  .marque-pill { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; border:1px solid; }
+  .bloc-assigned-users { display:flex; gap:6px; flex-wrap:wrap; padding:0 16px 12px; }
+  .user-pill { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:20px; font-size:11px; color:var(--muted); }
 </style>
 </head>
 <body>
@@ -435,6 +447,9 @@
       </div>
       <div class="nav-item" onclick="showView('tenants',this)">
         <span class="nav-icon">🏪</span> Clients
+      </div>
+      <div class="nav-item" onclick="showView('blocs',this)">
+        <span class="nav-icon">🗂</span> Blocs DLC
       </div>
     </nav>
     <div class="sidebar-footer">
@@ -525,6 +540,18 @@
         <div id="tenants-list" class="loading">⏳ Chargement...</div>
       </div>
 
+      <!-- ══ BLOCS DLC ══ -->
+      <div class="view" id="view-blocs">
+        <div class="section-header">
+          <div>
+            <div class="section-title">Blocs DLC</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:3px">Grouper les marques par bloc et les assigner aux utilisateurs.</div>
+          </div>
+          <button class="btn btn-primary" onclick="openNewBlocModal()">＋ Nouveau bloc</button>
+        </div>
+        <div id="blocs-list" class="loading">⏳ Chargement...</div>
+      </div>
+
     </div>
   </main>
 </div>
@@ -543,6 +570,9 @@
     </button>
     <button class="bnav-item" id="bnav-tenants" onclick="showView('tenants',this); syncBottomNav('tenants')">
       <span class="bnav-ico">🏪</span>Clients
+    </button>
+    <button class="bnav-item" id="bnav-blocs" onclick="showView('blocs',this); syncBottomNav('blocs')">
+      <span class="bnav-ico">🗂</span>Blocs
     </button>
     <button class="bnav-item" onclick="window.location.href='hub.html'">
       <span class="bnav-ico">←</span>Hub
@@ -597,6 +627,53 @@
   </div>
 </div>
 
+<!-- ══ Modal nouveau/éditer bloc ══ -->
+<div class="modal-overlay" id="modal-bloc" onclick="if(event.target.id==='modal-bloc')closeModal('modal-bloc')">
+  <div class="modal">
+    <div class="modal-title" id="modal-bloc-title">🗂 Nouveau bloc</div>
+    <label class="form-label">Nom du bloc *</label>
+    <input id="bloc-nom" class="form-input" type="text" placeholder="Ex : Bloc C — Chocolatiers">
+    <label class="form-label">Description</label>
+    <input id="bloc-desc" class="form-input" type="text" placeholder="Marcolini, Neuhaus, Benoît Nihant...">
+    <label class="form-label">Couleur</label>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input id="bloc-couleur" class="form-input" type="text" placeholder="#e8a045" style="flex:1;margin-bottom:0">
+      <input type="color" id="bloc-couleur-picker" value="#e8a045"
+        style="width:44px;height:44px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;padding:2px"
+        oninput="document.getElementById('bloc-couleur').value=this.value">
+    </div>
+    <input type="hidden" id="bloc-edit-id">
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-ghost" onclick="closeModal('modal-bloc')" style="flex:1">Annuler</button>
+      <button class="btn btn-primary" onclick="saveBloc()" style="flex:1">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Modal marques d'un bloc ══ -->
+<div class="modal-overlay" id="modal-bloc-marques" onclick="if(event.target.id==='modal-bloc-marques')closeModal('modal-bloc-marques')">
+  <div class="modal">
+    <div class="modal-title" id="modal-marques-title">📦 Marques du bloc</div>
+    <div id="marques-list" style="margin-bottom:14px;max-height:45vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input id="new-marque-input" class="form-input" type="text" placeholder="Nom de la marque / patissier" style="flex:1;margin-bottom:0"
+        onkeydown="if(event.key==='Enter')addMarque()">
+      <button class="btn btn-primary" onclick="addMarque()" style="white-space:nowrap">＋ Ajouter</button>
+    </div>
+    <button class="btn btn-ghost" onclick="closeModal('modal-bloc-marques')" style="width:100%">Fermer</button>
+  </div>
+</div>
+
+<!-- ══ Modal attribution utilisateurs ══ -->
+<div class="modal-overlay" id="modal-bloc-users" onclick="if(event.target.id==='modal-bloc-users')closeModal('modal-bloc-users')">
+  <div class="modal">
+    <div class="modal-title" id="modal-users-title">👥 Attribution du bloc</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Coche les utilisateurs qui verront ce bloc dans leur DLC.</div>
+    <div id="bloc-users-list" style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+    <button class="btn btn-ghost" onclick="closeModal('modal-bloc-users')" style="width:100%">Fermer</button>
+  </div>
+</div>
+
 <!-- Modal nouveau client -->
 <div class="modal-overlay" id="modal-tenant" onclick="if(event.target.id==='modal-tenant')closeModal('modal-tenant')">
   <div class="modal">
@@ -621,7 +698,7 @@
 
 <div class="toast-container" id="toast-container"></div>
 <div class="version-tag" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:80;letter-spacing:1px;opacity:.4">
-  admin v1.5 · 28/05/2026 00:14
+  admin v1.6 · 07/10/2026 18:10
 </div>
 
 <script>
@@ -770,6 +847,7 @@ const TITLES = {
   users:     ['Utilisateurs', 'Gérer les accès et les rôles'],
   modules:   ['Modules', 'Vue d\'ensemble des fonctionnalités'],
   tenants:   ['Clients', 'Gérer les commerces sur StoreLine'],
+  blocs:     ['Blocs DLC', 'Grouper les marques et les assigner aux utilisateurs'],
 };
 
 function syncBottomNav(name) {
@@ -789,6 +867,7 @@ function showView(name, el) {
 
   if (name === 'users')   loadUsers();
   if (name === 'tenants') loadTenants();
+  if (name === 'blocs')   loadBlocs();
   if (name === 'modules') renderModulesOverview();
   syncBottomNav(name);
 }
@@ -841,7 +920,7 @@ async function loadUsers() {
   document.getElementById('users-list').innerHTML = '<div class="loading">⏳ Chargement...</div>';
   try {
     await ensureTenantsLoaded();
-    const profiles = await sbSelect('profiles', '?select=id,email,nom,role,actif,tenant_id,created_at,permissions(*)&order=created_at.desc');
+    const profiles = await sbSelect('profiles', '?select=id,email,nom,role,actif,tenant_id,created_at,dlc_search_libre,permissions(*)&order=created_at.desc');
     const error = (!profiles || profiles.message) ? {message: profiles?.message || 'Erreur lecture'} : null;
 
     if (error) throw error;
@@ -980,6 +1059,21 @@ function renderUsers() {
           ${(isSuperadmin() ? ['employe','manager','admin','superadmin'] : ['employe','manager','admin']).map(r => `
             <button class="btn ${u.role===r?'btn-primary':'btn-ghost'}" onclick="changeRole('${u.id}','${r}')">${r}</button>
           `).join('')}
+        </div>
+        <div style="margin-bottom:12px">
+          <div class="modules-title">Blocs DLC assignés</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Les blocs définissent quelles marques apparaissent dans le suivi DLC de cet utilisateur.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+            ${(allBlocs.filter(b=>b.actif&&(b.dlc_blocs_users||[]).some(a=>a.user_id===u.id))).map(b=>`<span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid ${b.couleur}30;color:${b.couleur};background:${b.couleur}15">${escapeHtml(b.nom)}</span>`).join('')||'<span style="font-size:11px;color:var(--muted)">Aucun bloc assigné — voit tout le rayon</span>'}
+          </div>
+          <button class="btn btn-ghost" onclick="showView('blocs')" style="font-size:11px;padding:6px 12px">🗂 Gérer les blocs →</button>
+        </div>
+        <div style="margin-bottom:14px">
+          <div class="modules-title">Recherche hors-bloc</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Si désactivée, l'utilisateur ne peut consulter que les produits de ses blocs assignés.</div>
+          <button class="btn ${u.dlc_search_libre!==false?'btn-primary':'btn-ghost'}" onclick="toggleDlcSearchLibre('${u.id}',${u.dlc_search_libre!==false})" style="font-size:11px;padding:6px 14px">
+            ${u.dlc_search_libre!==false?'✓ Recherche libre':'⊘ Restreint au bloc'}
+          </button>
         </div>
         <div class="detail-actions">
           <button class="btn btn-ghost" onclick="activateUser('${u.id}',${!u.actif})">${u.actif?'⏸ Désactiver':'▶ Activer'}</button>
@@ -1262,6 +1356,295 @@ function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 // ── Init ──
 loadDashboard();
+
+// ══════════════════════════════════════════════════════════════
+// BLOCS DLC
+// ══════════════════════════════════════════════════════════════
+let allBlocs    = [];
+let currentBlocId = null; // pour modal marques / attribution
+
+async function loadBlocs() {
+  const el = document.getElementById('blocs-list');
+  if (!el) return;
+  el.innerHTML = '<div class="loading">⏳ Chargement...</div>';
+  try {
+    await ensureTenantsLoaded();
+    const tenantId = ME.tenant_id;
+    const query = isSuperadmin()
+      ? '?select=id,nom,couleur,description,ordre,actif,tenant_id,dlc_blocs_marques(id,marque),dlc_blocs_users(id,user_id)&order=ordre.asc,nom.asc'
+      : `?tenant_id=eq.${tenantId}&select=id,nom,couleur,description,ordre,actif,tenant_id,dlc_blocs_marques(id,marque),dlc_blocs_users(id,user_id)&order=ordre.asc,nom.asc`;
+    allBlocs = await sbFetch('/rest/v1/dlc_blocs' + query) || [];
+    renderBlocs();
+  } catch(e) {
+    el.innerHTML = `<div class="loading" style="color:var(--red)">⚠ ${e.message}</div>`;
+  }
+}
+
+function renderBlocs() {
+  const el = document.getElementById('blocs-list');
+  if (!allBlocs.length) {
+    el.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)"><div style="font-size:36px;margin-bottom:12px">🗂</div><div style="font-family:Fraunces,serif;font-size:18px;margin-bottom:6px">Aucun bloc créé</div><div style="font-size:12px">Crée un bloc pour grouper les marques par responsable.</div></div>';
+    return;
+  }
+  el.innerHTML = allBlocs.map(b => {
+    const marques  = (b.dlc_blocs_marques || []);
+    const assigned = (b.dlc_blocs_users   || []);
+    const color = b.couleur || '#e8a045';
+    const usersAssigned = assigned.map(a => {
+      const u = allUsers.find(x => x.id === a.user_id);
+      return u ? escapeHtml(u.email.split('@')[0]) : '?';
+    });
+    return `
+    <div class="bloc-card" id="bcard-${b.id}" style="border-left:4px solid ${color}">
+      <div class="bloc-card-header">
+        <div class="bloc-color-dot" style="background:${color}"></div>
+        <div style="flex:1;min-width:0">
+          <div class="bloc-name">${escapeHtml(b.nom)}</div>
+          ${b.description ? `<div class="bloc-desc">${escapeHtml(b.description)}</div>` : ''}
+        </div>
+        <span style="font-size:11px;color:var(--muted)">${marques.length} marque${marques.length!==1?'s':''} · ${assigned.length} user${assigned.length!==1?'s':''}</span>
+        ${!b.actif ? '<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(255,64,64,.15);color:var(--red);border:1px solid rgba(255,64,64,.3)">Inactif</span>' : ''}
+      </div>
+      ${marques.length ? `
+      <div class="bloc-marques">
+        ${marques.map(m => `<span class="marque-pill" style="color:${color};border-color:${color}30;background:${color}15">${escapeHtml(m.marque)}</span>`).join('')}
+      </div>` : ''}
+      ${usersAssigned.length ? `
+      <div class="bloc-assigned-users">
+        <span style="font-size:10px;color:var(--muted);margin-right:4px">Assigné à :</span>
+        ${usersAssigned.map(u => `<span class="user-pill">👤 ${u}</span>`).join('')}
+      </div>` : ''}
+      <div class="bloc-actions">
+        <button class="btn btn-ghost" onclick="openEditBlocModal('${b.id}')" style="font-size:11px;padding:6px 12px">✏ Modifier</button>
+        <button class="btn btn-ghost" onclick="openMarquesModal('${b.id}')" style="font-size:11px;padding:6px 12px">📦 Marques</button>
+        <button class="btn btn-ghost" onclick="openBlocUsersModal('${b.id}')" style="font-size:11px;padding:6px 12px">👥 Assigner</button>
+        <button class="btn btn-ghost" onclick="toggleBlocActif('${b.id}',${b.actif})" style="font-size:11px;padding:6px 12px">${b.actif?'⏸ Désactiver':'▶ Activer'}</button>
+        <button class="btn btn-ghost" onclick="deleteBloc('${b.id}')" style="font-size:11px;padding:6px 12px;color:var(--red);border-color:rgba(255,64,64,.3)">🗑 Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Nouveau bloc ──
+function openNewBlocModal() {
+  document.getElementById('modal-bloc-title').textContent = '🗂 Nouveau bloc';
+  document.getElementById('bloc-nom').value    = '';
+  document.getElementById('bloc-desc').value   = '';
+  document.getElementById('bloc-couleur').value = '#e8a045';
+  document.getElementById('bloc-couleur-picker').value = '#e8a045';
+  document.getElementById('bloc-edit-id').value = '';
+  document.getElementById('modal-bloc').style.display = 'flex';
+  setTimeout(() => document.getElementById('bloc-nom').focus(), 100);
+}
+
+function openEditBlocModal(id) {
+  const b = allBlocs.find(x => x.id === id);
+  if (!b) return;
+  document.getElementById('modal-bloc-title').textContent = '✏ Modifier le bloc';
+  document.getElementById('bloc-nom').value    = b.nom;
+  document.getElementById('bloc-desc').value   = b.description || '';
+  document.getElementById('bloc-couleur').value = b.couleur || '#e8a045';
+  document.getElementById('bloc-couleur-picker').value = b.couleur || '#e8a045';
+  document.getElementById('bloc-edit-id').value = id;
+  document.getElementById('modal-bloc').style.display = 'flex';
+}
+
+async function saveBloc() {
+  const nom     = document.getElementById('bloc-nom').value.trim();
+  const desc    = document.getElementById('bloc-desc').value.trim();
+  const couleur = document.getElementById('bloc-couleur').value.trim() || '#e8a045';
+  const editId  = document.getElementById('bloc-edit-id').value;
+  if (!nom) { toast('⚠ Le nom du bloc est obligatoire', true); return; }
+
+  const tenantId = ME.tenant_id || (allTenants[0] && allTenants[0].id) || null;
+
+  try {
+    if (editId) {
+      await sbFetch(`/rest/v1/dlc_blocs?id=eq.${editId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ nom, description: desc, couleur })
+      });
+      toast(`✓ Bloc "${nom}" modifié`);
+    } else {
+      const maxOrdre = allBlocs.length ? Math.max(...allBlocs.map(b => b.ordre || 0)) + 1 : 1;
+      await sbFetch('/rest/v1/dlc_blocs', {
+        method: 'POST',
+        body: JSON.stringify({ tenant_id: tenantId, nom, description: desc, couleur, ordre: maxOrdre, actif: true })
+      });
+      toast(`✓ Bloc "${nom}" créé`);
+    }
+    closeModal('modal-bloc');
+    loadBlocs();
+  } catch(e) { toast('⚠ ' + e.message, true); }
+}
+
+async function toggleBlocActif(id, currentActif) {
+  try {
+    await sbFetch(`/rest/v1/dlc_blocs?id=eq.${id}`, { method:'PATCH', body: JSON.stringify({ actif: !currentActif }) });
+    toast(currentActif ? 'Bloc désactivé' : '✓ Bloc activé');
+    loadBlocs();
+  } catch(e) { toast('⚠ ' + e.message, true); }
+}
+
+async function deleteBloc(id) {
+  const b = allBlocs.find(x => x.id === id);
+  if (!b) return;
+  if (!confirm(`Supprimer le bloc "${b.nom}" ? Les marques et attributions seront supprimées.`)) return;
+  try {
+    await sbFetch(`/rest/v1/dlc_blocs?id=eq.${id}`, { method:'DELETE' });
+    toast('Bloc supprimé');
+    loadBlocs();
+  } catch(e) { toast('⚠ ' + e.message, true); }
+}
+
+// ── Gestion des marques ──
+async function openMarquesModal(blocId) {
+  currentBlocId = blocId;
+  const b = allBlocs.find(x => x.id === blocId);
+  if (!b) return;
+  document.getElementById('modal-marques-title').textContent = `📦 Marques — ${b.nom}`;
+  document.getElementById('new-marque-input').value = '';
+  await renderMarquesList(blocId);
+  document.getElementById('modal-bloc-marques').style.display = 'flex';
+  setTimeout(() => document.getElementById('new-marque-input').focus(), 100);
+}
+
+async function renderMarquesList(blocId) {
+  const el = document.getElementById('marques-list');
+  const b  = allBlocs.find(x => x.id === blocId);
+  const marques = b ? (b.dlc_blocs_marques || []) : [];
+  if (!marques.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:10px">Aucune marque. Ajoutes-en ci-dessous.</div>';
+    return;
+  }
+  el.innerHTML = marques.map(m => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">
+      <span style="flex:1;font-size:13px">${escapeHtml(m.marque)}</span>
+      <button onclick="removeMarque('${m.id}','${blocId}')"
+        style="padding:4px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;color:var(--red);font-size:11px;cursor:pointer">✕</button>
+    </div>`).join('');
+}
+
+async function addMarque() {
+  const marque = document.getElementById('new-marque-input').value.trim();
+  if (!marque || !currentBlocId) return;
+  try {
+    await sbFetch('/rest/v1/dlc_blocs_marques', {
+      method: 'POST',
+      body: JSON.stringify({ bloc_id: currentBlocId, marque })
+    });
+    document.getElementById('new-marque-input').value = '';
+    // Mettre à jour localement
+    const b = allBlocs.find(x => x.id === currentBlocId);
+    if (b) {
+      if (!b.dlc_blocs_marques) b.dlc_blocs_marques = [];
+      b.dlc_blocs_marques.push({ id: Date.now().toString(), marque });
+    }
+    await renderMarquesList(currentBlocId);
+    renderBlocs();
+    document.getElementById('new-marque-input').focus();
+  } catch(e) { toast('⚠ ' + e.message, true); }
+}
+
+async function removeMarque(marqueId, blocId) {
+  try {
+    await sbFetch(`/rest/v1/dlc_blocs_marques?id=eq.${marqueId}`, { method: 'DELETE' });
+    const b = allBlocs.find(x => x.id === blocId);
+    if (b) b.dlc_blocs_marques = (b.dlc_blocs_marques || []).filter(m => m.id !== marqueId);
+    await renderMarquesList(blocId);
+    renderBlocs();
+  } catch(e) { toast('⚠ ' + e.message, true); }
+}
+
+// ── Attribution utilisateurs ──
+async function openBlocUsersModal(blocId) {
+  currentBlocId = blocId;
+  const b = allBlocs.find(x => x.id === blocId);
+  if (!b) return;
+  document.getElementById('modal-users-title').textContent = `👥 Attribution — ${b.nom}`;
+  // Charger les users du même tenant si pas encore chargés
+  if (!allUsers.length) await loadUsers();
+  renderBlocUsersList(blocId);
+  document.getElementById('modal-bloc-users').style.display = 'flex';
+}
+
+function renderBlocUsersList(blocId) {
+  const el = document.getElementById('bloc-users-list');
+  const b  = allBlocs.find(x => x.id === blocId);
+  const assignedIds = new Set((b ? b.dlc_blocs_users || [] : []).map(a => a.user_id));
+
+  // Filtrer les users du même tenant (ou tous si superadmin)
+  const tenantId = ME.tenant_id;
+  const users = allUsers.filter(u =>
+    u.role !== 'superadmin' && (isSuperadmin() || u.tenant_id === tenantId)
+  );
+
+  if (!users.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:10px">Aucun utilisateur disponible.</div>';
+    return;
+  }
+
+  el.innerHTML = users.map(u => {
+    const assigned = assignedIds.has(u.id);
+    const assocId  = assigned ? (b.dlc_blocs_users || []).find(a => a.user_id === u.id)?.id : null;
+    return `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg);border-radius:10px;border:1px solid ${assigned?'var(--amber)':'var(--border)'}">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(u.email)}</div>
+        <div style="font-size:10px;color:var(--muted)">${u.role} · ${escapeHtml(tenantName(u.tenant_id))}</div>
+      </div>
+      <button onclick="toggleBlocUser('${u.id}','${blocId}','${assocId || ''}',${assigned})"
+        class="btn ${assigned?'btn-primary':'btn-ghost'}"
+        style="flex-shrink:0;padding:6px 12px;font-size:11px">
+        ${assigned ? '✓ Assigné' : '＋ Assigner'}
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function toggleBlocUser(userId, blocId, assocId, currentlyAssigned) {
+  try {
+    if (currentlyAssigned && assocId) {
+      await sbFetch(`/rest/v1/dlc_blocs_users?id=eq.${assocId}`, { method: 'DELETE' });
+      const b = allBlocs.find(x => x.id === blocId);
+      if (b) b.dlc_blocs_users = (b.dlc_blocs_users || []).filter(a => a.id !== assocId);
+      toast('Utilisateur retiré du bloc');
+    } else {
+      const res = await sbFetch('/rest/v1/dlc_blocs_users', {
+        method: 'POST',
+        body: JSON.stringify({ user_id: userId, bloc_id: blocId })
+      });
+      const b = allBlocs.find(x => x.id === blocId);
+      if (b) {
+        if (!b.dlc_blocs_users) b.dlc_blocs_users = [];
+        const newId = Array.isArray(res) ? res[0]?.id : res?.id;
+        b.dlc_blocs_users.push({ id: newId || Date.now().toString(), user_id: userId });
+      }
+      toast('✓ Utilisateur assigné au bloc');
+    }
+    renderBlocUsersList(blocId);
+    renderBlocs();
+  } catch(e) { toast('⚠ ' + e.message, true); }
+}
+
+// ── Option recherche libre dans DLC ──
+async function toggleDlcSearchLibre(userId, currentVal) {
+  try {
+    await sbFetch(`/rest/v1/profiles?id=eq.${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ dlc_search_libre: !currentVal })
+    });
+    const u = allUsers.find(x => x.id === userId);
+    if (u) u.dlc_search_libre = !currentVal;
+    toast(currentVal ? 'Recherche restreinte au bloc' : '✓ Recherche libre activée');
+    renderUsers();
+  } catch(e) { toast('⚠ ' + e.message, true); }
+}
+
+// ── Vue "Blocs" dans la section users ──
+// Ajouter un bouton "Blocs DLC" dans la fiche utilisateur (si admin/superadmin)
+// Ceci est géré directement dans renderUsers via le champ dlc_search_libre
+
 </script>
 </body>
 </html>
