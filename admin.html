@@ -363,6 +363,12 @@
   .bloc-marques { display:flex; gap:6px; flex-wrap:wrap; padding:0 16px 10px; }
   .marque-pill { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; border:1px solid; }
   .bloc-assigned-users { display:flex; gap:6px; flex-wrap:wrap; padding:0 16px 12px; }
+  .picker-group { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--bg); }
+  .picker-head { display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; }
+  .picker-head input, .picker-item input { width:17px; height:17px; accent-color:var(--amber); cursor:pointer; flex-shrink:0; }
+  .picker-items { border-top:1px solid var(--border); padding:4px 0; }
+  .picker-item { display:flex; align-items:center; gap:10px; padding:7px 12px 7px 34px; font-size:12px; }
+  .picker-item.via-brand { opacity:.55; }
   .user-pill { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:20px; font-size:11px; color:var(--muted); }
 </style>
 </head>
@@ -650,17 +656,18 @@
   </div>
 </div>
 
-<!-- ══ Modal marques d'un bloc ══ -->
+<!-- ══ Modal contenu d'un bloc (marques + articles) ══ -->
 <div class="modal-overlay" id="modal-bloc-marques" onclick="if(event.target.id==='modal-bloc-marques')closeModal('modal-bloc-marques')">
-  <div class="modal">
-    <div class="modal-title" id="modal-marques-title">📦 Marques du bloc</div>
-    <div id="marques-list" style="margin-bottom:14px;max-height:45vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <input id="new-marque-input" class="form-input" type="text" placeholder="Nom de la marque / patissier" style="flex:1;margin-bottom:0"
-        onkeydown="if(event.key==='Enter')addMarque()">
-      <button class="btn btn-primary" onclick="addMarque()" style="white-space:nowrap">＋ Ajouter</button>
+  <div class="modal" style="max-width:640px">
+    <div class="modal-title" id="modal-marques-title">📦 Contenu du bloc</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+      Coche une <b>marque</b> pour inclure tous ses articles (y compris ceux ajoutés plus tard),
+      ou déplie une marque pour cocher des <b>articles</b> un par un.
     </div>
-    <button class="btn btn-ghost" onclick="closeModal('modal-bloc-marques')" style="width:100%">Fermer</button>
+    <input id="picker-search" class="form-input" type="text" placeholder="Rechercher une marque, un article, un code-barres..." oninput="renderPicker()">
+    <div id="picker-summary" style="font-size:11px;color:var(--amber);margin:-2px 0 10px"></div>
+    <div id="marques-list" style="max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+    <button class="btn btn-ghost" onclick="closeModal('modal-bloc-marques');renderBlocs()" style="width:100%">Fermer</button>
   </div>
 </div>
 
@@ -698,7 +705,7 @@
 
 <div class="toast-container" id="toast-container"></div>
 <div class="version-tag" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:80;letter-spacing:1px;opacity:.4">
-  admin v1.6 · 07/10/2026 18:10
+  admin v1.7 · 07/10/2026 18:34
 </div>
 
 <script>
@@ -1371,8 +1378,8 @@ async function loadBlocs() {
     await ensureTenantsLoaded();
     const tenantId = ME.tenant_id;
     const query = isSuperadmin()
-      ? '?select=id,nom,couleur,description,ordre,actif,tenant_id,dlc_blocs_marques(id,marque),dlc_blocs_users(id,user_id)&order=ordre.asc,nom.asc'
-      : `?tenant_id=eq.${tenantId}&select=id,nom,couleur,description,ordre,actif,tenant_id,dlc_blocs_marques(id,marque),dlc_blocs_users(id,user_id)&order=ordre.asc,nom.asc`;
+      ? '?select=id,nom,couleur,description,ordre,actif,tenant_id,dlc_blocs_marques(id,marque),dlc_blocs_produits(id,produit_id,nom,marque,code_barres),dlc_blocs_users(id,user_id)&order=ordre.asc,nom.asc'
+      : `?tenant_id=eq.${tenantId}&select=id,nom,couleur,description,ordre,actif,tenant_id,dlc_blocs_marques(id,marque),dlc_blocs_produits(id,produit_id,nom,marque,code_barres),dlc_blocs_users(id,user_id)&order=ordre.asc,nom.asc`;
     allBlocs = await sbFetch('/rest/v1/dlc_blocs' + query) || [];
     renderBlocs();
   } catch(e) {
@@ -1389,6 +1396,7 @@ function renderBlocs() {
   el.innerHTML = allBlocs.map(b => {
     const marques  = (b.dlc_blocs_marques || []);
     const assigned = (b.dlc_blocs_users   || []);
+    const articles = (b.dlc_blocs_produits || []);
     const color = b.couleur || '#e8a045';
     const usersAssigned = assigned.map(a => {
       const u = allUsers.find(x => x.id === a.user_id);
@@ -1402,13 +1410,15 @@ function renderBlocs() {
           <div class="bloc-name">${escapeHtml(b.nom)}</div>
           ${b.description ? `<div class="bloc-desc">${escapeHtml(b.description)}</div>` : ''}
         </div>
-        <span style="font-size:11px;color:var(--muted)">${marques.length} marque${marques.length!==1?'s':''} · ${assigned.length} user${assigned.length!==1?'s':''}</span>
+        <span style="font-size:11px;color:var(--muted)">${marques.length} marque${marques.length!==1?'s':''} · ${articles.length} article${articles.length!==1?'s':''} · ${assigned.length} user${assigned.length!==1?'s':''}</span>
         ${!b.actif ? '<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(255,64,64,.15);color:var(--red);border:1px solid rgba(255,64,64,.3)">Inactif</span>' : ''}
       </div>
-      ${marques.length ? `
+      ${(marques.length || articles.length) ? `
       <div class="bloc-marques">
-        ${marques.map(m => `<span class="marque-pill" style="color:${color};border-color:${color}30;background:${color}15">${escapeHtml(m.marque)}</span>`).join('')}
-      </div>` : ''}
+        ${marques.map(m => `<span class="marque-pill" style="color:${color};border-color:${color}30;background:${color}15">🏷 ${escapeHtml(m.marque)}</span>`).join('')}
+        ${articles.slice(0,8).map(a => `<span class="marque-pill" style="color:var(--muted);border-color:var(--border);background:var(--surface2)">${escapeHtml(a.nom)}</span>`).join('')}
+        ${articles.length > 8 ? `<span class="marque-pill" style="color:var(--muted);border-color:var(--border)">+${articles.length-8} articles</span>` : ''}
+      </div>` : `<div style="padding:0 16px 10px;font-size:11px;color:var(--muted)">Bloc vide — clique sur « 📦 Contenu » pour choisir les marques ou articles.</div>`}
       ${usersAssigned.length ? `
       <div class="bloc-assigned-users">
         <span style="font-size:10px;color:var(--muted);margin-right:4px">Assigné à :</span>
@@ -1416,7 +1426,7 @@ function renderBlocs() {
       </div>` : ''}
       <div class="bloc-actions">
         <button class="btn btn-ghost" onclick="openEditBlocModal('${b.id}')" style="font-size:11px;padding:6px 12px">✏ Modifier</button>
-        <button class="btn btn-ghost" onclick="openMarquesModal('${b.id}')" style="font-size:11px;padding:6px 12px">📦 Marques</button>
+        <button class="btn btn-ghost" onclick="openMarquesModal('${b.id}')" style="font-size:11px;padding:6px 12px">📦 Contenu</button>
         <button class="btn btn-ghost" onclick="openBlocUsersModal('${b.id}')" style="font-size:11px;padding:6px 12px">👥 Assigner</button>
         <button class="btn btn-ghost" onclick="toggleBlocActif('${b.id}',${b.actif})" style="font-size:11px;padding:6px 12px">${b.actif?'⏸ Désactiver':'▶ Activer'}</button>
         <button class="btn btn-ghost" onclick="deleteBloc('${b.id}')" style="font-size:11px;padding:6px 12px;color:var(--red);border-color:rgba(255,64,64,.3)">🗑 Supprimer</button>
@@ -1497,63 +1507,175 @@ async function deleteBloc(id) {
   } catch(e) { toast('⚠ ' + e.message, true); }
 }
 
-// ── Gestion des marques ──
+// ── Contenu du bloc : marques entières + articles individuels ──
+let pickerProducts = [];
+let pickerGroups   = [];
+let pickerExpanded = new Set();
+
+function blocNorm(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+}
+function sbCheck(res) {
+  if (res && !Array.isArray(res) && (res.code || res.message) && !res.id) throw new Error(res.message || res.code);
+  return res;
+}
+function currentBloc() { return allBlocs.find(x => x.id === currentBlocId); }
+
 async function openMarquesModal(blocId) {
   currentBlocId = blocId;
-  const b = allBlocs.find(x => x.id === blocId);
+  const b = currentBloc();
   if (!b) return;
-  document.getElementById('modal-marques-title').textContent = `📦 Marques — ${b.nom}`;
-  document.getElementById('new-marque-input').value = '';
-  await renderMarquesList(blocId);
+  if (!b.dlc_blocs_marques)  b.dlc_blocs_marques  = [];
+  if (!b.dlc_blocs_produits) b.dlc_blocs_produits = [];
+  pickerExpanded = new Set();
+  document.getElementById('modal-marques-title').textContent = `📦 Contenu — ${b.nom}`;
+  document.getElementById('picker-search').value = '';
+  document.getElementById('marques-list').innerHTML = '<div class="loading">⏳ Chargement de la base produits...</div>';
   document.getElementById('modal-bloc-marques').style.display = 'flex';
-  setTimeout(() => document.getElementById('new-marque-input').focus(), 100);
+  try {
+    const tenantId = b.tenant_id || ME.tenant_id;
+    const rows = await sbFetch(`/rest/v1/produits?tenant_id=eq.${tenantId}&select=id,nom,marque,code_barres&order=marque.asc,nom.asc&limit=5000`);
+    pickerProducts = Array.isArray(rows) ? rows : [];
+  } catch(e) {
+    pickerProducts = [];
+    toast('⚠ Base produits indisponible : ' + e.message, true);
+  }
+  renderPicker();
 }
 
-async function renderMarquesList(blocId) {
+function renderPicker() {
+  const b = currentBloc();
   const el = document.getElementById('marques-list');
-  const b  = allBlocs.find(x => x.id === blocId);
-  const marques = b ? (b.dlc_blocs_marques || []) : [];
-  if (!marques.length) {
-    el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:10px">Aucune marque. Ajoutes-en ci-dessous.</div>';
+  if (!b || !el) return;
+  const q = blocNorm(document.getElementById('picker-search').value);
+  const brandSel = new Set(b.dlc_blocs_marques.map(m => blocNorm(m.marque)));
+  const prodSel  = new Set(b.dlc_blocs_produits.map(p => p.produit_id));
+
+  // Grouper la base par marque
+  const map = new Map();
+  pickerProducts.forEach(p => {
+    const label = (p.marque || 'Sans marque').trim();
+    const key = blocNorm(label);
+    if (!map.has(key)) map.set(key, { key, marque: label, items: [] });
+    map.get(key).items.push(p);
+  });
+  const allGroups = [...map.values()].sort((a, x) => a.marque.localeCompare(x.marque, 'fr', { sensitivity:'base' }));
+
+  pickerGroups = allGroups.filter(g => {
+    if (!q) return true;
+    return blocNorm(g.marque).includes(q) || g.items.some(p => blocNorm(p.nom).includes(q) || String(p.code_barres || '').includes(q));
+  });
+
+  // Marques enregistrées qui n'existent plus dans la base (ex : faute de frappe)
+  const orphans = b.dlc_blocs_marques.filter(m => !map.has(blocNorm(m.marque)));
+
+  document.getElementById('picker-summary').textContent =
+    `${brandSel.size} marque${brandSel.size!==1?'s':''} entière${brandSel.size!==1?'s':''} · ${prodSel.size} article${prodSel.size!==1?'s':''} individuel${prodSel.size!==1?'s':''}`;
+
+  let html = '';
+  if (orphans.length) {
+    html += `<div style="padding:10px 12px;border:1px solid rgba(255,64,64,.35);border-radius:10px;background:rgba(255,64,64,.06)">
+      <div style="font-size:11px;color:var(--red);margin-bottom:6px">⚠ Marques introuvables dans la base produits (ne filtrent rien) :</div>
+      ${orphans.map(m => `<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+        <span style="flex:1;font-size:12px">${escapeHtml(m.marque)}</span>
+        <button class="btn btn-ghost" onclick="removeBlocMarqueById('${m.id}')" style="font-size:11px;padding:4px 10px;color:var(--red)">✕ Retirer</button>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  if (!pickerGroups.length) {
+    html += `<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">${pickerProducts.length ? 'Aucun résultat.' : 'Base produits vide pour ce magasin.'}</div>`;
+    el.innerHTML = html;
     return;
   }
-  el.innerHTML = marques.map(m => `
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">
-      <span style="flex:1;font-size:13px">${escapeHtml(m.marque)}</span>
-      <button onclick="removeMarque('${m.id}','${blocId}')"
-        style="padding:4px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;color:var(--red);font-size:11px;cursor:pointer">✕</button>
-    </div>`).join('');
+
+  html += pickerGroups.map((g, gi) => {
+    const brandOn = brandSel.has(g.key);
+    const selCount = g.items.filter(p => prodSel.has(p.id)).length;
+    const open = pickerExpanded.has(g.key) || (q && !blocNorm(g.marque).includes(q));
+    const visibleItems = q && !blocNorm(g.marque).includes(q)
+      ? g.items.filter(p => blocNorm(p.nom).includes(q) || String(p.code_barres || '').includes(q))
+      : g.items;
+    return `<div class="picker-group" style="${brandOn ? 'border-color:var(--amber)' : ''}">
+      <div class="picker-head" onclick="togglePickerGroup(${gi})">
+        <input type="checkbox" ${brandOn ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleBrandInBloc(${gi}, this.checked)" title="Inclure toute la marque">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700">${escapeHtml(g.marque)}</div>
+          <div style="font-size:10px;color:var(--muted)">${g.items.length} article${g.items.length!==1?'s':''}${brandOn ? ' · marque entière' : selCount ? ` · ${selCount} sélectionné${selCount!==1?'s':''}` : ''}</div>
+        </div>
+        <span style="color:var(--muted);font-size:11px">${open ? '▲' : '▼'}</span>
+      </div>
+      ${open ? `<div class="picker-items">
+        ${visibleItems.map(p => `<label class="picker-item ${brandOn ? 'via-brand' : ''}">
+          <input type="checkbox" ${brandOn || prodSel.has(p.id) ? 'checked' : ''} ${brandOn ? 'disabled' : ''} onchange="toggleProductInBloc('${p.id}', this.checked)">
+          <span style="flex:1">${escapeHtml(p.nom)}</span>
+          ${p.code_barres ? `<span style="font-size:10px;color:var(--muted)">${escapeHtml(p.code_barres)}</span>` : ''}
+        </label>`).join('')}
+      </div>` : ''}
+    </div>`;
+  }).join('');
+  el.innerHTML = html;
 }
 
-async function addMarque() {
-  const marque = document.getElementById('new-marque-input').value.trim();
-  if (!marque || !currentBlocId) return;
+function togglePickerGroup(gi) {
+  const g = pickerGroups[gi];
+  if (!g) return;
+  if (pickerExpanded.has(g.key)) pickerExpanded.delete(g.key); else pickerExpanded.add(g.key);
+  renderPicker();
+}
+
+async function toggleBrandInBloc(gi, checked) {
+  const b = currentBloc(), g = pickerGroups[gi];
+  if (!b || !g) return;
   try {
-    await sbFetch('/rest/v1/dlc_blocs_marques', {
-      method: 'POST',
-      body: JSON.stringify({ bloc_id: currentBlocId, marque })
-    });
-    document.getElementById('new-marque-input').value = '';
-    // Mettre à jour localement
-    const b = allBlocs.find(x => x.id === currentBlocId);
-    if (b) {
-      if (!b.dlc_blocs_marques) b.dlc_blocs_marques = [];
-      b.dlc_blocs_marques.push({ id: Date.now().toString(), marque });
+    if (checked) {
+      const res = sbCheck(await sbFetch('/rest/v1/dlc_blocs_marques', {
+        method: 'POST', body: JSON.stringify({ bloc_id: b.id, marque: g.marque })
+      }));
+      const row = Array.isArray(res) ? res[0] : res;
+      b.dlc_blocs_marques.push({ id: row && row.id, marque: g.marque });
+      toast(`✓ Marque « ${g.marque} » ajoutée au bloc`);
+    } else {
+      const toDel = b.dlc_blocs_marques.filter(m => blocNorm(m.marque) === g.key);
+      for (const m of toDel) {
+        if (m.id) sbCheck(await sbFetch(`/rest/v1/dlc_blocs_marques?id=eq.${m.id}`, { method: 'DELETE' }));
+      }
+      b.dlc_blocs_marques = b.dlc_blocs_marques.filter(m => blocNorm(m.marque) !== g.key);
+      toast(`Marque « ${g.marque} » retirée du bloc`);
     }
-    await renderMarquesList(currentBlocId);
-    renderBlocs();
-    document.getElementById('new-marque-input').focus();
   } catch(e) { toast('⚠ ' + e.message, true); }
+  renderPicker();
 }
 
-async function removeMarque(marqueId, blocId) {
+async function toggleProductInBloc(produitId, checked) {
+  const b = currentBloc();
+  const p = pickerProducts.find(x => x.id === produitId);
+  if (!b || !p) return;
   try {
-    await sbFetch(`/rest/v1/dlc_blocs_marques?id=eq.${marqueId}`, { method: 'DELETE' });
-    const b = allBlocs.find(x => x.id === blocId);
-    if (b) b.dlc_blocs_marques = (b.dlc_blocs_marques || []).filter(m => m.id !== marqueId);
-    await renderMarquesList(blocId);
-    renderBlocs();
+    if (checked) {
+      const res = sbCheck(await sbFetch('/rest/v1/dlc_blocs_produits', {
+        method: 'POST',
+        body: JSON.stringify({ bloc_id: b.id, produit_id: p.id, nom: p.nom, marque: p.marque, code_barres: p.code_barres || null })
+      }));
+      const row = Array.isArray(res) ? res[0] : res;
+      b.dlc_blocs_produits.push({ id: row && row.id, produit_id: p.id, nom: p.nom, marque: p.marque, code_barres: p.code_barres });
+    } else {
+      const assoc = b.dlc_blocs_produits.find(x => x.produit_id === produitId);
+      if (assoc && assoc.id) sbCheck(await sbFetch(`/rest/v1/dlc_blocs_produits?id=eq.${assoc.id}`, { method: 'DELETE' }));
+      b.dlc_blocs_produits = b.dlc_blocs_produits.filter(x => x.produit_id !== produitId);
+    }
   } catch(e) { toast('⚠ ' + e.message, true); }
+  renderPicker();
+}
+
+async function removeBlocMarqueById(id) {
+  const b = currentBloc();
+  if (!b) return;
+  try {
+    sbCheck(await sbFetch(`/rest/v1/dlc_blocs_marques?id=eq.${id}`, { method: 'DELETE' }));
+    b.dlc_blocs_marques = b.dlc_blocs_marques.filter(m => m.id !== id);
+  } catch(e) { toast('⚠ ' + e.message, true); }
+  renderPicker();
 }
 
 // ── Attribution utilisateurs ──

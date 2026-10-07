@@ -552,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  dlc v3.0 · 07/10/2026 18:11
+  dlc v3.1 · 07/10/2026 18:33
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -1033,7 +1033,8 @@ async function fullSync() {
         toast(`✓ ${products.length} DLC chargée${products.length > 1 ? 's' : ''} depuis Supabase`);
         updateNoDlcBadge();
         startAutoSync();
-        loadUserBlocs(); // charger les blocs en arrière-plan
+        await loadUserBlocs();
+        updateNoDlcBadge();
         render();
         return;
     } catch(e) {
@@ -1089,68 +1090,87 @@ async function fullSync() {
   }
 }
 
-// ── v3.0 : Chargement des blocs utilisateur ──
+// ── v3.1 : Blocs DLC (marques entières + articles individuels) ──
+function normKey(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+}
+
 async function loadUserBlocs() {
-  if (!canUseSupabase()) return;
+  _userBlocs = [];
+  _searchLibre = true;
+  if (!canUseSupabase()) { renderBlocSelector(); return; }
   try {
     const user = await ensureSupabaseUserReady();
-    // Admins/superadmin voient tout — pas de filtre bloc
-    if (['superadmin','admin','manager'].includes(user.role)) {
-      _searchLibre = true;
-      _userBlocs   = [];
-      _blocMarques = [];
-      return;
-    }
-    // Récupérer les blocs assignés à cet utilisateur
+    if (!user.id) { renderBlocSelector(); return; }
     const rows = await sbFetch(
-      `/rest/v1/dlc_blocs_users?user_id=eq.${encodeURIComponent(user.id)}&select=bloc_id,dlc_blocs(id,nom,couleur,actif,dlc_blocs_marques(marque))`
+      `/rest/v1/dlc_blocs_users?user_id=eq.${encodeURIComponent(user.id)}` +
+      `&select=bloc_id,dlc_blocs(id,nom,couleur,actif,dlc_blocs_marques(marque),dlc_blocs_produits(nom,marque,code_barres))`
     );
-    // Récupérer dlc_search_libre depuis le profil
-    const profileRows = await sbFetch(
-      `/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=dlc_search_libre`
-    );
-    _searchLibre = profileRows?.[0]?.dlc_search_libre !== false;
-    _userBlocs   = (rows || []).map(r => r.dlc_blocs).filter(b => b && b.actif);
-    _blocMarques = _userBlocs.flatMap(b => (b.dlc_blocs_marques || []).map(m => m.marque.toLowerCase().trim()));
-    renderBlocSelector();
+    _userBlocs = (rows || [])
+      .map(r => r.dlc_blocs)
+      .filter(b => b && b.actif !== false)
+      .map(b => ({
+        ...b,
+        _marques: (b.dlc_blocs_marques || []).map(x => normKey(x.marque)),
+        _produits: (b.dlc_blocs_produits || []).map(x => ({
+          nom: normKey(x.nom), marque: normKey(x.marque), code: String(x.code_barres || '').trim()
+        })),
+      }));
+    if (_userBlocs.length) {
+      const pr = await sbFetch(`/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=dlc_search_libre`);
+      _searchLibre = !(pr && pr[0] && pr[0].dlc_search_libre === false);
+    }
   } catch(e) {
     console.warn('[dlc] Blocs indisponibles:', e.message);
+    _userBlocs = [];
   }
+  if (_blocFilter && !_userBlocs.some(b => b.id === _blocFilter)) _blocFilter = null;
+  renderBlocSelector();
+}
+
+function blocMatches(bloc, nom, marque, barcode) {
+  const m = normKey(marque), n = normKey(nom), code = String(barcode || '').trim();
+  if (bloc._marques.includes(m)) return true;
+  return bloc._produits.some(p => (code && p.code && p.code === code) || (p.nom === n && p.marque === m));
+}
+
+// ignorePill = true : on teste contre tous les blocs de l'utilisateur
+function inMyBlocs(nom, marque, barcode, ignorePill) {
+  if (!_userBlocs.length) return true; // aucun bloc assigné → tout le rayon
+  const list = (_blocFilter && !ignorePill) ? _userBlocs.filter(b => b.id === _blocFilter) : _userBlocs;
+  return list.some(b => blocMatches(b, nom, marque, barcode));
+}
+
+function applyBlocFilter(items, ignorePill) {
+  return items.filter(p => inMyBlocs(p.name, p.brand, p.barcode, ignorePill));
+}
+
+function applyBlocFilterSheet(items, ignorePill) {
+  return items.filter(p => inMyBlocs(p.nom_article || p.nom, p.patissier || p.marque, p.code_barres, ignorePill));
 }
 
 function renderBlocSelector() {
   const container = document.getElementById('bloc-selector-wrap');
   if (!container) return;
-  if (!_userBlocs.length) { container.style.display = 'none'; return; }
+  if (!_userBlocs.length) { container.style.display = 'none'; container.innerHTML = ''; return; }
   container.style.display = 'flex';
-  container.innerHTML = `
-    <button class="bloc-pill ${_blocFilter===null?'active':''}" onclick="setBlocFilter(null)">Tous</button>
-    ${_userBlocs.map(b => `<button class="bloc-pill ${_blocFilter===b.id?'active':''}" onclick="setBlocFilter('${b.id}')" style="--bloc-color:${b.couleur||'#e8a045'}">${b.nom}</button>`).join('')}`;
+  container.innerHTML =
+    `<button class="bloc-pill ${_blocFilter === null ? 'active' : ''}" onclick="setBlocFilter(null)">Mes blocs</button>` +
+    _userBlocs.map(b =>
+      `<button class="bloc-pill ${_blocFilter === b.id ? 'active' : ''}" onclick="setBlocFilter('${b.id}')" style="--bloc-color:${b.couleur || '#e8a045'}">${b.nom}</button>`
+    ).join('');
 }
 
 function setBlocFilter(blocId) {
   _blocFilter = blocId;
   renderBlocSelector();
   render();
-}
-
-function applyBlocFilter(products) {
-  // Pas de blocs assignés → tout voir
-  if (!_userBlocs.length) return products;
-  // Un bloc sélectionné → filtrer sur ce bloc uniquement
-  if (_blocFilter) {
-    const bloc = _userBlocs.find(b => b.id === _blocFilter);
-    if (!bloc) return products;
-    const marques = (bloc.dlc_blocs_marques || []).map(m => m.marque.toLowerCase().trim());
-    return products.filter(p => marques.includes((p.brand||'').toLowerCase().trim()));
-  }
-  // Tous les blocs → filtre sur les marques de tous les blocs assignés
-  return products.filter(p => _blocMarques.includes((p.brand||'').toLowerCase().trim()));
+  updateNoDlcBadge();
 }
 
 // ── Recherche produit (Sheets) ──
 function lookupLocal(query) {
-  return sheetProducts.filter(p =>
+  return (_searchLibre ? sheetProducts : applyBlocFilterSheet(sheetProducts, true)).filter(p =>
     (p.nom_article && p.nom_article.toLowerCase().includes(query)) ||
     (p.patissier   && p.patissier.toLowerCase().includes(query))   ||
     (p.code_barres && String(p.code_barres).includes(query))
@@ -1345,14 +1365,14 @@ function updateFabVisibility() {
 }
 
 function updateCrStats() {
-  const active = products.filter(p => !p.archived);
+  const active = applyBlocFilter(products.filter(p => !p.archived));
   const urgent = active.filter(p => daysUntil(p.dlc) <= 0).length;
   document.getElementById('cr-urgent').textContent = urgent;
   document.getElementById('cr-total').textContent  = active.length;
 }
 
 function updateCrToday() {
-  const expiring = products.filter(p => !p.archived && daysUntil(p.dlc) <= 0)
+  const expiring = applyBlocFilter(products.filter(p => !p.archived && daysUntil(p.dlc) <= 0))
                            .sort((a, b) => daysUntil(a.dlc) - daysUntil(b.dlc));
   const section = document.getElementById('cr-today-section');
   if (!expiring.length) { section.innerHTML = ''; return; }
@@ -1393,7 +1413,7 @@ function crLookup() {
   if (!q) return;
 
   let crPool = products;
-  if (!_searchLibre && _blocMarques.length) crPool = products.filter(p => _blocMarques.includes((p.brand||'').toLowerCase().trim()));
+  if (!_searchLibre) crPool = applyBlocFilter(products, true);
   const matches = crPool.filter(p =>
     p.name.toLowerCase().includes(q) ||
     p.brand.toLowerCase().includes(q) ||
@@ -1466,7 +1486,7 @@ function onCrInput() {
     if (!q || q.length < 2) { sugg.style.display = 'none'; sugg.innerHTML = ''; return; }
 
     // Cherche d'abord dans les produits actifs (Calendar), puis dans Sheets
-    const fromCalendar = products.filter(p =>
+    const fromCalendar = (_searchLibre ? products : applyBlocFilter(products, true)).filter(p =>
       p.name.toLowerCase().includes(q) ||
       p.brand.toLowerCase().includes(q) ||
       (p.barcode && p.barcode.includes(q))
@@ -1543,7 +1563,7 @@ function closeConfirm() { document.getElementById('modal-confirm').style.display
 
 // ── Tout retirer (urgents du jour) ──
 function toutRetirer() {
-  const urgents = products.filter(p => !p.archived && daysUntil(p.dlc) <= 0);
+  const urgents = applyBlocFilter(products.filter(p => !p.archived && daysUntil(p.dlc) <= 0));
   if (!urgents.length) return;
   askConfirm(`Retirer les ${urgents.length} article${urgents.length > 1 ? 's' : ''} périmés aujourd'hui ?`, async () => {
     for (const p of urgents) {
@@ -1666,7 +1686,7 @@ function quickLookup() {
   if (!q) { toast('⚠ Tape un nom ou un code-barres', true); return; }
 
   let crPool = products;
-  if (!_searchLibre && _blocMarques.length) crPool = products.filter(p => _blocMarques.includes((p.brand||'').toLowerCase().trim()));
+  if (!_searchLibre) crPool = applyBlocFilter(products, true);
   const matches = crPool.filter(p =>
     p.name.toLowerCase().includes(q) ||
     p.brand.toLowerCase().includes(q) ||
@@ -1821,7 +1841,7 @@ async function updateNoDlcBadge() {
   const tracked    = new Set(products.map(p => p.name.toLowerCase().trim()));
   const exclList   = await loadExclusions();
   const exclusions = new Set(exclList.map(e => e.toLowerCase().trim()));
-  const count = sheetProducts.filter(p => {
+  const count = applyBlocFilterSheet(sheetProducts).filter(p => {
     const nom = (p.nom_article || p.nom || '').toLowerCase().trim();
     return nom && !tracked.has(nom) && !exclusions.has(nom);
   }).length;
@@ -1833,7 +1853,7 @@ async function openNoDlc() {
   const tracked  = new Set(products.map(p => p.name.toLowerCase().trim()));
   const exclList = await loadExclusions();
   const exclusions = new Set(exclList.map(e => e.toLowerCase().trim()));
-  _missingProducts = sheetProducts.filter(p => {
+  _missingProducts = applyBlocFilterSheet(sheetProducts).filter(p => {
     const nom = (p.nom_article || p.nom || '').toLowerCase().trim();
     return nom && !tracked.has(nom) && !exclusions.has(nom);
   });
@@ -1980,7 +2000,7 @@ async function reintegrerArticle(idx) {
   // Recharger les missing products
   const tracked   = new Set(products.map(p => p.name.toLowerCase().trim()));
   const exclusSet = new Set(exclusions.map(e => e.toLowerCase().trim()));
-  _missingProducts = sheetProducts.filter(p => {
+  _missingProducts = applyBlocFilterSheet(sheetProducts).filter(p => {
     const n = (p.nom_article || p.nom || '').toLowerCase().trim();
     return n && !tracked.has(n) && !exclusSet.has(n);
   });
@@ -2281,7 +2301,7 @@ function setFilter(f, btn) {
 function render() { renderStats(); renderProducts(); }
 
 function renderStats() {
-  const active = products.filter(p => !p.archived);
+  const active = applyBlocFilter(products.filter(p => !p.archived));
   const c = { red:0, yellow:0, green:0, grey:0 };
   active.forEach(p => c[statusClass(daysUntil(p.dlc))]++);
   document.getElementById('stats-bar').innerHTML = `
