@@ -363,7 +363,12 @@
   .bloc-marques { display:flex; gap:6px; flex-wrap:wrap; padding:0 16px 10px; }
   .marque-pill { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; border:1px solid; }
   .bloc-assigned-users { display:flex; gap:6px; flex-wrap:wrap; padding:0 16px 12px; }
-  .picker-group { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--bg); }
+  .picker-group { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--bg); flex-shrink:0; }
+  #marques-list > *, #bloc-users-list > * { flex-shrink:0; }
+  .picker-head { min-height:52px; }
+  .picker-item { min-height:38px; cursor:pointer; border-bottom:1px solid var(--border); }
+  .picker-item:last-child { border-bottom:none; }
+  .picker-item:hover { background:var(--surface2); }
   .picker-head { display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; }
   .picker-head input, .picker-item input { width:17px; height:17px; accent-color:var(--amber); cursor:pointer; flex-shrink:0; }
   .picker-items { border-top:1px solid var(--border); padding:4px 0; }
@@ -705,7 +710,7 @@
 
 <div class="toast-container" id="toast-container"></div>
 <div class="version-tag" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:80;letter-spacing:1px;opacity:.4">
-  admin v1.7 · 07/10/2026 18:34
+  admin v1.8 · 07/10/2026 19:48
 </div>
 
 <script>
