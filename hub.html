@@ -42,16 +42,12 @@
   }
   body { transition:background .18s ease,color .18s ease; }
   .theme-toggle-global {
-    position:fixed; top:12px; right:12px; z-index:1200;
-    min-width:70px; height:34px; border-radius:999px; padding:0 12px;
-    display:flex; align-items:center; justify-content:center;
-    background:var(--surface); color:var(--amber);
-    border:1px solid var(--border); box-shadow:0 10px 24px rgba(0,0,0,.18);
-    font-size:11px;font-weight:700; cursor:pointer; line-height:1;
+    height:30px; padding:0 12px; border-radius:8px;
+    background:transparent; color:var(--muted);
+    border:1px solid var(--border);
+    font-family:'DM Mono',monospace; font-size:11px; cursor:pointer;
   }
-  .theme-toggle-global:hover { border-color:var(--amber); color:var(--amber2); transform:translateY(-1px); }
-  html[data-theme="light"] .theme-toggle-global { box-shadow:0 10px 24px rgba(84,62,37,.12); }
-  @media(max-width:640px){ .theme-toggle-global { top:auto; right:12px; bottom:72px; } }
+  .theme-toggle-global:hover { border-color:var(--amber); color:var(--amber); }
 
   body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
   button { transition:all .15s; }
@@ -80,10 +76,48 @@
 
   .grid {
     display:grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap:20px;
-    padding:24px 32px 60px;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap:12px;
+    padding:8px 32px 60px;
     max-width:1100px; margin:0 auto;
+  }
+  .featured-wrap { max-width:1100px; margin:0 auto; padding:8px 32px 28px; }
+  .tile.featured {
+    flex-direction:row; align-items:center; gap:28px;
+    padding:34px 36px; border-radius:20px;
+    border-color:rgba(232,160,69,.45);
+    background:linear-gradient(135deg, rgba(232,160,69,.14), var(--surface) 60%);
+  }
+  .tile.featured .tile-accent { height:4px; }
+  .tile.featured .tile-icon { font-size:64px; margin:0; }
+  .tile.featured .tile-name { font-size:30px; margin-bottom:6px; }
+  .tile.featured .tile-desc { font-size:13px; max-width:520px; }
+  .tile.featured .tile-badge { margin-top:12px; }
+  .tile.featured .tile-go {
+    margin-left:auto; flex-shrink:0; padding:14px 22px; border-radius:12px;
+    background:var(--amber); color:#000; font-family:'Fraunces',serif; font-weight:700; font-size:17px;
+  }
+  .section-label {
+    max-width:1100px; margin:0 auto; padding:4px 32px 8px;
+    font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--muted);
+  }
+  .grid .tile { flex-direction:row; align-items:center; gap:14px; padding:16px 18px; border-radius:12px; }
+  .grid .tile-icon { font-size:24px; margin:0; }
+  .grid .tile-name { font-size:15px; margin:0; }
+  .grid .tile-desc, .grid .tile-badge { display:none; }
+  .grid .tile-accent { height:2px; background:var(--border); }
+  @media(max-width:640px){
+    header { padding:16px 18px; }
+    .hero { padding:28px 18px 14px; }
+    .featured-wrap { padding:8px 16px 22px; }
+    .tile.featured { flex-direction:column; align-items:flex-start; gap:12px; padding:24px 22px; }
+    .tile.featured .tile-icon { font-size:44px; }
+    .tile.featured .tile-name { font-size:24px; }
+    .tile.featured .tile-go { margin-left:0; width:100%; text-align:center; }
+    .section-label { padding:4px 18px 8px; }
+    .grid { grid-template-columns:1fr 1fr; padding:8px 16px 60px; gap:10px; }
+    .grid .tile { padding:14px; gap:10px; }
+    .grid .tile-name { font-size:13px; }
   }
 
   .tile {
@@ -137,7 +171,6 @@
   </script>
 </head>
 <body>
-<button class="theme-toggle-global" id="theme-toggle-global" onclick="toggleStoreLineTheme()" title="Mode clair / sombre" aria-label="Mode clair ou sombre">Clair</button>
 <script>
 (function(){
   function applyStoreLineTheme(theme) {
@@ -181,25 +214,32 @@
       <span id="clock">--:--</span>
       <span id="date-str"></span>
     </div>
+    <button class="theme-toggle-global" id="theme-toggle-global" onclick="toggleStoreLineTheme()" title="Mode clair / sombre" aria-label="Mode clair ou sombre">Clair</button>
     <a href="admin.html" id="admin-btn" style="display:none;padding:6px 12px;background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:#a78bfa;text-decoration:none;transition:all .15s">⚙ Admin</a>
     <button onclick="logout()" id="logout-btn" style="display:none;padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--red)';this.style.borderColor='rgba(255,64,64,.4)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">↩ Déco</button>
   </div>
 </header>
 
 <div class="hero">
-  <div class="hero-title">Outils internes</div>
+  <div class="hero-title" style="font-size:30px">Outils internes</div>
   <div class="hero-sub">Espace de travail - StoreLine</div>
 </div>
 
-<div class="grid">
-
-  <a class="tile locked" href="dlc.html">
+<div class="featured-wrap">
+  <a class="tile featured locked" href="dlc.html">
     <div class="tile-accent"></div>
     <div class="tile-icon">📦</div>
-    <div class="tile-name">Suivi DLC</div>
-    <div class="tile-desc">Gestion des dates de péremption. Alertes automatiques, contrôle rapide, scanner code-barres.</div>
-    <div class="tile-badge">✓ Opérationnel</div>
+    <div>
+      <div class="tile-name">Suivi DLC</div>
+      <div class="tile-desc">Dates de péremption de tes blocs, alertes, produits sans DLC, historique et scanner code-barres.</div>
+      <div class="tile-badge">✓ Opérationnel</div>
+    </div>
+    <div class="tile-go">Ouvrir →</div>
   </a>
+</div>
+
+<div class="section-label">Autres outils</div>
+<div class="grid">
 
   <a class="tile locked" href="pertes.html">
     <div class="tile-accent"></div>
@@ -269,7 +309,7 @@
 
 </div>
 
-<div class="version-tag">hub v1.13 · 19/05/2026 23:01</div>
+<div class="version-tag">hub v1.14 · 09/10/2026 10:00</div>
 
 <script>
 // ── Auth : check immédiat avant le rendu ──
