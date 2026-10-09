@@ -522,6 +522,19 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   .fab-add { display:flex !important; position:fixed; right:20px; bottom:calc(env(safe-area-inset-bottom) + 24px) !important; width:56px !important; height:56px !important; border-radius:28px !important; border:none !important; background:#e8a045 !important; color:#fff !important; font-size:30px !important; align-items:center; justify-content:center; box-shadow:0 8px 24px rgba(232,160,69,.45) !important; z-index:150; }
   .btn-add.desktop-only { display:none !important; }
   .toast-container { bottom:calc(env(safe-area-inset-bottom) + 92px) !important; }
+  .histo-item { background:var(--surface); border-radius:14px; padding:12px 14px; box-shadow:var(--ui-shadow); }
+  .histo-item.undone { opacity:.5; }
+  #modal-histo .modal-title { color:var(--text) !important; font-size:24px !important; font-weight:700 !important; }
+  .histo-date-group { display:flex; gap:6px; flex:1; min-width:220px; }
+  .histo-date-group input { flex:1; min-width:0; }
+  .histo-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .histo-tag { font-size:12px; font-weight:600; padding:3px 9px; border-radius:999px; }
+  .histo-when { font-size:12px; color:var(--muted); }
+  .histo-name { font-size:15px; font-weight:600; margin-top:6px; }
+  .histo-meta { font-size:13px; color:var(--muted); margin-top:1px; }
+  .histo-actions { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; align-items:center; }
+  .histo-actions input[type="date"] { height:34px; padding:0 10px !important; font-size:14px !important; border:none !important; background:var(--surface2) !important; border-radius:10px !important; color:var(--text); }
+  .histo-actions .pill-btn { color:var(--text) !important; }
   .tabbar { position:fixed; left:0; right:0; bottom:0; z-index:140; display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); padding:4px 0 calc(env(safe-area-inset-bottom) + 6px); background:color-mix(in srgb, var(--bg) 90%, transparent); -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); border-top:.5px solid var(--border); }
   .tabbar a, .tabbar button { min-height:46px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; color:var(--muted); text-decoration:none; background:none; border:none; cursor:pointer; }
   .tabbar .on { color:var(--amber); }
@@ -549,7 +562,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   .btn-cancel { border-radius:999px !important; }
   .form-label { letter-spacing:.3px !important; text-transform:none !important; font-size:13px !important; color:var(--muted) !important; }
   @media (max-width:640px) {
-    #modal .modal, #modal-edit .modal { position:fixed; left:0; right:0; bottom:0; max-width:none !important; width:100% !important; border-radius:22px 22px 0 0 !important; max-height:92vh; overflow-y:auto; padding-bottom:calc(env(safe-area-inset-bottom) + 20px) !important; }
+    #modal .modal, #modal-edit .modal, #modal-histo .modal { position:fixed; left:0; right:0; bottom:0; max-width:none !important; width:100% !important; border-radius:22px 22px 0 0 !important; max-height:92vh; overflow-y:auto; padding-bottom:calc(env(safe-area-inset-bottom) + 20px) !important; }
   }
 </style>
 </head>
@@ -672,7 +685,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  dlc v4.2 · 09/10/2026 16:14
+  dlc v4.3 · 09/10/2026 21:33
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -763,11 +776,10 @@ document.addEventListener('DOMContentLoaded', () => {
 <!-- Modal Historique -->
 <div class="modal-overlay" id="modal-histo" style="display:none" onclick="if(event.target.id==='modal-histo')closeHisto()">
   <div class="modal" style="max-width:560px">
-    <div class="modal-title">🕓 Mes derniers changements</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Les 30 dernières actions faites sur cet appareil. Tu peux annuler ou attribuer une nouvelle date.</div>
+    <div class="modal-title">Mes derniers changements</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Tes 50 dernières actions, enregistrées sur ton compte. Tu peux annuler ou attribuer une nouvelle date.</div>
     <div id="histo-list" style="max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
     <div class="modal-actions" style="margin-top:16px">
-      <button class="btn-cancel" onclick="clearHisto()">Vider</button>
       <button class="btn-cancel" onclick="closeHisto()">Fermer</button>
     </div>
   </div>
@@ -2516,48 +2528,124 @@ function scanFeedback() {
 
 
 // ══════════════════════════════════════
-// v3.2 : Historique des changements (local, par utilisateur)
+// v4.3 : Historique des changements — en ligne (Supabase, lié au compte)
+//        repli local si Supabase indisponible
 // ══════════════════════════════════════
-const HISTO_MAX = 30;
+const HISTO_MAX = 50;
+let histoCache = null;   // liste affichée (plus récent en premier)
 function histoKey() { const u = getStoredUser() || {}; return 'sl_dlc_histo_' + (u.id || 'local'); }
-function getHisto() { try { return JSON.parse(localStorage.getItem(histoKey()) || '[]'); } catch(e) { return []; } }
-function setHisto(h) { try { localStorage.setItem(histoKey(), JSON.stringify(h.slice(0, HISTO_MAX))); } catch(e) {} }
+function getLocalHisto() { try { return JSON.parse(localStorage.getItem(histoKey()) || '[]'); } catch(e) { return []; } }
+function setLocalHisto(h) { try { localStorage.setItem(histoKey(), JSON.stringify(h.filter(e => !e.sid).slice(0, HISTO_MAX))); } catch(e) {} }
+function getHisto() { if (!histoCache) histoCache = getLocalHisto(); return histoCache; }
+
+function histoFromRow(r) {
+  return { sid: r.id, t: new Date(r.created_at).getTime(), type: r.type, dbId: r.dlc_id || null, eventId: null,
+    brand: r.marque || '', name: r.nom || '', barcode: r.code_barres || '',
+    oldDlc: r.old_dlc || null, newDlc: r.new_dlc || null, undone: !!r.annule };
+}
+
+async function loadHisto() {
+  if (!canUseSupabase()) { histoCache = getLocalHisto(); return; }
+  try {
+    await flushLocalHisto();
+    const user = await ensureSupabaseUserReady();
+    if (!user.id) throw new Error('Utilisateur inconnu');
+    const rows = await sbFetch(`/rest/v1/dlc_historique?user_id=eq.${encodeURIComponent(user.id)}&select=id,type,dlc_id,nom,marque,code_barres,old_dlc,new_dlc,annule,created_at&order=created_at.desc&limit=${HISTO_MAX}`);
+    const online = (Array.isArray(rows) ? rows : []).map(histoFromRow);
+    const pending = getLocalHisto().filter(e => !e.sid);   // actions pas encore envoyées
+    histoCache = [...pending, ...online].sort((a, b) => b.t - a.t).slice(0, HISTO_MAX);
+  } catch(e) {
+    console.warn('[histo] Supabase indisponible:', e.message);
+    histoCache = getLocalHisto();
+  }
+}
+
+async function pushHisto(e) {
+  if (!canUseSupabase()) return;
+  try {
+    const user = await ensureSupabaseUserReady();
+    if (!user.id || !user.tenant_id) return;
+    const isUuid = v => /^[0-9a-f-]{36}$/i.test(String(v || ''));
+    const payload = {
+      tenant_id: user.tenant_id, user_id: user.id, user_email: user.email || null,
+      type: e.type, dlc_id: isUuid(e.dbId) ? e.dbId : null,
+      nom: e.name || '', marque: e.brand || '', code_barres: e.barcode || '',
+      old_dlc: e.oldDlc || null, new_dlc: e.newDlc || null,
+      created_at: new Date(e.t || Date.now()).toISOString() };
+    let rows;
+    try { rows = await sbFetch('/rest/v1/dlc_historique', { method:'POST', body: JSON.stringify(payload) }); }
+    catch(firstErr) {
+      if (!payload.dlc_id) throw firstErr;
+      payload.dlc_id = null;   // article supprimé entre-temps : on garde la trace sans lien
+      rows = await sbFetch('/rest/v1/dlc_historique', { method:'POST', body: JSON.stringify(payload) });
+    }
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (row && row.id) { e.sid = row.id; setLocalHisto(getHisto()); }
+  } catch(err) {
+    console.warn('[histo] enregistrement en ligne impossible:', err.message);
+    setLocalHisto(getHisto());   // gardé en local, renvoyé plus tard
+  }
+}
+
+async function markHistoUndone(e) {
+  e.undone = true;
+  if (e.sid && canUseSupabase()) {
+    try { await sbFetch(`/rest/v1/dlc_historique?id=eq.${encodeURIComponent(e.sid)}`, { method:'PATCH', body: JSON.stringify({ annule:true, annule_at: new Date().toISOString() }) }); }
+    catch(err) { console.warn('[histo] annulation non synchronisée:', err.message); }
+  } else setLocalHisto(getHisto());
+}
+
+// Renvoie en ligne les actions faites hors connexion
+async function flushLocalHisto() {
+  if (!canUseSupabase()) return;
+  const pending = getLocalHisto().filter(e => !e.sid);
+  for (const e of pending.reverse()) {
+    await pushHisto(e);
+    if (e.sid && e.undone) await markHistoUndone(e);
+  }
+  try { localStorage.setItem(histoKey(), JSON.stringify(pending.filter(e => !e.sid))); } catch(_) {}
+}
 
 function logHisto(type, p, oldDlc, newDlc) {
   const h = getHisto();
-  h.unshift({ t: Date.now(), type, dbId: p.dbId || null, eventId: p.eventId || null,
-    brand: p.brand || '', name: p.name || '', barcode: p.barcode || '', oldDlc, newDlc, undone: false });
-  setHisto(h);
+  const e = { t: Date.now(), type, dbId: p.dbId || null, eventId: p.eventId || null,
+    brand: p.brand || '', name: p.name || '', barcode: p.barcode || '', oldDlc, newDlc, undone: false };
+  h.unshift(e);
+  if (h.length > HISTO_MAX) h.length = HISTO_MAX;
+  setLocalHisto(h);
+  pushHisto(e);
 }
 
-function openHisto() { renderHisto(); document.getElementById('modal-histo').style.display = 'flex'; }
+async function openHisto() {
+  document.getElementById('histo-list').innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">Chargement…</div>';
+  document.getElementById('modal-histo').style.display = 'flex';
+  await loadHisto();
+  renderHisto();
+}
 function closeHisto() { document.getElementById('modal-histo').style.display = 'none'; }
-function clearHisto() { if (confirm('Vider l’historique ?')) { setHisto([]); renderHisto(); } }
 
 function renderHisto() {
   const el = document.getElementById('histo-list');
   const h = getHisto();
   if (!h.length) { el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">Aucun changement enregistré.</div>'; return; }
-  const labels = { retrait: ['✓ Retiré', 'var(--red)'], date: ['📅 Date modifiée', 'var(--amber)'], ajout: ['＋ Ajouté', 'var(--green)'] };
+  const labels = { retrait: ['Retiré', 'var(--red)', 'var(--red-bg)'], date: ['Date modifiée', 'var(--yellow)', 'var(--yellow-bg)'], ajout: ['Ajouté', 'var(--green)', 'var(--green-bg)'] };
   const minDate = today.toISOString().split('T')[0];
   el.innerHTML = h.map((e, i) => {
-    const [lab, col] = labels[e.type] || ['?', 'var(--muted)'];
+    const [lab, col, bg] = labels[e.type] || ['?', 'var(--muted)', 'var(--surface2)'];
     const when = new Date(e.t).toLocaleString('fr-BE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-    const detail = e.type === 'retrait' ? `DLC ${fmtDate(e.oldDlc)}`
-      : e.type === 'date' ? `${fmtDate(e.oldDlc)} → ${fmtDate(e.newDlc)}` : `DLC ${fmtDate(e.newDlc)}`;
-    const undoLabel = e.type === 'retrait' ? '↩ Remettre' : e.type === 'date' ? '↩ Ancienne date' : '✕ Supprimer';
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${col};border-radius:8px;padding:10px 12px;${e.undone ? 'opacity:.5' : ''}">
-      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
-        <span style="font-size:11px;font-weight:700;color:${col}">${lab}${e.undone ? ' · annulé' : ''}</span>
-        <span style="font-size:10px;color:var(--muted)">${when}</span>
+    const detail = e.type === 'retrait' ? `DLC ${e.oldDlc ? fmtDate(e.oldDlc) : '—'}`
+      : e.type === 'date' ? `${e.oldDlc ? fmtDate(e.oldDlc) : '—'} → ${e.newDlc ? fmtDate(e.newDlc) : '—'}` : `DLC ${e.newDlc ? fmtDate(e.newDlc) : '—'}`;
+    const undoLabel = e.type === 'retrait' ? 'Remettre' : e.type === 'date' ? 'Ancienne date' : 'Annuler l’ajout';
+    return `<div class="histo-item${e.undone ? ' undone' : ''}">
+      <div class="histo-top">
+        <span class="histo-tag" style="color:${col};background:${bg}">${lab}${e.undone ? ' · annulé' : ''}</span>
+        <span class="histo-when">${when}${e.sid || !canUseSupabase() ? '' : ' · en attente'}</span>
       </div>
-      <div style="font-size:13px;font-weight:600;margin-top:3px">${e.name}</div>
-      <div style="font-size:11px;color:var(--muted)">${e.brand} · ${detail}</div>
-      ${e.undone ? '' : `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
-        <button class="filter-btn" onclick="undoHisto(${i})" style="font-size:11px;padding:6px 10px">${undoLabel}</button>
-        <input type="date" id="histo-date-${i}" min="${minDate}" value="${e.newDlc || e.oldDlc || minDate}"
-          style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px">
-        <button class="filter-btn" onclick="setDateFromHisto(${i})" style="font-size:11px;padding:6px 10px">📅 Attribuer</button>
+      <div class="histo-name">${escHtml(e.name)}</div>
+      <div class="histo-meta">${escHtml(e.brand)} · ${detail}</div>
+      ${e.undone ? '' : `<div class="histo-actions">
+        <button class="pill-btn" onclick="undoHisto(${i})">${undoLabel}</button>
+        <span class="histo-date-group"><input type="date" id="histo-date-${i}" min="${minDate}" value="${e.newDlc || e.oldDlc || minDate}"><button class="pill-btn" onclick="setDateFromHisto(${i})">Attribuer</button></span>
       </div>`}
     </div>`;
   }).join('');
@@ -2608,7 +2696,7 @@ async function undoHisto(i) {
       products = products.filter(x => x !== p);
       toast(`✓ Ajout de "${e.name}" annulé`);
     }
-    e.undone = true; setHisto(h);
+    await markHistoUndone(e);
     render(); updateNoDlcBadge(); renderHisto();
   } catch(err) { toast('⚠ ' + err.message, true); }
 }
@@ -2621,7 +2709,7 @@ async function setDateFromHisto(i) {
     const p = findProductForHisto(e);
     if (p) await setProductDate(p, dlc);
     else await restoreRetrait(e, dlc);
-    e.undone = true; setHisto(h);
+    await markHistoUndone(e);
     logHisto(p ? 'date' : 'ajout', p || { dbId: e.dbId, brand: e.brand, name: e.name, barcode: e.barcode }, p ? e.newDlc || e.oldDlc : null, dlc);
     toast(`✓ "${e.name}" → ${fmtDate(dlc)}`);
     render(); updateNoDlcBadge(); renderHisto();
