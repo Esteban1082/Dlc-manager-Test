@@ -3,180 +3,147 @@
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src * blob: data:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; style-src * 'unsafe-inline'; connect-src *; img-src * blob: data:; worker-src * blob:; media-src * blob:;">
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>StoreLine – Gestion magasin</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>StoreLine – Accueil</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&display=swap" rel="stylesheet">
 <script>
 (function(){
-  try {
-    var t = localStorage.getItem('sl_theme') || localStorage.getItem('sl_admin_theme') || 'dark';
-    if (t === 'light') document.documentElement.dataset.theme = 'light';
-  } catch(e) {}
+  try { var t = localStorage.getItem('sl_ui_theme') || 'light'; if (t === 'light') document.documentElement.dataset.theme = 'light'; } catch(e) { document.documentElement.dataset.theme = 'light'; }
 })();
 </script>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
   :root {
-    --bg:      #0f0f0d;
-    --surface: #1a1a16;
-    --border:  #2e2e28;
-    --text:    #f0ede4;
-    --muted:   #7a7a6e;
-    --amber:   #e8a045;
-    --amber2:  #f5c060;
-    --red:     #ff4040;
-    --green:   #4cdb8a;
-    --yellow:  #f5c842;
+    --bg:#161412; --surface:#211e1b; --surface2:#2b2723; --border:#3a342e; --text:#f4efe7; --muted:#a3978a;
+    --accent:#e8a045; --link:#f0b264; --red:#ff7a6e; --red-bg:rgba(255,122,110,.12); --yellow:#f0b450; --yellow-bg:rgba(240,180,80,.12);
+    --green:#6fcf97; --green-bg:rgba(111,207,151,.12); --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.25);
   }
-  /* StoreLine theme */
   html[data-theme="light"] {
-    --bg:#f7f3eb; --surface:#fffdf8; --surface2:#f0e8dc;
-    --border:#e0d6c7; --border2:#c9bca9;
-    --text:#211d18; --muted:#766b5f;
-    --amber:#b96f22; --amber2:#d9913d;
-    --red:#c93636; --red-bg:rgba(201,54,54,.10);
-    --yellow:#b98916; --yellow-bg:rgba(185,137,22,.12);
-    --green:#167a4a; --green-bg:rgba(22,122,74,.10);
-    --blue:#1f75a8; --purple:#7c55c7;
-    --grey:#8d8378; --grey-bg:rgba(141,131,120,.12);
+    --bg:#f4efe7; --surface:#fffcf7; --surface2:#f1e6d6; --border:#e2d7c9; --text:#23201c; --muted:#6e6256;
+    --accent:#e8a045; --link:#a8540f; --red:#b3261e; --red-bg:#fbece9; --yellow:#8a5a00; --yellow-bg:#fbf2e1;
+    --green:#2f6b45; --green-bg:#ecf3ec; --shadow:0 1px 2px rgba(60,40,20,.05), 0 10px 28px rgba(60,40,20,.08);
   }
-  body { transition:background .18s ease,color .18s ease; }
-  .theme-toggle-global {
-    height:30px; padding:0 12px; border-radius:8px;
-    background:transparent; color:var(--muted);
-    border:1px solid var(--border);
-    font-family:'DM Mono',monospace; font-size:11px; cursor:pointer;
-  }
-  .theme-toggle-global:hover { border-color:var(--amber); color:var(--amber); }
-
-  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; }
-  button { transition:all .15s; }
-  button:active { transform:scale(0.97); }
-
-  header {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:20px 32px; border-bottom:1px solid var(--border);
-    position:sticky; top:0; background:var(--bg); z-index:100;
-  }
-  .logo-title { font-family:'Fraunces',serif; font-weight:900; font-size:24px; color:var(--amber); }
-  .logo-sub   { font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
-  .date-display { font-size:11px; color:var(--muted); letter-spacing:1px; text-align:right; }
-  #clock { color:var(--text); font-size:18px; display:block; }
-
-  .hero {
-    padding:48px 32px 24px;
-    max-width:900px; margin:0 auto;
-    text-align:center;
-  }
-  .hero-title {
-    font-family:'Fraunces',serif; font-weight:900; font-size:36px;
-    color:var(--amber); margin-bottom:10px;
-  }
-  .hero-sub { font-size:13px; color:var(--muted); letter-spacing:1px; }
-
-  .grid {
-    display:grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    gap:12px;
-    padding:8px 32px 60px;
-    max-width:1100px; margin:0 auto;
-  }
-  .featured-wrap { max-width:1100px; margin:0 auto; padding:8px 32px 28px; }
-  .tile.featured {
-    flex-direction:row; align-items:center; gap:28px;
-    padding:34px 36px; border-radius:20px;
-    border-color:rgba(232,160,69,.45);
-    background:linear-gradient(135deg, rgba(232,160,69,.14), var(--surface) 60%);
-  }
-  .tile.featured .tile-accent { height:4px; }
-  .tile.featured .tile-icon { font-size:64px; margin:0; }
-  .tile.featured .tile-name { font-size:30px; margin-bottom:6px; }
-  .tile.featured .tile-desc { font-size:13px; max-width:520px; }
-  .tile.featured .tile-badge { margin-top:12px; }
-  .tile.featured .tile-go {
-    margin-left:auto; flex-shrink:0; padding:14px 22px; border-radius:12px;
-    background:var(--amber); color:#000; font-family:'Fraunces',serif; font-weight:700; font-size:17px;
-  }
-  .section-label {
-    max-width:1100px; margin:0 auto; padding:4px 32px 8px;
-    font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--muted);
-  }
-  .grid .tile { flex-direction:row; align-items:center; gap:14px; padding:16px 18px; border-radius:12px; }
-  .grid .tile-icon { font-size:24px; margin:0; }
-  .grid .tile-name { font-size:15px; margin:0; }
-  .grid .tile-desc, .grid .tile-badge { display:none; }
-  .grid .tile-accent { height:2px; background:var(--border); }
-  @media(max-width:640px){
-    header { padding:16px 18px; }
-    .hero { padding:28px 18px 14px; }
-    .featured-wrap { padding:8px 16px 22px; }
-    .tile.featured { flex-direction:column; align-items:flex-start; gap:12px; padding:24px 22px; }
-    .tile.featured .tile-icon { font-size:44px; }
-    .tile.featured .tile-name { font-size:24px; }
-    .tile.featured .tile-go { margin-left:0; width:100%; text-align:center; }
-    .section-label { padding:4px 18px 8px; }
-    .grid { grid-template-columns:1fr 1fr; padding:8px 16px 60px; gap:10px; }
-    .grid .tile { padding:14px; gap:10px; }
-    .grid .tile-name { font-size:13px; }
-  }
-
-  .tile {
-    display:flex; flex-direction:column;
-    background:var(--surface); border:1px solid var(--border);
-    border-radius:16px; padding:28px 24px;
-    cursor:pointer; text-decoration:none; color:var(--text);
-    transition:all .2s; position:relative; overflow:hidden;
-  }
-  .tile:hover { border-color:var(--amber); transform:translateY(-3px); box-shadow:0 8px 32px rgba(232,160,69,.15); }
-  .tile.locked { pointer-events:none; opacity:0.4; }
-  .tile:active { transform:translateY(0); }
-  .tile-accent { position:absolute; top:0; left:0; right:0; height:3px; background:var(--amber); }
-  .tile-icon { font-size:38px; margin-bottom:16px; line-height:1; }
-  .tile-name { font-family:'Fraunces',serif; font-size:20px; font-weight:700; margin-bottom:8px; }
-  .tile-desc { font-size:12px; color:var(--muted); line-height:1.6; }
-  .tile-badge {
-    display:inline-flex; align-items:center;
-    margin-top:16px; padding:4px 10px;
-    background:rgba(232,160,69,.12); border:1px solid rgba(232,160,69,.25);
-    border-radius:20px; font-size:10px; color:var(--amber); letter-spacing:1px;
-  }
-  .tile.disabled { opacity:.45; cursor:not-allowed; pointer-events:none; }
-  .tile.disabled .tile-accent { background:var(--border); }
-  .tile.disabled .tile-badge { background:rgba(110,110,100,.12); border-color:var(--border); color:var(--muted); }
-
-  .version-tag {
-    position:fixed; bottom:10px; left:14px;
-    font-size:10px; color:var(--border);
-    font-family:'DM Mono',monospace; letter-spacing:1px; z-index:50;
-  }
+  body { background:var(--bg); color:var(--text); font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', sans-serif; min-height:100vh; -webkit-font-smoothing:antialiased; }
+  a { color:inherit; text-decoration:none; }
+  button { font-family:inherit; cursor:pointer; }
+  .serif { font-family:'Fraunces', Georgia, serif; }
+  .wrap { max-width:720px; margin:0 auto; padding:calc(env(safe-area-inset-top) + 28px) 18px 60px; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .date-line { font-size:13px; font-weight:600; color:var(--muted); }
+  h1 { font-family:'Fraunces', Georgia, serif; font-weight:600; font-size:34px; letter-spacing:-.8px; line-height:1.1; }
+  .top-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+  .pill-btn { height:34px; padding:0 13px; border-radius:17px; border:1px solid var(--border); background:var(--surface); color:var(--muted); font-size:12px; font-weight:600; display:inline-flex; align-items:center; }
+  .pill-btn:hover { color:var(--text); }
+  .avatar { width:38px; height:38px; border-radius:19px; border:1px solid var(--border); background:var(--surface); display:flex; align-items:center; justify-content:center; font-weight:700; color:var(--muted); }
+  .dlc-card { display:block; margin-top:22px; border-radius:22px; padding:20px; background:var(--surface); box-shadow:var(--shadow); transition:transform .15s; }
+  .dlc-card:hover { transform:translateY(-2px); }
+  .dlc-head { display:flex; justify-content:space-between; align-items:center; }
+  .dlc-ico { width:46px; height:46px; border-radius:13px; background:var(--accent); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .dlc-title { font-family:'Fraunces', Georgia, serif; font-size:21px; font-weight:600; }
+  .dlc-sub { font-size:13px; color:var(--muted); margin-top:1px; }
+  .stats { display:none; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; margin-top:18px; }
+  .stat { border-radius:14px; padding:12px; }
+  .stat b { display:block; font-family:'Fraunces', Georgia, serif; font-size:28px; font-weight:600; line-height:1.1; }
+  .stat span { font-size:12px; color:var(--muted); font-weight:500; }
+  .section { font-size:12px; font-weight:700; letter-spacing:1px; color:var(--muted); padding:26px 4px 8px; }
+  .group { background:var(--surface); border-radius:16px; overflow:hidden; }
+  .tool-row { display:flex; align-items:center; gap:12px; padding:0 16px; min-height:52px; border-bottom:.5px solid var(--border); color:var(--text); }
+  .tool-row:last-child { border-bottom:none; }
+  .tool-row:hover { background:var(--surface2); }
+  .tool-ico { width:30px; height:30px; border-radius:8px; background:var(--surface2); color:var(--link); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
+  .tool-name { flex:1; font-size:16px; }
+  .chev { color:var(--muted); opacity:.6; display:flex; }
+  .tile.locked { pointer-events:none; opacity:.4; }
+  .version-tag { text-align:center; font-size:10px; color:var(--muted); opacity:.5; margin-top:28px; }
+  #lock-screen { position:fixed; inset:0; z-index:9999; background:var(--bg); display:none; align-items:center; justify-content:center; }
+  #pwd-input { width:100%; padding:16px 18px; background:var(--surface); border:1px solid var(--border); border-radius:14px; color:var(--text); font-size:26px; text-align:center; letter-spacing:12px; outline:none; margin-bottom:8px; }
+  #pwd-input:focus { border-color:var(--accent); }
+  .primary { width:100%; height:52px; background:var(--accent); border:none; border-radius:26px; font-size:17px; font-weight:700; color:#23201c; }
+  @media (min-width:900px) { .wrap { padding-top:48px; } h1 { font-size:40px; } }
 </style>
-
-  <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#e8a045">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="StoreLine">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js')
-          .then(r => console.log('SW registered'))
-          .catch(e => console.warn('SW failed:', e));
+        navigator.serviceWorker.register('/service-worker.js').catch(e => console.warn('SW failed:', e));
       });
     }
   </script>
 </head>
 <body>
+
+<div id="lock-screen">
+  <div style="text-align:center;width:320px;padding:20px">
+    <div class="serif" style="font-size:30px;font-weight:600;margin-bottom:4px">StoreLine</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:32px">Entre ton code d'accès</div>
+    <label for="pwd-input" style="position:absolute;left:-9999px">Code d'accès</label>
+    <input id="pwd-input" type="password" placeholder="• • • •" autocomplete="off"
+      onkeydown="if(event.key==='Enter')checkPassword()">
+    <div id="pwd-error" style="color:var(--red);font-size:12px;min-height:18px;margin-bottom:12px"></div>
+    <button class="primary" onclick="checkPassword()">Entrer</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="top">
+    <div class="date-line"><span id="date-str"></span> · <span id="clock">--:--</span></div>
+    <div class="top-actions">
+      <button class="pill-btn" id="theme-toggle-global" onclick="toggleStoreLineTheme()" aria-label="Mode clair ou sombre">Sombre</button>
+      <a href="admin.html" id="admin-btn" class="pill-btn" style="display:none">Admin</a>
+      <button onclick="logout()" id="logout-btn" class="pill-btn" style="display:none" aria-label="Déconnexion">Déco</button>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px">
+    <h1 id="hello">Bonjour</h1>
+    <div class="avatar" id="avatar" aria-hidden="true">S</div>
+  </div>
+
+  <a class="tile dlc-card locked" href="dlc.html">
+    <div class="dlc-head">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="dlc-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="3"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg></div>
+        <div>
+          <div class="dlc-title">Suivi DLC</div>
+          <div class="dlc-sub" id="dlc-sub">Touchez pour commencer le tour</div>
+        </div>
+      </div>
+      <span class="chev"><svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span>
+    </div>
+    <div class="stats" id="dlc-stats">
+      <div class="stat" style="background:var(--red-bg)"><b id="n-red" style="color:var(--red)">0</b><span>À retirer</span></div>
+      <div class="stat" style="background:var(--yellow-bg)"><b id="n-soon" style="color:var(--yellow)">0</b><span>Cette semaine</span></div>
+      <div class="stat" style="background:var(--green-bg)"><b id="n-ok" style="color:var(--green)">0</b><span>Sous contrôle</span></div>
+    </div>
+  </a>
+
+  <div class="section">AUTRES OUTILS</div>
+  <div class="group">
+      <a class="tile tool-row locked" href="pertes.html"><span class="tool-ico">P</span><span class="tool-name">Pertes</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
+      <a class="tile tool-row locked" href="produits.html"><span class="tool-ico">B</span><span class="tool-name">Base produits</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
+      <a class="tile tool-row locked" href="temperatures.html"><span class="tool-ico">T</span><span class="tool-name">Températures</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
+      <a class="tile tool-row locked" href="allergenes.html"><span class="tool-ico">A</span><span class="tool-name">Allergènes</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
+      <a class="tile tool-row locked" href="transferts.html"><span class="tool-ico">Tr</span><span class="tool-name">Transferts</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
+      <a class="tile tool-row locked" href="commandes.html"><span class="tool-ico">C</span><span class="tool-name">Commandes</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
+      <a class="tile tool-row locked" href="documents.html"><span class="tool-ico">D</span><span class="tool-name">Documents</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
+      <a class="tile tool-row locked" href="donnees.html"><span class="tool-ico">Do</span><span class="tool-name">Données</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
+  </div>
+
+  <div class="version-tag">hub v2.1 · 09/10/2026 15:57</div>
+</div>
+
 <script>
 (function(){
   function applyStoreLineTheme(theme) {
-    var next = theme === 'light' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    try { localStorage.setItem('sl_theme', next); localStorage.setItem('sl_admin_theme', next); } catch(e) {}
+    var next = theme === 'dark' ? 'dark' : 'light';
+    if (next === 'light') document.documentElement.dataset.theme = 'light'; else delete document.documentElement.dataset.theme;
+    try { localStorage.setItem('sl_ui_theme', next); } catch(e) {}
     var btn = document.getElementById('theme-toggle-global');
     if (btn) btn.textContent = next === 'light' ? 'Sombre' : 'Clair';
   }
@@ -186,131 +153,6 @@
   applyStoreLineTheme(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
 })();
 </script>
-
-<!-- Écran de connexion -->
-<div id="lock-screen" style="position:fixed;inset:0;z-index:9999;background:var(--bg);display:none;align-items:center;justify-content:center;">
-  <div style="text-align:center;width:340px;padding:20px">
-    <div style="font-family:'Fraunces',serif;font-size:48px;font-weight:900;color:var(--amber);margin-bottom:8px">🏪</div>
-    <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--amber);margin-bottom:6px">StoreLine</div>
-    <div style="font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:40px">Gestion magasin</div>
-    <input id="pwd-input" type="password" placeholder="• • • •"
-      autocomplete="off"
-      style="width:100%;box-sizing:border-box;padding:18px 20px;background:var(--surface);border:2px solid var(--border);border-radius:14px;color:var(--text);font-family:'DM Mono',monospace;font-size:28px;text-align:center;letter-spacing:12px;outline:none;margin-bottom:8px;transition:border-color .2s"
-      onkeydown="if(event.key==='Enter')checkPassword()"
-      oninput="if(this.value.length>0){this.style.borderColor='var(--amber)'}else{this.style.borderColor='var(--border)'}"
-    >
-    <div id="pwd-error" style="color:var(--red);font-size:12px;min-height:18px;margin-bottom:14px"></div>
-    <button onclick="checkPassword()" style="width:100%;padding:18px;background:var(--amber);border:none;border-radius:14px;font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:#000;cursor:pointer;transition:all .15s">Entrer →</button>
-  </div>
-</div>
-
-<header>
-  <div>
-    <div class="logo-title">🏪 StoreLine</div>
-    <div class="logo-sub">Gestion magasin</div>
-  </div>
-  <div style="display:flex;align-items:center;gap:12px">
-    <div class="date-display">
-      <span id="clock">--:--</span>
-      <span id="date-str"></span>
-    </div>
-    <button class="theme-toggle-global" id="theme-toggle-global" onclick="toggleStoreLineTheme()" title="Mode clair / sombre" aria-label="Mode clair ou sombre">Clair</button>
-    <a href="admin.html" id="admin-btn" style="display:none;padding:6px 12px;background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:#a78bfa;text-decoration:none;transition:all .15s">⚙ Admin</a>
-    <button onclick="logout()" id="logout-btn" style="display:none;padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--red)';this.style.borderColor='rgba(255,64,64,.4)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">↩ Déco</button>
-  </div>
-</header>
-
-<div class="hero">
-  <div class="hero-title" style="font-size:30px">Outils internes</div>
-  <div class="hero-sub">Espace de travail - StoreLine</div>
-</div>
-
-<div class="featured-wrap">
-  <a class="tile featured locked" href="dlc.html">
-    <div class="tile-accent"></div>
-    <div class="tile-icon">📦</div>
-    <div>
-      <div class="tile-name">Suivi DLC</div>
-      <div class="tile-desc">Dates de péremption de tes blocs, alertes, produits sans DLC, historique et scanner code-barres.</div>
-      <div class="tile-badge">✓ Opérationnel</div>
-    </div>
-    <div class="tile-go">Ouvrir →</div>
-  </a>
-</div>
-
-<div class="section-label">Autres outils</div>
-<div class="grid">
-
-  <a class="tile locked" href="pertes.html">
-    <div class="tile-accent"></div>
-    <div class="tile-icon">📉</div>
-    <div class="tile-name">Pertes</div>
-    <div class="tile-desc">Enregistrement des produits jetés. Historique filtrable par jour, semaine, mois.</div>
-    <div class="tile-badge">✓ Opérationnel</div>
-  </a>
-
-  <a class="tile locked" href="produits.html">
-    <div class="tile-accent"></div>
-    <div class="tile-icon">📋</div>
-    <div class="tile-name">Base produits</div>
-    <div class="tile-desc">Catalogue complet des articles. Recherche par nom, marque ou code-barres.</div>
-    <div class="tile-badge">✓ Opérationnel</div>
-  </a>
-
-  <a class="tile locked" href="allergenes.html">
-    <div class="tile-accent"></div>
-    <div class="tile-icon">⚠️</div>
-    <div class="tile-name">Allergènes</div>
-    <div class="tile-desc">Fiches allergènes par produit. Les 14 allergènes réglementaires, consultables rapidement.</div>
-    <div class="tile-badge">✓ Opérationnel</div>
-  </a>
-
-  <a class="tile locked" href="temperatures.html">
-    <div class="tile-accent"></div>
-    <div class="tile-icon">🌡️</div>
-    <div class="tile-name">Températures</div>
-    <div class="tile-desc">Relevé quotidien des températures par appareil. Historique et détection hors norme.</div>
-    <div class="tile-badge">✓ Opérationnel</div>
-  </a>
-
-  <a class="tile locked" href="documents.html">
-    <div class="tile-accent"></div>
-    <div class="tile-icon">📁</div>
-    <div class="tile-name">Documents</div>
-    <div class="tile-desc">Checklists d'ouverture/fermeture, fiches PDF, contacts utiles.</div>
-    <div class="tile-badge">✓ Opérationnel</div>
-  </a>
-
-
-  <a class="tile locked" href="transferts.html">
-    <div class="tile-accent"></div>
-    <div class="tile-icon">🔄</div>
-    <div class="tile-name">Transferts</div>
-    <div class="tile-desc">Bons de transfert inter-rayons. Articles, quantités, code-barres, prix total et historique.</div>
-    <div class="tile-badge">✓ Opérationnel</div>
-  </a>
-
-
-  <a class="tile locked" href="commandes.html">
-    <div class="tile-accent"></div>
-    <div class="tile-icon">📋</div>
-    <div class="tile-name">Commandes</div>
-    <div class="tile-desc">Bons de commande fournisseurs. Saisie par produit et jour de livraison, envoi email direct.</div>
-    <div class="tile-badge">✓ Opérationnel</div>
-  </a>
-
-  <a class="tile locked" href="donnees.html">
-    <div class="tile-accent"></div>
-    <div class="tile-icon">🗂</div>
-    <div class="tile-name">Données</div>
-    <div class="tile-desc">Vue tableur de toutes les données. Produits, pertes, températures, allergènes, transferts. Export CSV.</div>
-    <div class="tile-badge">✓ Opérationnel</div>
-  </a>
-
-</div>
-
-<div class="version-tag">hub v1.14 · 09/10/2026 10:00</div>
-
 <script>
 // ── Auth : check immédiat avant le rendu ──
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -446,18 +288,57 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (adminBtn) adminBtn.style.display = 'inline-flex';
     }
     if (slUser.email) {
-      const sub = document.querySelector('.hero-sub');
-      if (sub) sub.textContent = slUser.email + ' - StoreLine';
+      const raw = slUser.email.split('@')[0].split(/[._-]/)[0] || '';
+      const first = raw.charAt(0).toUpperCase() + raw.slice(1);
+      document.getElementById('hello').textContent = first ? 'Bonjour ' + first : 'Bonjour';
+      document.getElementById('avatar').textContent = (first.charAt(0) || 'S');
     }
+    loadDlcCounts(slToken, slUser).catch(e => console.warn('Compteurs DLC:', e));
   }
 });
+
+
+// ── Compteurs DLC (filtrés sur les blocs de l'utilisateur) ──
+function hubNorm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
+async function hubGet(path, token) {
+  const r = await fetch(SUPABASE_URL + path, { headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + token } });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+async function loadDlcCounts(token, user) {
+  if (!user || !user.tenant_id) return;
+  const rows = await hubGet('/rest/v1/dlc?tenant_id=eq.' + encodeURIComponent(user.tenant_id) + '&actif=eq.true&select=nom,marque,code_barres,dlc_date', token);
+  let blocs = [];
+  try {
+    const br = await hubGet('/rest/v1/dlc_blocs_users?user_id=eq.' + encodeURIComponent(user.id) + '&select=dlc_blocs(nom,actif,dlc_blocs_marques(marque),dlc_blocs_produits(nom,marque,code_barres))', token);
+    blocs = (br || []).map(x => x.dlc_blocs).filter(b => b && b.actif !== false);
+  } catch(e) {}
+  const inBlocs = (p) => {
+    if (!blocs.length) return true;
+    const m = hubNorm(p.marque), n = hubNorm(p.nom), c = String(p.code_barres || '').trim();
+    return blocs.some(b => (b.dlc_blocs_marques || []).some(x => hubNorm(x.marque) === m) ||
+      (b.dlc_blocs_produits || []).some(x => (c && String(x.code_barres || '').trim() === c) || (hubNorm(x.nom) === n && hubNorm(x.marque) === m)));
+  };
+  const today = new Date(); today.setHours(0,0,0,0);
+  const c = { red: 0, soon: 0, ok: 0 };
+  (rows || []).filter(inBlocs).forEach(p => {
+    const d = Math.round((new Date(p.dlc_date + 'T00:00:00') - today) / 86400000);
+    if (d <= 0) c.red++; else if (d <= 7) c.soon++; else c.ok++;
+  });
+  document.getElementById('n-red').textContent = c.red;
+  document.getElementById('n-soon').textContent = c.soon;
+  document.getElementById('n-ok').textContent = c.ok;
+  document.getElementById('dlc-stats').style.display = 'grid';
+  document.getElementById('dlc-sub').textContent = c.red ? (c.red + ' produit' + (c.red > 1 ? 's' : '') + ' à retirer aujourd’hui') : 'Tout est sous contrôle';
+}
 
 function updateClock() {
   const now = new Date();
   document.getElementById('clock').textContent = now.toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit' });
-  document.getElementById('date-str').textContent = ' · ' + now.toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' });
+  const d = now.toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' });
+  document.getElementById('date-str').textContent = d.charAt(0).toUpperCase() + d.slice(1);
 }
-updateClock(); setInterval(updateClock, 1000);
+updateClock(); setInterval(updateClock, 30000);
 </script>
 </body>
 </html>

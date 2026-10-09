@@ -65,7 +65,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <script>
 (function(){
   try {
-    var t = localStorage.getItem('sl_theme') || localStorage.getItem('sl_admin_theme') || 'dark';
+    var t = localStorage.getItem('sl_ui_theme') || 'light';
     if (t === 'light') document.documentElement.dataset.theme = 'light';
   } catch(e) {}
 })();
@@ -447,6 +447,110 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   .theme-toggle-global, #theme-toggle { display:none !important; }
 </style>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" crossorigin="anonymous"></script>
+
+<style id="sl-ui">
+  /* StoreLine UI v2 — Verre × Atelier */
+  html:not([data-theme="light"]) {
+    --bg:#161412; --surface:#211e1b; --surface2:#2b2723; --border:#3a342e; --border2:#4a4239;
+    --text:#f4efe7; --muted:#a3978a; --amber:#e8a045; --amber2:#f0b264;
+    --red:#ff7a6e; --red-bg:rgba(255,122,110,.12); --yellow:#f0b450; --yellow-bg:rgba(240,180,80,.12);
+    --green:#6fcf97; --green-bg:rgba(111,207,151,.12); --blue:#7fb8ff; --purple:#b9a2ff;
+    --grey:#9a8f84; --grey-bg:rgba(154,143,132,.12);
+    --ui-shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.25);
+  }
+  html[data-theme="light"] {
+    --bg:#f4efe7; --surface:#fffcf7; --surface2:#f1e6d6; --border:#e2d7c9; --border2:#cfc2b2;
+    --text:#23201c; --muted:#6e6256; --amber:#ad5a10; --amber2:#c46f15;
+    --red:#b3261e; --red-bg:#fbece9; --yellow:#8a5a00; --yellow-bg:#fbf2e1;
+    --green:#2f6b45; --green-bg:#ecf3ec; --blue:#1f6aa5; --purple:#6b4fc0;
+    --grey:#857a6f; --grey-bg:rgba(133,122,111,.12);
+    --ui-shadow:0 1px 2px rgba(60,40,20,.05), 0 10px 28px rgba(60,40,20,.08);
+  }
+  :root { --ui-sans:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', sans-serif; --ui-serif:'Fraunces', Georgia, serif; }
+  html body { background:var(--bg) !important; color:var(--text); -webkit-font-smoothing:antialiased; }
+  html body, html body * { font-family:var(--ui-sans) !important; }
+  html body [style*="Fraunces"], html body h1, html body .logo-title, html body .stat-count, html body .modal-title, html body .archive-name, html body .empty-state-text, html body .dlc-title { font-family:var(--ui-serif) !important; letter-spacing:-.3px; }
+  header { background:color-mix(in srgb, var(--bg) 86%, transparent) !important; -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); }
+  .modal-overlay { background:rgba(35,32,28,.38) !important; -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); }
+  .modal { border-radius:22px !important; border:none !important; box-shadow:0 20px 60px rgba(0,0,0,.18) !important; background:var(--surface) !important; }
+  .form-input, input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="date"], input[type="search"], select, textarea { border-radius:12px !important; }
+  .toast { border-radius:14px !important; box-shadow:var(--ui-shadow) !important; }
+  .theme-toggle-global, #theme-toggle { display:none !important; }
+</style>
+
+<style id="sl-ui-dlc">
+  .dlc-header { position:sticky; top:0; z-index:100; display:block !important; padding:calc(env(safe-area-inset-top) + 10px) 16px 10px !important; border-bottom:.5px solid var(--border) !important; height:auto !important; }
+  .dlc-topbar, .dlc-titlerow, .main { max-width:860px; margin-left:auto; margin-right:auto; }
+  .dlc-topbar { display:flex; justify-content:space-between; align-items:center; min-height:40px; }
+  .back-link { font-size:17px; color:var(--amber); text-decoration:none; padding:8px 0; }
+  .top-pills { display:flex; gap:8px; }
+  .pill-btn { height:34px; padding:0 13px; border-radius:17px; border:1px solid var(--border); background:var(--surface); color:var(--muted); font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .pill-btn.icon { width:34px; padding:0; }
+  .pill-btn:hover { color:var(--text); }
+  .dlc-titlerow { display:flex; justify-content:space-between; align-items:flex-end; gap:10px; margin-top:2px; }
+  .dlc-title { font-size:32px !important; font-weight:600; letter-spacing:-.8px !important; margin:0; color:var(--text); }
+  .sync-status { display:flex !important; align-items:center; gap:6px; background:none !important; border:none !important; padding:6px 0 !important; cursor:pointer; }
+  .sync-label-text { font-size:12px !important; color:var(--muted) !important; letter-spacing:0 !important; text-transform:none !important; }
+  .main { padding:12px 16px !important; }
+  .search-row { display:flex; gap:8px; }
+  .search-field { flex:1; display:flex; align-items:center; gap:8px; height:42px; padding:0 12px; border-radius:12px; background:var(--surface2); color:var(--muted); }
+  .search-field input { flex:1; min-width:0; border:none !important; background:transparent !important; outline:none; font-size:16px; color:var(--text); padding:0 !important; height:100%; }
+  .scan-btn { width:46px; height:42px; border:none; border-radius:12px; background:var(--text); color:var(--bg); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .bloc-row { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  #bloc-selector-wrap { gap:6px; overflow-x:auto; scrollbar-width:none; padding:0 !important; flex:1; min-width:0; }
+  .bloc-pill { height:32px !important; padding:0 13px !important; border-radius:16px !important; border:1px solid var(--border) !important; background:var(--surface) !important; color:var(--muted) !important; font-size:12px !important; font-weight:600 !important; }
+  .bloc-pill.active { background:var(--text) !important; border-color:var(--text) !important; color:var(--bg) !important; }
+  .sort-btn { margin-left:auto; height:32px; padding:0 10px; border:none; background:none; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .seg { display:flex; background:var(--surface2); border-radius:10px; padding:2px; }
+  .seg .filter-btn { flex:1; height:32px; border:none !important; border-radius:8px !important; background:transparent !important; color:var(--text) !important; font-size:13px !important; font-weight:500 !important; letter-spacing:0 !important; text-transform:none !important; padding:0 !important; cursor:pointer; display:flex !important; align-items:center; justify-content:center; text-align:center; gap:4px; }
+  .seg .filter-btn.active { background:var(--surface) !important; box-shadow:0 1px 3px rgba(60,40,20,.15); }
+  #product-list { margin-top:6px; }
+  .dlc-section { font-size:12px; font-weight:700; letter-spacing:1px; padding:16px 4px 8px; color:var(--muted); }
+  .dlc-section.red { color:var(--red); } .dlc-section.yellow { color:var(--yellow); } .dlc-section.green { color:var(--green); }
+  .dlc-group { background:var(--surface); border-radius:16px; overflow:hidden; }
+  .dlc-row { width:100%; display:flex; align-items:center; gap:12px; padding:12px 16px; min-height:62px; border:none; border-bottom:.5px solid var(--border); background:transparent; text-align:left; cursor:pointer; color:var(--text); }
+  .dlc-row:last-child { border-bottom:none; }
+  .dlc-row:hover, .dlc-row:focus-visible { background:var(--surface2); }
+  .dlc-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .dlc-row-name { font-size:16px; font-weight:500; }
+  .dlc-row-brand { font-size:13px; color:var(--muted); }
+  .dlc-pill { flex-shrink:0; font-size:12px; font-weight:600; padding:4px 10px; border-radius:999px; background:var(--grey-bg); color:var(--grey); }
+  .dlc-pill.red { background:var(--red-bg); color:var(--red); } .dlc-pill.yellow { background:var(--yellow-bg); color:var(--yellow); } .dlc-pill.green { background:var(--green-bg); color:var(--green); }
+  .dlc-empty { text-align:center; padding:56px 20px; color:var(--muted); font-family:var(--ui-serif) !important; font-size:20px; }
+  .view-container { padding-bottom:110px !important; }
+  .fab-add { display:flex !important; position:fixed; right:20px; bottom:calc(env(safe-area-inset-bottom) + 24px) !important; width:56px !important; height:56px !important; border-radius:28px !important; border:none !important; background:#e8a045 !important; color:#fff !important; font-size:30px !important; align-items:center; justify-content:center; box-shadow:0 8px 24px rgba(232,160,69,.45) !important; z-index:150; }
+  .btn-add.desktop-only { display:none !important; }
+  .toast-container { bottom:calc(env(safe-area-inset-bottom) + 92px) !important; }
+  .tabbar { position:fixed; left:0; right:0; bottom:0; z-index:140; display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); padding:4px 0 calc(env(safe-area-inset-bottom) + 6px); background:color-mix(in srgb, var(--bg) 90%, transparent); -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); border-top:.5px solid var(--border); }
+  .tabbar a, .tabbar button { min-height:46px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; color:var(--muted); text-decoration:none; background:none; border:none; cursor:pointer; }
+  .tabbar .on { color:var(--amber); }
+  .sheet-overlay { position:fixed; inset:0; z-index:900; background:rgba(35,32,28,.38); display:flex; align-items:flex-end; justify-content:center; padding:8px; }
+  .action-sheet { width:100%; max-width:440px; display:flex; flex-direction:column; gap:8px; padding-bottom:env(safe-area-inset-bottom); }
+  .as-card { background:var(--surface); border-radius:18px; overflow:hidden; }
+  .as-head { padding:16px; text-align:center; border-bottom:.5px solid var(--border); }
+  .as-brand { font-size:13px; color:var(--muted); }
+  .as-name { font-family:var(--ui-serif) !important; font-size:20px; font-weight:600; margin-top:2px; }
+  .as-date { font-size:13px; font-weight:600; margin-top:4px; color:var(--muted); }
+  .as-date.red { color:var(--red); } .as-date.yellow { color:var(--yellow); } .as-date.green { color:var(--green); }
+  .as-btn { width:100%; border:none; border-bottom:.5px solid var(--border); background:none; padding:16px; font-size:18px; color:var(--amber); cursor:pointer; }
+  .as-btn:last-child { border-bottom:none; }
+  .as-btn.ok { color:var(--green); font-weight:600; }
+  .as-btn:hover { background:var(--surface2); }
+  .as-cancel { border:none; background:var(--surface); border-radius:18px; padding:16px; font-size:18px; font-weight:600; color:var(--amber); cursor:pointer; }
+  .undo-bar { position:fixed; left:16px; right:16px; bottom:calc(env(safe-area-inset-bottom) + 92px); z-index:800; max-width:520px; margin:0 auto; background:#23201c; color:#f8f2e9; border-radius:14px; padding:10px 10px 10px 16px; align-items:center; gap:12px; box-shadow:0 10px 30px rgba(0,0,0,.25); font-size:14px; }
+  .undo-bar span { flex:1; }
+  .undo-bar button { border:none; background:none; color:#e8a045; font-size:14px; font-weight:700; cursor:pointer; min-height:36px; padding:0 8px; }
+  .date-presets { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .date-presets button { border:1px solid var(--border); background:var(--surface2); color:var(--text); border-radius:999px; padding:8px 12px; font-size:13px; cursor:pointer; }
+  .date-presets button:hover { border-color:var(--amber); }
+  .danger-btn { width:100%; margin-top:14px; border:none; border-radius:14px; background:var(--red-bg); color:var(--red); padding:14px; font-size:15px; font-weight:600; cursor:pointer; }
+  .btn-confirm { border-radius:999px !important; background:#e8a045 !important; color:#23201c !important; font-weight:700 !important; }
+  .btn-cancel { border-radius:999px !important; }
+  .form-label { letter-spacing:.3px !important; text-transform:none !important; font-size:13px !important; color:var(--muted) !important; }
+  @media (max-width:640px) {
+    #modal .modal, #modal-edit .modal { position:fixed; left:0; right:0; bottom:0; max-width:none !important; width:100% !important; border-radius:22px 22px 0 0 !important; max-height:92vh; overflow-y:auto; padding-bottom:calc(env(safe-area-inset-bottom) + 20px) !important; }
+  }
+</style>
 </head>
 <body>
 <button class="theme-toggle-global" id="theme-toggle-global" onclick="toggleStoreLineTheme()" title="Mode clair / sombre" aria-label="Mode clair ou sombre">Clair</button>
@@ -455,7 +559,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   function applyStoreLineTheme(theme) {
     var next = theme === 'light' ? 'light' : 'dark';
     document.documentElement.dataset.theme = next;
-    try { localStorage.setItem('sl_theme', next); localStorage.setItem('sl_admin_theme', next); } catch(e) {}
+    
     var btn = document.getElementById('theme-toggle-global');
     if (btn) btn.textContent = next === 'light' ? 'Sombre' : 'Clair';
   }
@@ -482,78 +586,92 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
-<header>
-  <div class="logo">
-    <span class="logo-title">DLC Manager</span>
-    <span class="logo-sub">StoreLine</span>
+<header class="dlc-header">
+  <div class="dlc-topbar">
+    <a href="hub.html" class="back-link">‹ Accueil</a>
+    <div class="top-pills">
+      <button class="pill-btn" id="nodlc-btn" onclick="openNoDlc()">Sans DLC</button>
+      <button class="pill-btn icon" onclick="openHisto()" aria-label="Historique de mes changements">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12a9 9 0 103-6.7L3 8"></path><path d="M3 3v5h5M12 7v5l3 2"></path></svg>
+      </button>
+    </div>
   </div>
-  <div class="header-right">
-    <div class="sync-status" onclick="fullSync()" title="Cliquer pour synchroniser" aria-label="Synchroniser les données">
+  <div class="dlc-titlerow">
+    <h1 class="dlc-title">Suivi DLC</h1>
+    <div class="sync-status" onclick="fullSync()" title="Synchroniser" role="button" tabindex="0" aria-label="Synchroniser les données">
       <div class="sync-dot" id="sync-dot"></div>
-      <div style="display:flex;flex-direction:column;gap:1px">
-        <span id="sync-label" class="sync-label-text">Synchronisation…</span>
-        <span id="sync-time" style="font-size:9px;color:var(--muted)">jamais synchronisé</span>
-      </div>
-    </div>
-
-    <div class="date-display">
-      <span id="clock">--:--</span>
-      <span id="date-str"></span>
+      <span id="sync-label" class="sync-label-text">Synchronisation…</span>
+      <span id="sync-time" style="display:none"></span>
     </div>
   </div>
+  <span id="clock" style="display:none"></span><span id="date-str" style="display:none"></span>
 </header>
 
-<div class="legend">
-  <div class="legend-pill" style="background:var(--red-bg);color:var(--red)"><div class="legend-dot" style="background:var(--red)"></div> Périmé aujourd'hui</div>
-  <div class="legend-pill" style="background:var(--yellow-bg);color:var(--yellow)"><div class="legend-dot" style="background:var(--yellow)"></div> 1–3 jours</div>
-  <div class="legend-pill" style="background:var(--green-bg);color:var(--green)"><div class="legend-dot" style="background:var(--green)"></div> 4–10 jours</div>
-  <div class="legend-pill" style="background:var(--grey-bg);color:var(--grey)"><div class="legend-dot" style="background:var(--grey)"></div> +10 jours</div>
-</div>
-
-<div class="stats" id="stats-bar"></div>
+<div class="stats" id="stats-bar" style="display:none"></div>
 
 <div id="view-dlc" class="view-container">
 <!-- Barre de recherche rapide -->
 <div class="main" style="padding-bottom:0;margin-bottom:0">
   <div style="max-width:100%;position:relative">
-    <div class="barcode-row">
-      <input class="form-input" id="quick-search" type="text" placeholder="🔍  Rechercher dans la liste ou scanner…"
-        oninput="onQuickInput()" onkeydown="if(event.key==='Enter'){hideQuickSugg();quickLookup()}"
-        autocomplete="off" aria-label="Recherche rapide de produit"
-        style="flex:1;background:var(--surface);border-color:var(--border);font-size:13px">
-      <button class="btn-scan" onclick="quickLookup()" title="Rechercher" aria-label="Lancer la recherche">🔍</button>
-      <button class="btn-scan" onclick="openQuickScanner()" title="Scanner" aria-label="Scanner un code-barres">📷</button>
+    <div class="search-row">
+      <label class="search-field" for="quick-search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+        <input id="quick-search" type="search" placeholder="Nom, marque ou code-barres"
+          oninput="onQuickInput()" onkeydown="if(event.key==='Enter'){hideQuickSugg();quickLookup()}"
+          autocomplete="off" aria-label="Recherche rapide de produit">
+      </label>
+      <button class="scan-btn" onclick="openQuickScanner()" aria-label="Scanner un code-barres">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3M7 12h10"></path></svg>
+      </button>
     </div>
     <div id="quick-suggestions" style="display:none;position:absolute;left:0;right:0;z-index:100;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:4px"></div>
   </div>
 </div>
 
 <div class="main">
-  <div class="toolbar">
-    <div class="toolbar-left" style="flex-wrap:wrap;gap:6px">
-      <div id="bloc-selector-wrap" style="display:none;gap:8px;flex-wrap:nowrap;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none"></div>
-      <button class="filter-btn active" onclick="setFilter('all',this)" aria-label="Afficher tous les produits">Tous</button>
-      <button class="filter-btn" onclick="setFilter('red',this)" aria-label="Filtrer les produits urgents">🔴 Urgents</button>
-      <button class="filter-btn" onclick="setFilter('yellow',this)" aria-label="Filtrer les produits bientôt périmés">🟡 Bientôt</button>
-      <button class="filter-btn" onclick="setFilter('green',this)" aria-label="Filtrer les produits OK">🟢 OK</button>
-      <button class="filter-btn" id="nodlc-btn" onclick="openNoDlc()" style="border-color:var(--muted);color:var(--muted)" aria-label="Voir les produits sans date">⚠ Sans DLC</button>
-      <button class="filter-btn" onclick="openHisto()" style="border-color:var(--muted);color:var(--muted)" aria-label="Historique de mes changements">🕓 Historique</button>
-      <button class="filter-btn" id="sort-btn" onclick="toggleSort()" title="Changer le tri" style="border-color:var(--muted);color:var(--muted)" aria-label="Changer le tri">↕ Par date</button>
-      <button class="filter-btn" id="view-btn" onclick="toggleView()" title="Vue liste / grille" style="border-color:var(--muted);color:var(--muted)" aria-label="Basculer vue liste ou grille">▦ Grille</button>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn-add desktop-only" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋ Ajouter</button>
-    </div>
+  <div class="bloc-row">
+    <div id="bloc-selector-wrap" style="display:none"></div>
+    <button class="sort-btn" id="sort-btn" onclick="toggleSort()" aria-label="Changer le tri">↕ Par date</button>
   </div>
+  <div class="seg" role="group" aria-label="Filtrer">
+    <button class="filter-btn active" onclick="setFilter('all',this)">Tous</button>
+    <button class="filter-btn" onclick="setFilter('red',this)">Urgents</button>
+    <button class="filter-btn" onclick="setFilter('yellow',this)">Bientôt</button>
+    <button class="filter-btn" onclick="setFilter('green',this)">OK</button>
+  </div>
+  <button id="view-btn" style="display:none" aria-hidden="true" tabindex="-1"></button>
   <div id="product-list"></div>
 </div>
 
 </div><!-- /view-dlc -->
 <!-- v2.8: FAB (Floating Action Button) mobile -->
-<button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
+<button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter une DLC">+</button>
+
+<!-- Feuille d'actions article -->
+<div class="sheet-overlay" id="sheet-actions" style="display:none" onclick="if(event.target===this)closeActions()">
+  <div class="action-sheet" role="dialog" aria-modal="true" aria-labelledby="as-name">
+    <div class="as-card">
+      <div class="as-head">
+        <div class="as-brand" id="as-brand"></div>
+        <div class="as-name" id="as-name"></div>
+        <div class="as-date" id="as-date"></div>
+      </div>
+      <button class="as-btn ok" onclick="actVerify()">✓ Vérifié — retiré du rayon</button>
+      <button class="as-btn" onclick="actEdit()">Modifier date et infos</button>
+      <button class="as-btn" onclick="actDuplicate()">Dupliquer (nouveau lot)</button>
+    </div>
+    <button class="as-cancel" onclick="closeActions()">Annuler</button>
+  </div>
+</div>
+
+<!-- Bandeau d'annulation -->
+<div class="undo-bar" id="undo-bar" style="display:none" role="status">
+  <span id="undo-text"></span>
+  <button onclick="undoLast()">Annuler</button>
+</div>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  dlc v3.4 · 09/10/2026 10:00
+  dlc v4.1 · 09/10/2026 15:57
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -688,7 +806,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <!-- Modal -->
 <div class="modal-overlay" id="modal" style="display:none" onclick="closeModalOutside(event)">
   <div class="modal">
-    <div class="modal-title">Nouveau produit</div>
+    <div class="modal-title">Nouvelle DLC</div>
 
     <div class="form-group">
       <label class="form-label">Recherche produit (nom ou code-barres)</label>
@@ -716,6 +834,13 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="form-group">
       <label class="form-label">Date de péremption (DLC)</label>
       <input class="form-input" id="f-date" type="date" aria-label="Date de péremption">
+      <div class="date-presets">
+        <button type="button" onclick="setDatePreset('f-date',0)">Aujourd'hui</button>
+        <button type="button" onclick="setDatePreset('f-date',1)">Demain</button>
+        <button type="button" onclick="setDatePreset('f-date',3)">+3 j</button>
+        <button type="button" onclick="setDatePreset('f-date',7)">+7 j</button>
+        <button type="button" onclick="setDatePreset('f-date',14)">+14 j</button>
+      </div>
     </div>
 
     <div class="modal-actions">
@@ -767,12 +892,19 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="form-group">
       <label class="form-label">Nouvelle date de péremption (DLC)</label>
       <input class="form-input" id="edit-date" type="date" aria-label="Nouvelle date de péremption">
+      <div class="date-presets">
+        <button type="button" onclick="setDatePreset('edit-date',0)">Aujourd'hui</button>
+        <button type="button" onclick="setDatePreset('edit-date',1)">Demain</button>
+        <button type="button" onclick="setDatePreset('edit-date',3)">+3 j</button>
+        <button type="button" onclick="setDatePreset('edit-date',7)">+7 j</button>
+        <button type="button" onclick="setDatePreset('edit-date',14)">+14 j</button>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeEditDate()" aria-label="Annuler la modification">Annuler</button>
       <button class="btn-confirm" onclick="confirmEditDate()" aria-label="Enregistrer">Enregistrer →</button>
     </div>
-    <button onclick="deleteFromEdit()" style="width:100%;margin-top:12px;padding:10px;background:transparent;border:1px solid rgba(255,64,64,.35);border-radius:8px;color:var(--red);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer">🗑 Supprimer définitivement (suivi + base produits)</button>
+    <button class="danger-btn" onclick="deleteFromEdit()">Supprimer définitivement</button>
   </div>
 </div>
 
@@ -1350,7 +1482,7 @@ async function verifyProduct(id) {
   render();
   updateNoDlcBadge();
   if (dataSource === 'supabase' && canUseSupabase() && p.dbId) {
-    toast(`✓ "${p.name}" retiré`);
+    showUndo(`« ${p.name} » retiré`);
     return;
   }
   if (p.eventId) {
@@ -1963,7 +2095,7 @@ async function updateNoDlcBadge() {
     return nom && !tracked.has(nom) && !exclusions.has(nom);
   }).length;
   const btn = document.getElementById('nodlc-btn');
-  if (btn) btn.textContent = count > 0 ? `⚠ Sans DLC (${count})` : '⚠ Sans DLC';
+  if (btn) btn.textContent = count > 0 ? `Sans DLC · ${count}` : 'Sans DLC';
 }
 
 async function openNoDlc() {
@@ -2558,82 +2690,88 @@ function renderStats() {
 
 }
 
+function dlcWhen(d) { return d < 0 ? 'Périmé ' + Math.abs(d) + ' j' : d === 0 ? "Aujourd'hui" : d === 1 ? 'Demain' : 'Dans ' + d + ' j'; }
+function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+
 function renderProducts() {
   const list = document.getElementById('product-list');
-
   let active = products.filter(p => !p.archived);
-  active = applyBlocFilter(active);  // v3.0 : filtre blocs
-  if (currentFilter !== 'all') active = active.filter(p => statusClass(daysUntil(p.dlc)) === currentFilter);
+  active = applyBlocFilter(active);
+  if (currentFilter === 'green') active = active.filter(p => ['green','grey'].includes(statusClass(daysUntil(p.dlc))));
+  else if (currentFilter !== 'all') active = active.filter(p => statusClass(daysUntil(p.dlc)) === currentFilter);
 
   if (!active.length) {
-    list.innerHTML = emptyState('Aucun produit','Clique sur "+ Ajouter produit" pour commencer');
+    list.innerHTML = '<div class="dlc-empty">' + (products.length ? 'Rien à afficher ici.' : 'Aucun produit suivi pour l’instant.') + '</div>';
     return;
   }
+  const section = (title, cls, items) => `<div class="dlc-section ${cls}">${title} · ${items.length}</div><div class="dlc-group">${items.map(productRow).join('')}</div>`;
 
   if (currentSort === 'brand') {
-    // Tri par marque puis par date
-    active.sort((a, b) => a.brand.localeCompare(b.brand) || daysUntil(a.dlc) - daysUntil(b.dlc));
+    active.sort((a, b) => a.brand.localeCompare(b.brand, 'fr', { sensitivity:'base' }) || daysUntil(a.dlc) - daysUntil(b.dlc));
     const brands = {};
-    active.forEach(p => { if (!brands[p.brand]) brands[p.brand] = []; brands[p.brand].push(p); });
-    let html = '';
-    for (const [brand, items] of Object.entries(brands)) {
-      html += `<div class="section-title">🏷 ${brand} (${items.length})</div>
-               <div class="products-grid">${items.map(productCard).join('')}</div>`;
-    }
-    list.innerHTML = html;
+    active.forEach(p => { (brands[p.brand] = brands[p.brand] || []).push(p); });
+    list.innerHTML = Object.entries(brands).map(([b, items]) => section(escHtml(b).toUpperCase(), 'brand', items)).join('');
     return;
   }
-
-  // Tri par date (défaut)
   active.sort((a, b) => daysUntil(a.dlc) - daysUntil(b.dlc));
   const groups = { red:[], yellow:[], green:[], grey:[] };
   active.forEach(p => groups[statusClass(daysUntil(p.dlc))].push(p));
   groups.red.sort((a, b) =>
     a.brand.localeCompare(b.brand, 'fr', { sensitivity: 'base' }) ||
     daysUntil(a.dlc) - daysUntil(b.dlc) ||
-    a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
-  );
-  const labels = { red:'🔴 À retirer immédiatement', yellow:'🟡 À surveiller', green:'🟢 Sous contrôle', grey:'⚪ Longue conservation' };
-
-  let html = '';
-  for (const [cls, items] of Object.entries(groups)) {
-    if (!items.length) continue;
-    html += `<div class="section-title">${labels[cls]} (${items.length})</div>
-             <div class="products-grid">${items.map(productCard).join('')}</div>`;
-  }
-  list.innerHTML = html;
+    a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
+  const labels = { red:'À RETIRER', yellow:'À SURVEILLER', green:'SOUS CONTRÔLE', grey:'LONGUE CONSERVATION' };
+  list.innerHTML = Object.entries(groups).filter(([, it]) => it.length).map(([cls, it]) => section(labels[cls], cls, it)).join('');
 }
 
-const productCard = p => {
-  const days = daysUntil(p.dlc), cls = statusClass(days);
-  const daysColor = cls === 'red' ? 'var(--red)' : cls === 'yellow' ? 'var(--yellow)' : cls === 'green' ? 'var(--green)' : 'var(--muted)';
-  const urgentBadge = cls === 'red' ? '<div class="urgent-badge">URGENT</div>' : '';
-  return `<div class="product-card ${cls}" id="card-${p.id}"
-    data-id="${p.id}"
-    ontouchstart="swipeStart(event,${p.id})"
-    ontouchmove="swipeMove(event,${p.id})"
-    ontouchend="swipeEnd(event,${p.id})">
-    <div class="swipe-hint" id="swipe-hint-${p.id}">✓</div>
-    ${urgentBadge}
-    <div class="card-top"><span class="card-brand">${p.brand}</span><span class="status-badge">${statusLabel(days)}</span></div>
-    <div class="card-name">${p.name}</div>
-    <div class="card-days" style="color:${daysColor}">${daysShortLabel(days)}</div>
-    <div class="card-date">DLC : <span>${fmtDate(p.dlc)}</span></div>
-    ${p.barcode ? `<div class="card-date">Code : <span>${p.barcode}</span></div>` : ''}
-    <!-- Vue liste : infos inline -->
-    <div class="card-brand-inline" style="display:none">${p.brand}</div>
-    <div class="card-meta" style="display:none">
-      <span class="status-badge">${statusLabel(days)}</span>
-      <span class="card-date-inline">${fmtDate(p.dlc)}</span>
-      <span class="card-date-inline" style="font-weight:700;color:${daysColor}">${daysShortLabel(days)}</span>
-    </div>
-    <div class="card-actions">
-      <button class="action-btn archive" onclick="verifyProduct(${p.id})" aria-label="Retirer ${p.name}">✓ Retiré</button>
-      <button class="action-btn edit"    onclick="openEditDate(${p.id})" aria-label="Modifier ${p.name}">✏ Modifier</button>
-      <button class="action-btn edit"    onclick="duplicateProduct(${p.id})" title="Dupliquer" aria-label="Dupliquer ${p.name}">⧉</button>
-    </div>
-  </div>`;
+const productRow = p => {
+  const d = daysUntil(p.dlc), cls = statusClass(d);
+  return `<button class="dlc-row" onclick="openActions(${p.id})" aria-label="${escHtml(p.name)}, ${escHtml(p.brand)}, ${dlcWhen(d)}">
+    <span class="dlc-row-main"><span class="dlc-row-name">${escHtml(p.name)}</span><span class="dlc-row-brand">${escHtml(p.brand)}</span></span>
+    <span class="dlc-pill ${cls}">${dlcWhen(d)}</span>
+  </button>`;
 };
+const productCard = productRow;
+
+// ── Feuille d'actions ──
+let _asId = null;
+function openActions(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+  _asId = id;
+  const d = daysUntil(p.dlc);
+  document.getElementById('as-brand').textContent = p.brand + (p.barcode ? ' · ' + p.barcode : '');
+  document.getElementById('as-name').textContent = p.name;
+  const dt = document.getElementById('as-date');
+  dt.textContent = 'DLC ' + fmtDate(p.dlc) + ' · ' + dlcWhen(d);
+  dt.className = 'as-date ' + statusClass(d);
+  document.getElementById('sheet-actions').style.display = 'flex';
+}
+function closeActions() { document.getElementById('sheet-actions').style.display = 'none'; }
+function actVerify() { const id = _asId; closeActions(); verifyProduct(id); }
+function actEdit() { const id = _asId; closeActions(); openEditDate(id); }
+function actDuplicate() { const id = _asId; closeActions(); duplicateProduct(id); }
+
+// ── Bandeau Annuler ──
+let _undoTimer = null;
+function showUndo(msg) {
+  const bar = document.getElementById('undo-bar');
+  document.getElementById('undo-text').textContent = msg;
+  bar.style.display = 'flex';
+  clearTimeout(_undoTimer);
+  _undoTimer = setTimeout(() => { bar.style.display = 'none'; }, 5000);
+}
+function undoLast() {
+  document.getElementById('undo-bar').style.display = 'none';
+  clearTimeout(_undoTimer);
+  undoHisto(0);
+}
+
+// ── Raccourcis de date ──
+function setDatePreset(inputId, n) {
+  const x = new Date(); x.setHours(12, 0, 0, 0); x.setDate(x.getDate() + n);
+  document.getElementById(inputId).value = x.toISOString().slice(0, 10);
+}
 
 const archiveCard = p => `<div class="archive-card">
   <div><div class="archive-name">${p.name}</div><div class="archive-meta">${p.brand} · DLC ${fmtDate(p.dlc)}</div></div>

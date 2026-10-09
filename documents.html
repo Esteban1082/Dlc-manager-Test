@@ -65,7 +65,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <script>
 (function(){
   try {
-    var t = localStorage.getItem('sl_theme') || localStorage.getItem('sl_admin_theme') || 'dark';
+    var t = localStorage.getItem('sl_ui_theme') || 'light';
     if (t === 'light') document.documentElement.dataset.theme = 'light';
   } catch(e) {}
 })();
@@ -171,6 +171,36 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   .version-tag { position:fixed; bottom:10px; left:14px; font-size:10px; color:var(--border); letter-spacing:1px; z-index:50; }
   .theme-toggle-global, #theme-toggle { display:none !important; }
 </style>
+
+<style id="sl-ui">
+  /* StoreLine UI v2 — Verre × Atelier */
+  html:not([data-theme="light"]) {
+    --bg:#161412; --surface:#211e1b; --surface2:#2b2723; --border:#3a342e; --border2:#4a4239;
+    --text:#f4efe7; --muted:#a3978a; --amber:#e8a045; --amber2:#f0b264;
+    --red:#ff7a6e; --red-bg:rgba(255,122,110,.12); --yellow:#f0b450; --yellow-bg:rgba(240,180,80,.12);
+    --green:#6fcf97; --green-bg:rgba(111,207,151,.12); --blue:#7fb8ff; --purple:#b9a2ff;
+    --grey:#9a8f84; --grey-bg:rgba(154,143,132,.12);
+    --ui-shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.25);
+  }
+  html[data-theme="light"] {
+    --bg:#f4efe7; --surface:#fffcf7; --surface2:#f1e6d6; --border:#e2d7c9; --border2:#cfc2b2;
+    --text:#23201c; --muted:#6e6256; --amber:#ad5a10; --amber2:#c46f15;
+    --red:#b3261e; --red-bg:#fbece9; --yellow:#8a5a00; --yellow-bg:#fbf2e1;
+    --green:#2f6b45; --green-bg:#ecf3ec; --blue:#1f6aa5; --purple:#6b4fc0;
+    --grey:#857a6f; --grey-bg:rgba(133,122,111,.12);
+    --ui-shadow:0 1px 2px rgba(60,40,20,.05), 0 10px 28px rgba(60,40,20,.08);
+  }
+  :root { --ui-sans:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', sans-serif; --ui-serif:'Fraunces', Georgia, serif; }
+  html body { background:var(--bg) !important; color:var(--text); -webkit-font-smoothing:antialiased; }
+  html body, html body * { font-family:var(--ui-sans) !important; }
+  html body [style*="Fraunces"], html body h1, html body .logo-title, html body .modal-title { font-family:var(--ui-serif) !important; letter-spacing:-.3px; }
+  header { background:color-mix(in srgb, var(--bg) 86%, transparent) !important; -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); }
+  .modal-overlay { background:rgba(35,32,28,.38) !important; -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); }
+  .modal { border-radius:22px !important; border:none !important; box-shadow:0 20px 60px rgba(0,0,0,.18) !important; background:var(--surface) !important; }
+  .form-input, input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="date"], input[type="search"], select, textarea { border-radius:12px !important; }
+  .toast { border-radius:14px !important; box-shadow:var(--ui-shadow) !important; }
+  .theme-toggle-global, #theme-toggle { display:none !important; }
+</style>
 </head>
 <body>
 <button class="theme-toggle-global" id="theme-toggle-global" onclick="toggleStoreLineTheme()" title="Mode clair / sombre" aria-label="Mode clair ou sombre">Clair</button>
@@ -179,7 +209,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   function applyStoreLineTheme(theme) {
     var next = theme === 'light' ? 'light' : 'dark';
     document.documentElement.dataset.theme = next;
-    try { localStorage.setItem('sl_theme', next); localStorage.setItem('sl_admin_theme', next); } catch(e) {}
+    
     var btn = document.getElementById('theme-toggle-global');
     if (btn) btn.textContent = next === 'light' ? 'Sombre' : 'Clair';
   }
@@ -302,7 +332,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">documents v2.4 · 09/10/2026 10:00</div>
+<div class="version-tag">documents v2.5 · 09/10/2026 15:36</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
