@@ -536,11 +536,11 @@ document.addEventListener('DOMContentLoaded', () => {
       <button class="filter-btn" onclick="setFilter('yellow',this)" aria-label="Filtrer les produits bientôt périmés">🟡 Bientôt</button>
       <button class="filter-btn" onclick="setFilter('green',this)" aria-label="Filtrer les produits OK">🟢 OK</button>
       <button class="filter-btn" id="nodlc-btn" onclick="openNoDlc()" style="border-color:var(--muted);color:var(--muted)" aria-label="Voir les produits sans date">⚠ Sans DLC</button>
+      <button class="filter-btn" onclick="openHisto()" style="border-color:var(--muted);color:var(--muted)" aria-label="Historique de mes changements">🕓 Historique</button>
       <button class="filter-btn" id="sort-btn" onclick="toggleSort()" title="Changer le tri" style="border-color:var(--muted);color:var(--muted)" aria-label="Changer le tri">↕ Par date</button>
       <button class="filter-btn" id="view-btn" onclick="toggleView()" title="Vue liste / grille" style="border-color:var(--muted);color:var(--muted)" aria-label="Basculer vue liste ou grille">▦ Grille</button>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn-controle-rapide" onclick="openControleRapide()" aria-label="Ouvrir le mode contrôle rapide">⚡ Contrôle rapide</button>
       <button class="btn-add desktop-only" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋ Ajouter</button>
     </div>
   </div>
@@ -552,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  dlc v3.1 · 07/10/2026 18:33
+  dlc v3.2 · 09/10/2026 09:41
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -622,6 +622,19 @@ document.addEventListener('DOMContentLoaded', () => {
   <div style="padding:14px 20px;border-top:2px solid var(--border);text-align:center;font-size:13px;color:var(--muted);background:var(--surface)">
     Urgents ce jour : <span id="cr-urgent" style="color:var(--red);font-weight:700;font-size:16px">…</span> &nbsp;|&nbsp;
     Total suivi : <span id="cr-total" style="color:var(--amber);font-weight:700;font-size:16px">…</span>
+  </div>
+</div>
+
+<!-- Modal Historique -->
+<div class="modal-overlay" id="modal-histo" style="display:none" onclick="if(event.target.id==='modal-histo')closeHisto()">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-title">🕓 Mes derniers changements</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Les 30 dernières actions faites sur cet appareil. Tu peux annuler ou attribuer une nouvelle date.</div>
+    <div id="histo-list" style="max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn-cancel" onclick="clearHisto()">Vider</button>
+      <button class="btn-cancel" onclick="closeHisto()">Fermer</button>
+    </div>
   </div>
 </div>
 
@@ -1272,6 +1285,7 @@ async function addProduct() {
         })
       });
       const row = Array.isArray(inserted) ? inserted[0] : null;
+      logHisto('ajout', { dbId: row && row.id, brand, name, barcode }, null, dlc);
       products.push(normalizeDlcRow(row || { nom:name, marque:brand, code_barres:barcode, dlc_date:dlc }, nextId++));
       dataSource = 'supabase';
       nextId = products.length + 1;
@@ -1304,6 +1318,7 @@ async function verifyProduct(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
   products = products.filter(x => x.id !== id);
+  logHisto('retrait', p, p.dlc, null);
   if (dataSource === 'supabase' && canUseSupabase() && p.dbId) {
     sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, {
       method:'PATCH',
@@ -1622,6 +1637,7 @@ async function confirmEditDate() {
         method:'PATCH',
         body: JSON.stringify({ dlc_date:newDlc })
       });
+      logHisto('date', p, p.dlc, newDlc);
       p.dlc = newDlc;
       toast(`✓ Date mise à jour -> ${fmtDate(newDlc)}`);
       render();
@@ -1635,6 +1651,7 @@ async function confirmEditDate() {
   try {
     const data = await api({ action: 'updateEvent', eventId: p.eventId, dlc: newDlc });
     if (data.success) {
+      logHisto('date', p, p.dlc, newDlc);
       p.dlc = newDlc;
       toast(`✅ Date mise à jour → ${fmtDate(newDlc)}`);
       render();
@@ -1964,8 +1981,19 @@ async function exclureArticle(nom) {
   }
 }
 
+function exclusionInMyBlocs(nom) {
+  if (!_userBlocs.length) return true;
+  const k = normKey(nom);
+  const sp = sheetProducts.find(p => normKey(p.nom_article || p.nom) === k);
+  if (sp) return inMyBlocs(sp.nom_article || sp.nom, sp.patissier || sp.marque, sp.code_barres);
+  const dp = products.find(p => normKey(p.name) === k);
+  if (dp) return inMyBlocs(dp.name, dp.brand, dp.barcode);
+  return false;
+}
+
 function renderExclusionsList() {
-  const exclusions = _exclusionsCache || [];
+  const allExcl = _exclusionsCache || [];
+  const exclusions = allExcl.map((nom, i) => ({ nom, i })).filter(x => exclusionInMyBlocs(x.nom));
   const list = document.getElementById('nodlc-excl-list');
   const excl = document.getElementById('nodlc-excl-count');
   if (excl) excl.textContent = exclusions.length ? `(${exclusions.length})` : '';
@@ -1975,7 +2003,7 @@ function renderExclusionsList() {
     return;
   }
 
-  list.innerHTML = exclusions.map((nom, i) => `
+  list.innerHTML = exclusions.map(({ nom, i }) => `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;
       background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
       <div>
@@ -2247,6 +2275,120 @@ function scanFeedback() {
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.2);
   } catch(e) {}
+}
+
+
+// ══════════════════════════════════════
+// v3.2 : Historique des changements (local, par utilisateur)
+// ══════════════════════════════════════
+const HISTO_MAX = 30;
+function histoKey() { const u = getStoredUser() || {}; return 'sl_dlc_histo_' + (u.id || 'local'); }
+function getHisto() { try { return JSON.parse(localStorage.getItem(histoKey()) || '[]'); } catch(e) { return []; } }
+function setHisto(h) { try { localStorage.setItem(histoKey(), JSON.stringify(h.slice(0, HISTO_MAX))); } catch(e) {} }
+
+function logHisto(type, p, oldDlc, newDlc) {
+  const h = getHisto();
+  h.unshift({ t: Date.now(), type, dbId: p.dbId || null, eventId: p.eventId || null,
+    brand: p.brand || '', name: p.name || '', barcode: p.barcode || '', oldDlc, newDlc, undone: false });
+  setHisto(h);
+}
+
+function openHisto() { renderHisto(); document.getElementById('modal-histo').style.display = 'flex'; }
+function closeHisto() { document.getElementById('modal-histo').style.display = 'none'; }
+function clearHisto() { if (confirm('Vider l’historique ?')) { setHisto([]); renderHisto(); } }
+
+function renderHisto() {
+  const el = document.getElementById('histo-list');
+  const h = getHisto();
+  if (!h.length) { el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">Aucun changement enregistré.</div>'; return; }
+  const labels = { retrait: ['✓ Retiré', 'var(--red)'], date: ['📅 Date modifiée', 'var(--amber)'], ajout: ['＋ Ajouté', 'var(--green)'] };
+  const minDate = today.toISOString().split('T')[0];
+  el.innerHTML = h.map((e, i) => {
+    const [lab, col] = labels[e.type] || ['?', 'var(--muted)'];
+    const when = new Date(e.t).toLocaleString('fr-BE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const detail = e.type === 'retrait' ? `DLC ${fmtDate(e.oldDlc)}`
+      : e.type === 'date' ? `${fmtDate(e.oldDlc)} → ${fmtDate(e.newDlc)}` : `DLC ${fmtDate(e.newDlc)}`;
+    const undoLabel = e.type === 'retrait' ? '↩ Remettre' : e.type === 'date' ? '↩ Ancienne date' : '✕ Supprimer';
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${col};border-radius:8px;padding:10px 12px;${e.undone ? 'opacity:.5' : ''}">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+        <span style="font-size:11px;font-weight:700;color:${col}">${lab}${e.undone ? ' · annulé' : ''}</span>
+        <span style="font-size:10px;color:var(--muted)">${when}</span>
+      </div>
+      <div style="font-size:13px;font-weight:600;margin-top:3px">${e.name}</div>
+      <div style="font-size:11px;color:var(--muted)">${e.brand} · ${detail}</div>
+      ${e.undone ? '' : `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
+        <button class="filter-btn" onclick="undoHisto(${i})" style="font-size:11px;padding:6px 10px">${undoLabel}</button>
+        <input type="date" id="histo-date-${i}" min="${minDate}" value="${e.newDlc || e.oldDlc || minDate}"
+          style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px">
+        <button class="filter-btn" onclick="setDateFromHisto(${i})" style="font-size:11px;padding:6px 10px">📅 Attribuer</button>
+      </div>`}
+    </div>`;
+  }).join('');
+}
+
+function findProductForHisto(e) {
+  return products.find(p => (e.dbId && p.dbId === e.dbId) || (e.eventId && p.eventId === e.eventId));
+}
+
+async function restoreRetrait(e, dlc) {
+  if (e.dbId && canUseSupabase()) {
+    await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(e.dbId)}`, { method:'PATCH', body: JSON.stringify({ actif:true, dlc_date: dlc }) });
+    products.push({ id: nextId++, dbId: e.dbId, brand: e.brand, name: e.name, barcode: e.barcode, dlc, archived:false });
+  } else {
+    const data = await api({ action:'createEvent', brand:e.brand, name:e.name, dlc, barcode:e.barcode });
+    if (!data.success) throw new Error(data.error || 'Calendar');
+    products.push({ id: nextId++, eventId: data.eventId, brand: e.brand, name: e.name, barcode: e.barcode, dlc, archived:false });
+  }
+}
+
+async function setProductDate(p, dlc) {
+  if (p.dbId && canUseSupabase()) {
+    await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, { method:'PATCH', body: JSON.stringify({ dlc_date: dlc }) });
+  } else {
+    const data = await api({ action:'updateEvent', eventId: p.eventId, dlc });
+    if (!data.success) throw new Error(data.error || 'Calendar');
+  }
+  p.dlc = dlc;
+}
+
+async function undoHisto(i) {
+  const h = getHisto(); const e = h[i];
+  if (!e || e.undone) return;
+  try {
+    if (e.type === 'retrait') {
+      await restoreRetrait(e, e.oldDlc);
+      toast(`✓ "${e.name}" remis en suivi`);
+    } else if (e.type === 'date') {
+      const p = findProductForHisto(e);
+      if (!p) throw new Error('article plus en suivi');
+      await setProductDate(p, e.oldDlc);
+      toast(`✓ Date remise au ${fmtDate(e.oldDlc)}`);
+    } else if (e.type === 'ajout') {
+      const p = findProductForHisto(e);
+      if (!p) throw new Error('article introuvable');
+      if (p.dbId && canUseSupabase()) await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, { method:'PATCH', body: JSON.stringify({ actif:false }) });
+      else if (p.eventId) await api({ action:'deleteEvent', eventId: p.eventId });
+      products = products.filter(x => x !== p);
+      toast(`✓ Ajout de "${e.name}" annulé`);
+    }
+    e.undone = true; setHisto(h);
+    render(); updateNoDlcBadge(); renderHisto();
+  } catch(err) { toast('⚠ ' + err.message, true); }
+}
+
+async function setDateFromHisto(i) {
+  const h = getHisto(); const e = h[i];
+  const dlc = (document.getElementById('histo-date-' + i) || {}).value;
+  if (!e || !dlc) { toast('⚠ Choisis une date', true); return; }
+  try {
+    const p = findProductForHisto(e);
+    if (p) await setProductDate(p, dlc);
+    else await restoreRetrait(e, dlc);
+    e.undone = true; setHisto(h);
+    logHisto(p ? 'date' : 'ajout', p || { dbId: e.dbId, brand: e.brand, name: e.name, barcode: e.barcode }, p ? e.newDlc || e.oldDlc : null, dlc);
+    toast(`✓ "${e.name}" → ${fmtDate(dlc)}`);
+    render(); updateNoDlcBadge(); renderHisto();
+  } catch(err) { toast('⚠ ' + err.message, true); }
 }
 
 // ── Dupliquer un article ──
