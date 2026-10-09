@@ -552,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  dlc v3.2 · 09/10/2026 09:41
+  dlc v3.3 · 09/10/2026 09:49
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -622,6 +622,21 @@ document.addEventListener('DOMContentLoaded', () => {
   <div style="padding:14px 20px;border-top:2px solid var(--border);text-align:center;font-size:13px;color:var(--muted);background:var(--surface)">
     Urgents ce jour : <span id="cr-urgent" style="color:var(--red);font-weight:700;font-size:16px">…</span> &nbsp;|&nbsp;
     Total suivi : <span id="cr-total" style="color:var(--amber);font-weight:700;font-size:16px">…</span>
+  </div>
+</div>
+
+<!-- Modal édition produit base -->
+<div class="modal-overlay" id="modal-prod-edit" style="display:none" onclick="if(event.target.id==='modal-prod-edit')closeProdEdit()">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">✏ Modifier le produit</div>
+    <div class="form-group"><label class="form-label">Nom de l'article</label><input class="form-input" id="pe-name" type="text"></div>
+    <div class="form-group"><label class="form-label">Marque / fournisseur</label><input class="form-input" id="pe-brand" type="text"></div>
+    <div class="form-group"><label class="form-label">Code-barres</label><input class="form-input" id="pe-barcode" type="text" inputmode="numeric"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeProdEdit()">Annuler</button>
+      <button class="btn-confirm" onclick="saveProdEdit()">Enregistrer →</button>
+    </div>
+    <button onclick="deleteProdEdit()" style="width:100%;margin-top:12px;padding:10px;background:transparent;border:1px solid rgba(255,64,64,.35);border-radius:8px;color:var(--red);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer">🗑 Supprimer définitivement de la base</button>
   </div>
 </div>
 
@@ -743,16 +758,20 @@ document.addEventListener('DOMContentLoaded', () => {
 <!-- Modal Changer Date -->
 <div class="modal-overlay" id="modal-edit" style="display:none" onclick="closeEditOutside(event)">
   <div class="modal">
-    <div class="modal-title">Changer la date</div>
-    <div id="edit-product-name" style="font-family:'Fraunces',serif;font-size:16px;color:var(--muted);margin-bottom:20px;"></div>
+    <div class="modal-title">Modifier l'article</div>
+    <div id="edit-product-name" style="font-family:'Fraunces',serif;font-size:16px;color:var(--muted);margin-bottom:16px;"></div>
+    <div class="form-group"><label class="form-label">Nom de l'article</label><input class="form-input" id="edit-name" type="text"></div>
+    <div class="form-group"><label class="form-label">Marque / fournisseur</label><input class="form-input" id="edit-brand" type="text"></div>
+    <div class="form-group"><label class="form-label">Code-barres</label><input class="form-input" id="edit-barcode" type="text" inputmode="numeric"></div>
     <div class="form-group">
       <label class="form-label">Nouvelle date de péremption (DLC)</label>
       <input class="form-input" id="edit-date" type="date" aria-label="Nouvelle date de péremption">
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeEditDate()" aria-label="Annuler la modification">Annuler</button>
-      <button class="btn-confirm" onclick="confirmEditDate()" aria-label="Mettre à jour la date">Mettre à jour →</button>
+      <button class="btn-confirm" onclick="confirmEditDate()" aria-label="Enregistrer">Enregistrer →</button>
     </div>
+    <button onclick="deleteFromEdit()" style="width:100%;margin-top:12px;padding:10px;background:transparent;border:1px solid rgba(255,64,64,.35);border-radius:8px;color:var(--red);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer">🗑 Supprimer définitivement (suivi + base produits)</button>
   </div>
 </div>
 
@@ -1610,6 +1629,9 @@ function openEditDate(id) {
   editingId = id;
   document.getElementById('edit-product-name').textContent = `${p.brand} – ${p.name}`;
   document.getElementById('edit-date').value = p.dlc;
+  document.getElementById('edit-name').value = p.name || '';
+  document.getElementById('edit-brand').value = p.brand || '';
+  document.getElementById('edit-barcode').value = p.barcode || '';
   document.getElementById('edit-date').min   = today.toISOString().split('T')[0];
   document.getElementById('modal-edit').style.display = 'flex';
 }
@@ -1622,45 +1644,122 @@ function closeEditDate() {
 function closeEditOutside(e) { if (e.target.id === 'modal-edit') closeEditDate(); }
 
 async function confirmEditDate() {
-  const newDlc = document.getElementById('edit-date').value;
+  const newDlc  = document.getElementById('edit-date').value;
+  const name    = document.getElementById('edit-name').value.trim();
+  const brand   = document.getElementById('edit-brand').value.trim();
+  const barcode = document.getElementById('edit-barcode').value.trim();
   if (!newDlc) { toast('⚠ Sélectionne une date', true); return; }
-
+  if (!name || !brand) { toast('⚠ Nom et marque obligatoires', true); return; }
   const p = products.find(x => x.id === editingId);
   if (!p) return;
-
+  const old = { name: p.name, brand: p.brand, barcode: p.barcode };
+  const infoChanged = name !== p.name || brand !== p.brand || barcode !== (p.barcode || '');
+  const dateChanged = newDlc !== p.dlc;
   closeEditDate();
-  toast(`⏳ Mise à jour de "${p.name}"…`);
-
-  if (dataSource === 'supabase' && canUseSupabase() && p.dbId) {
-    try {
-      await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, {
-        method:'PATCH',
-        body: JSON.stringify({ dlc_date:newDlc })
-      });
-      logHisto('date', p, p.dlc, newDlc);
-      p.dlc = newDlc;
-      toast(`✓ Date mise à jour -> ${fmtDate(newDlc)}`);
-      render();
-      return;
-    } catch(e) {
-      toast(`⚠ Supabase : ${e.message}`, true);
-      return;
-    }
-  }
-
+  if (!infoChanged && !dateChanged) return;
   try {
-    const data = await api({ action: 'updateEvent', eventId: p.eventId, dlc: newDlc });
-    if (data.success) {
-      logHisto('date', p, p.dlc, newDlc);
-      p.dlc = newDlc;
-      toast(`✅ Date mise à jour → ${fmtDate(newDlc)}`);
-      render();
-    } else {
-      toast(`⚠ Erreur : ${data.error || 'inconnue'}`, true);
+    if (p.dbId && canUseSupabase()) {
+      await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, {
+        method:'PATCH', body: JSON.stringify({ dlc_date:newDlc, nom:name, marque:brand, code_barres: barcode || null })
+      });
+    } else if (p.eventId) {
+      const data = await api({ action:'updateEvent', eventId:p.eventId, dlc:newDlc, brand, name, barcode });
+      if (!data.success) throw new Error(data.error || 'Calendar');
     }
-  } catch(e) {
-    toast('⚠ Erreur réseau', true);
+    if (dateChanged) logHisto('date', { ...p, name, brand, barcode }, p.dlc, newDlc);
+    Object.assign(p, { name, brand, barcode, dlc:newDlc });
+    if (infoChanged) await syncProduitBase(old, { name, brand, barcode });
+    toast('✓ Article mis à jour');
+    render(); updateNoDlcBadge();
+  } catch(e) { toast('⚠ ' + e.message, true); }
+}
+
+// ── v3.3 : base produits (édition / suppression) ──
+function findBaseProduct(info) {
+  const code = String(info.barcode || '').trim();
+  return sheetProducts.find(sp =>
+    (code && String(sp.code_barres || '').trim() === code) ||
+    (normKey(sp.nom_article || sp.nom) === normKey(info.name) && normKey(sp.patissier || sp.marque) === normKey(info.brand)));
+}
+
+async function updateBaseProduct(sp, info) {
+  if (sp.id && canUseSupabase()) {
+    await sbFetch(`/rest/v1/produits?id=eq.${encodeURIComponent(sp.id)}`, {
+      method:'PATCH', body: JSON.stringify({ nom:info.name, marque:info.brand, code_barres: info.barcode || null })
+    });
+  } else {
+    const d = await api({ action:'updateProduct', oldBarcode: sp.code_barres || '', oldNom: sp.nom_article || sp.nom || '',
+      nom_article:info.name, patissier:info.brand, code_barres:info.barcode, categorie: sp.categorie || '' });
+    if (!d.success) throw new Error(d.error || 'Apps Script updateProduct');
   }
+  Object.assign(sp, { nom:info.name, nom_article:info.name, marque:info.brand, patissier:info.brand, code_barres:info.barcode });
+}
+
+async function deleteBaseProduct(sp) {
+  if (sp.id && canUseSupabase()) {
+    await sbFetch(`/rest/v1/produits?id=eq.${encodeURIComponent(sp.id)}`, { method:'DELETE' });
+  } else {
+    const d = await api({ action:'deleteProduct', code_barres: sp.code_barres || '', nom: sp.nom_article || sp.nom || '' });
+    if (!d.success) throw new Error(d.error || 'Apps Script deleteProduct');
+  }
+  sheetProducts = sheetProducts.filter(x => x !== sp);
+  _missingProducts = _missingProducts.filter(x => x !== sp);
+}
+
+async function syncProduitBase(oldInfo, newInfo) {
+  const sp = findBaseProduct(oldInfo);
+  if (!sp) return;
+  try { await updateBaseProduct(sp, newInfo); }
+  catch(e) { toast('⚠ Base produits non mise à jour : ' + e.message, true); }
+}
+
+async function deleteFromEdit() {
+  const p = products.find(x => x.id === editingId);
+  if (!p) return;
+  if (!confirm(`Supprimer définitivement "${p.name}" ?\nL'article sort du suivi DLC et de la base produits.`)) return;
+  closeEditDate();
+  try {
+    if (p.dbId && canUseSupabase()) await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, { method:'DELETE' });
+    else if (p.eventId) await api({ action:'deleteEvent', eventId:p.eventId });
+    products = products.filter(x => x !== p);
+    const sp = findBaseProduct(p);
+    if (sp) await deleteBaseProduct(sp);
+    toast(`🗑 "${p.name}" supprimé définitivement`);
+    render(); updateNoDlcBadge();
+  } catch(e) { toast('⚠ ' + e.message, true); }
+}
+
+let _prodEditRef = null;
+function openProdEdit(idx) {
+  const sp = sheetProducts[idx];
+  if (!sp) return;
+  _prodEditRef = sp;
+  document.getElementById('pe-name').value    = sp.nom_article || sp.nom || '';
+  document.getElementById('pe-brand').value   = sp.patissier || sp.marque || '';
+  document.getElementById('pe-barcode').value = sp.code_barres || '';
+  document.getElementById('modal-prod-edit').style.display = 'flex';
+}
+function closeProdEdit() { document.getElementById('modal-prod-edit').style.display = 'none'; _prodEditRef = null; }
+
+async function saveProdEdit() {
+  const sp = _prodEditRef;
+  const info = { name: document.getElementById('pe-name').value.trim(),
+                 brand: document.getElementById('pe-brand').value.trim(),
+                 barcode: document.getElementById('pe-barcode').value.trim() };
+  if (!sp) return;
+  if (!info.name || !info.brand) { toast('⚠ Nom et marque obligatoires', true); return; }
+  closeProdEdit();
+  try { await updateBaseProduct(sp, info); toast('✓ Produit mis à jour'); renderNoDlcList(); updateNoDlcBadge(); }
+  catch(e) { toast('⚠ ' + e.message, true); }
+}
+
+async function deleteProdEdit() {
+  const sp = _prodEditRef;
+  if (!sp) return;
+  if (!confirm(`Supprimer définitivement "${sp.nom_article || sp.nom}" de la base produits ?`)) return;
+  closeProdEdit();
+  try { await deleteBaseProduct(sp); toast('🗑 Produit supprimé'); renderNoDlcList(); updateNoDlcBadge(); }
+  catch(e) { toast('⚠ ' + e.message, true); }
 }
 // ── Recherche rapide page d'accueil ──
 let quickTimer = null;
@@ -1905,7 +2004,8 @@ function renderNoDlcList() {
   const list = document.getElementById('nodlc-list');
   const excl = document.getElementById('nodlc-excl-count');
   const exclusions = _exclusionsCache || [];
-  if (excl) excl.textContent = exclusions.length ? `(${exclusions.length})` : '';
+  const exclCount = exclusions.filter(exclusionInMyBlocs).length;
+  if (excl) excl.textContent = exclCount ? `(${exclCount})` : '';
 
   const items = q ? _missingProducts.filter(p =>
     (p.nom_article || '').toLowerCase().includes(q) ||
@@ -1933,6 +2033,9 @@ function renderNoDlcList() {
         <div style="font-size:11px;color:var(--muted)">${marque}${barcode ? ' · ' + barcode : ''}</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
+        <button onclick="openProdEdit(${sheetProducts.indexOf(p)})" title="Modifier ou supprimer"
+          style="padding:6px 10px;min-height:36px;background:transparent;border:1px solid var(--border);border-radius:6px;
+                 font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer">✏</button>
         <button onclick="exclureArticle('${safeName}')" title="Jeter quotidiennement — ne plus afficher"
           style="padding:6px 10px;min-height:36px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;
                  font-family:'DM Mono',monospace;font-size:11px;color:var(--red);cursor:pointer;white-space:nowrap">
@@ -2525,7 +2628,7 @@ const productCard = p => {
     </div>
     <div class="card-actions">
       <button class="action-btn archive" onclick="verifyProduct(${p.id})" aria-label="Retirer ${p.name}">✓ Retiré</button>
-      <button class="action-btn edit"    onclick="openEditDate(${p.id})" aria-label="Changer la date de ${p.name}">📅 Date</button>
+      <button class="action-btn edit"    onclick="openEditDate(${p.id})" aria-label="Modifier ${p.name}">✏ Modifier</button>
       <button class="action-btn edit"    onclick="duplicateProduct(${p.id})" title="Dupliquer" aria-label="Dupliquer ${p.name}">⧉</button>
     </div>
   </div>`;
