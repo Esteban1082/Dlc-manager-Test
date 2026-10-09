@@ -504,6 +504,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   .seg { display:flex; background:var(--surface2); border-radius:10px; padding:2px; }
   .seg .filter-btn { flex:1; height:32px; border:none !important; border-radius:8px !important; background:transparent !important; color:var(--text) !important; font-size:13px !important; font-weight:500 !important; letter-spacing:0 !important; text-transform:none !important; padding:0 !important; cursor:pointer; display:flex !important; align-items:center; justify-content:center; text-align:center; gap:4px; }
   .seg .filter-btn.active { background:var(--surface) !important; box-shadow:0 1px 3px rgba(60,40,20,.15); }
+  html:not([data-theme="light"]) .seg .filter-btn.active { background:#48413a !important; }
   #product-list { margin-top:6px; }
   .dlc-section { font-size:12px; font-weight:700; letter-spacing:1px; padding:16px 4px 8px; color:var(--muted); }
   .dlc-section.red { color:var(--red); } .dlc-section.yellow { color:var(--yellow); } .dlc-section.green { color:var(--green); }
@@ -671,7 +672,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  dlc v4.1 · 09/10/2026 15:57
+  dlc v4.2 · 09/10/2026 16:14
 </div>
 
 <!-- Modal Ajout en lot -->

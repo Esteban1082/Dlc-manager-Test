@@ -17,7 +17,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     // Attendre que le body existe
     const render = () => {
       if (!document.body) { requestAnimationFrame(render); return; }
-      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🚫</div><div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">${title}</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">${sub}</div><a href="index.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>`;
+      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🚫</div><div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">${title}</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">${sub}</div><a href="hub.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>`;
     };
     render();
   }
@@ -207,6 +207,102 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   .toast { border-radius:14px !important; box-shadow:var(--ui-shadow) !important; }
   .theme-toggle-global, #theme-toggle { display:none !important; }
 </style>
+<style id="sl-mod">
+  /* StoreLine — modules, design D */
+  :root { --sl-w:700px; --fill:#e8a045; }
+  html body { font-size:15px; }
+  /* En-tête */
+  header.sl-head { display:block !important; position:sticky; top:0; z-index:100; padding:calc(env(safe-area-inset-top) + 10px) 0 12px !important; border-bottom:.5px solid var(--border) !important; }
+  .sl-head-in { max-width:var(--sl-w); margin:0 auto; padding:0 24px; }
+  .sl-head-top { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:34px; }
+  .sl-back { display:inline-flex !important; align-items:center; gap:6px; padding:0 !important; border:none !important; background:none !important; color:var(--amber) !important; font-size:16px !important; font-weight:500; text-decoration:none; }
+  .sl-back:hover { opacity:.75; }
+  .sl-head-actions { display:flex; align-items:center; gap:8px; }
+  .sl-title { font-family:var(--ui-serif) !important; font-size:32px; font-weight:700; letter-spacing:-.6px !important; line-height:1.1; margin-top:6px; color:var(--text); }
+  .pill-btn { height:34px; padding:0 14px; border-radius:17px; border:1px solid var(--border) !important; background:var(--surface) !important; color:var(--muted) !important; font-size:13px !important; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .pill-btn.icon { width:34px; padding:0; }
+  .sync-badge, .sl-sync { font-size:12px !important; color:var(--muted) !important; border:none !important; background:none !important; padding:0 !important; letter-spacing:0 !important; text-transform:none !important; }
+  .sync-badge.ok { color:var(--green) !important; }
+  @media (max-width:640px) { .sl-title { font-size:30px; } .sl-head-in { padding:0 16px; } }
+
+  /* Conteneurs */
+  .main, .content { padding-top:18px !important; }
+  @media (max-width:640px) { .main, .content { padding-left:16px !important; padding-right:16px !important; } }
+
+  /* Titres de section */
+  .main [style*="Fraunces"][style*="color:var(--amber)"], .content [style*="Fraunces"][style*="color:var(--amber)"], .section-title, .panier-header > div:first-child { color:var(--text) !important; font-weight:700 !important; }
+  .modal-title { color:var(--text) !important; font-size:22px !important; font-weight:700 !important; }
+  [style*="letter-spacing:2px"], [style*="letter-spacing:1px"], [style*="letter-spacing:1.5px"], .histo-section-title, .form-label, .form-label-m, label { letter-spacing:.04em !important; }
+  .form-label, .form-label-m { font-size:12px !important; font-weight:600 !important; color:var(--muted) !important; }
+  [style*="height:1px;background:var(--border)"] { opacity:.6; }
+
+  /* Champs */
+  .form-input, .form-input-m, .toolbar-search, input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="date"], input[type="time"], input[type="search"], input[type="tel"], input[type="url"], select, textarea {
+    background:var(--surface2) !important; border:1.5px solid transparent !important; border-radius:12px !important; color:var(--text) !important; font-size:16px !important; box-shadow:none !important; }
+  .form-input:focus, .form-input-m:focus, input:focus, select:focus, textarea:focus { border-color:var(--fill) !important; outline:none !important; background:var(--surface) !important; }
+  input::placeholder, textarea::placeholder { color:var(--muted) !important; opacity:.8; }
+  .modal input, .modal select, .modal textarea { background:var(--surface2) !important; }
+
+  /* Bouton scanner */
+  .sl-scan { flex-shrink:0; width:48px; min-height:46px; border:none !important; border-radius:12px !important; background:var(--text) !important; color:var(--bg) !important; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0 !important; }
+
+  /* Boutons */
+  button[style*="background:var(--amber)"], .btn-primary, .btn.primary, .btn-confirm, .btn-save, .btn-sm.primary {
+    background:var(--fill) !important; color:#23201c !important; border:none !important; border-radius:999px !important; font-family:var(--ui-sans) !important; font-weight:700 !important; box-shadow:0 4px 14px rgba(232,160,69,.28); }
+  button[style*="background:var(--red)"] { border-radius:999px !important; font-family:var(--ui-sans) !important; font-weight:700 !important; border:none !important; }
+  button[style*="background:var(--green)"] { border-radius:999px !important; font-family:var(--ui-sans) !important; font-weight:700 !important; border:none !important; color:#fff !important; }
+  button[style*="border:1px solid var(--border)"]:not(.sl-scan):not(.filter-btn):not(.mode-btn):not(.filter-chip):not(.tab):not(.main-tab), .btn-cancel, .btn-sm:not(.primary), .btn.secondary { border-radius:999px !important; background:var(--surface) !important; border:1px solid var(--border) !important; color:var(--text) !important; font-weight:600 !important; letter-spacing:0 !important; text-transform:none !important; font-size:13px !important; }
+  button[style*="font-size:20px"][style*="border:1px solid var(--border)"] { border-radius:12px !important; }
+  /* Icônes modifier / supprimer */
+  button:has(> .ic-edit), button:has(> .ic-del) { width:34px !important; height:34px !important; padding:0 !important; border:none !important; border-radius:17px !important; background:var(--surface2) !important; display:inline-flex !important; align-items:center; justify-content:center; flex-shrink:0; }
+  button:has(> .ic-del) { background:var(--red-bg) !important; }
+  .ic-edit, .ic-del { width:16px; height:16px; display:block; background:currentColor; -webkit-mask:var(--ic) center/contain no-repeat; mask:var(--ic) center/contain no-repeat; }
+  button:has(> .ic-edit) { color:var(--text) !important; }
+  button:has(> .ic-del) { color:var(--red) !important; }
+  .ic-edit { --ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
+  .ic-del { --ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6'/%3E%3C/svg%3E"); }
+
+  /* Contrôles segmentés (filtres et onglets) */
+  .main div:has(> .filter-btn), .content div:has(> .filter-btn), div:has(> .mode-btn), div:has(> .filter-chip), .tabs, .main-tabs, .tabs-bar {
+    display:flex !important; flex-wrap:nowrap !important; gap:0 !important; background:var(--surface2) !important; border:none !important; border-radius:10px !important; padding:2px !important; overflow-x:auto; scrollbar-width:none; }
+  .tabs, .main-tabs { margin-bottom:18px !important; }
+  body > .tabs, header + .tabs { width:calc(100% - 32px) !important; max-width:var(--sl-w); margin:14px auto 4px !important; }
+  .tabs-bar { margin:10px 16px !important; }
+  .filter-btn, .mode-btn, .filter-chip, .tab, .main-tab {
+    flex:1 1 0; min-width:max-content; height:32px; padding:0 12px !important; border:none !important; border-radius:8px !important; background:transparent !important; color:var(--text) !important; font-size:13px !important; font-weight:500 !important; letter-spacing:0 !important; text-transform:none !important; white-space:nowrap; display:inline-flex !important; align-items:center; justify-content:center; gap:5px; cursor:pointer; box-shadow:none !important; margin:0 !important; }
+  .filter-btn.active, .mode-btn.active, .filter-chip.active, .tab.active, .main-tab.active { background:var(--surface) !important; color:var(--text) !important; font-weight:600 !important; box-shadow:0 1px 3px rgba(60,40,20,.15) !important; }
+  .tabs-bar .tab { flex:0 0 auto; }
+
+  /* Cartes et lignes */
+  .main [style*="background:var(--surface)"][style*="border-radius"]:not(input):not(select):not(textarea):not(button):not(#pertes-suggestions),
+  .product-card, .appliance-card, .bon-card, .checklist-card, .contact-card, .doc-row, .histo-card, .histo-row, .article-row, .produit-row, .fourn-bar {
+    border-radius:16px !important; border-color:transparent !important; box-shadow:var(--ui-shadow) !important; }
+  .main [style*="background:rgba(255,64,64"], .main [style*="var(--red-bg)"] { border-color:transparent !important; border-radius:16px !important; }
+  #pertes-suggestions, .suggestions-box { border-radius:14px !important; border:none !important; box-shadow:0 12px 30px rgba(0,0,0,.14) !important; }
+
+  /* Pastilles et badges */
+  .badge-oui, .badge-non, .badge-inconnu, .rayon-badge, .histo-badge, .cell-badge, [style*="border-radius:20px"] { border-radius:999px !important; letter-spacing:0 !important; }
+
+  /* États vides : emojis atténués */
+  .empty-ico, [style^="font-size:32px;margin-bottom"], [style^="font-size:36px;margin-bottom"], [style^="font-size:40px;margin-bottom"], [style^="font-size:48px;margin-bottom"] { filter:grayscale(1); opacity:.35; }
+
+  /* Fenêtres en feuille sur mobile */
+  @media (max-width:640px) {
+    .modal-overlay { align-items:flex-end !important; padding:0 !important; }
+    .modal-overlay .modal { width:100% !important; max-width:none !important; border-radius:22px 22px 0 0 !important; max-height:92vh; overflow-y:auto; padding-bottom:calc(env(safe-area-inset-bottom) + 20px) !important; }
+  }
+  .version-tag { opacity:.5; }
+  /* Petits titres en serif → sans (lignes de liste, boutons) */
+  .main [style*="Fraunces"]:is([style*="font-size:11px"],[style*="font-size:12px"],[style*="font-size:13px"],[style*="font-size:14px"],[style*="font-size:15px"],[style*="font-size:16px"],[style*="font-size:17px"],[style*="font-size:18px"]),
+  .content [style*="Fraunces"]:is([style*="font-size:11px"],[style*="font-size:12px"],[style*="font-size:13px"],[style*="font-size:14px"],[style*="font-size:15px"],[style*="font-size:16px"],[style*="font-size:17px"],[style*="font-size:18px"]),
+  .modal button[style*="Fraunces"], .main button[style*="Fraunces"], .content button[style*="Fraunces"] {
+    font-family:var(--ui-sans) !important; font-size:15px !important; font-weight:600 !important; letter-spacing:0 !important; text-transform:none !important; }
+  .main button[style*="Fraunces"][style*="background:var(--amber)"], .modal button[style*="background:var(--amber)"], .modal button[style*="background:var(--red)"] { font-weight:700 !important; }
+  input[style*="width:60px"], input[style*="width:64px"], input[style*="width:70px"], input[style*="width:80px"] { padding-left:10px !important; padding-right:6px !important; font-size:15px !important; width:76px !important; flex-shrink:0; }
+  html:not([data-theme="light"]) :is(.filter-btn, .mode-btn, .filter-chip, .tab, .main-tab).active { background:#48413a !important; }
+  .a-chip { border-radius:14px !important; border:none !important; background:var(--surface2) !important; }
+
+</style>
 </head>
 <body>
 <button class="theme-toggle-global" id="theme-toggle-global" onclick="toggleStoreLineTheme()" title="Mode clair / sombre" aria-label="Mode clair ou sombre">Clair</button>
@@ -226,14 +322,13 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 })();
 </script>
 
-<header>
-  <div>
-    <div class="logo-title">🌡️ Températures</div>
-    <div class="logo-sub">StoreLine</div>
-  </div>
-  <div style="display:flex;align-items:center;gap:8px">
-    <a class="back-btn" href="index.html">← Hub</a>
-    <button id="logout-btn" style="display:none;padding:7px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;transition:all .15s" onclick="logoutModule()">↩</button>
+<header class="sl-head">
+  <div class="sl-head-in">
+    <div class="sl-head-top">
+      <a class="back-btn sl-back" href="hub.html"><svg width="11" height="18" viewBox="0 0 11 18" aria-hidden="true"><path d="M9 1.5 1.8 9 9 16.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Accueil</span></a>
+      <div class="sl-head-actions"><button id="logout-btn" class="pill-btn" style="display:none" onclick="logoutModule()">Déco</button></div>
+    </div>
+    <h1 class="sl-title">Températures</h1>
   </div>
 </header>
 
@@ -243,7 +338,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">Relevé du jour</div>
     <button onclick="openZoneModal()"
       style="padding:7px 14px;background:transparent;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);">
-      ⚙ Zones
+      Zones
     </button>
   </div>
   <div id="today-label" style="font-size:12px;color:var(--muted);margin-bottom:20px"></div>
@@ -252,7 +347,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 
   <button onclick="saveAllTemps()"
     style="width:100%;padding:14px;background:var(--amber);border:none;border-radius:12px;font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:#000;margin-top:8px">
-    ✓ Enregistrer le relevé
+    Enregistrer le relevé
   </button>
 
   <div class="section-title" style="margin-top:36px">Historique</div>
@@ -272,7 +367,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <!-- Modal gestion appareils -->
 <div class="modal-overlay" id="modal-zones" onclick="if(event.target.id==='modal-zones')closeZoneModal()">
   <div class="modal">
-    <div class="modal-title">⚙ Zones de relevé</div>
+    <div class="modal-title">Zones de relevé</div>
     <div id="zones-manage-list" style="margin-bottom:16px"></div>
     <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">AJOUTER UNE ZONE</div>
     <div style="display:flex;gap:8px;margin-bottom:16px">
@@ -289,7 +384,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">temperatures v1.11 · 09/10/2026 15:36</div>
+<div class="version-tag">temperatures v2.0 · 09/10/2026 16:14</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
@@ -585,9 +680,9 @@ async function saveAllTemps() {
 function setHistoFilter(f, btn) {
   histoFilter = f;
   document.querySelectorAll('.filter-btn').forEach(b => {
-    b.style.background = 'transparent'; b.style.color = 'var(--muted)'; b.style.borderColor = 'var(--border)';
+    b.style.background = 'transparent'; b.style.color = 'var(--muted)'; b.style.borderColor = 'var(--border)'; b.classList.remove('active');
   });
-  btn.style.background = 'var(--amber)'; btn.style.color = '#000'; btn.style.borderColor = 'var(--amber)';
+  btn.style.background = 'var(--amber)'; btn.style.color = '#000'; btn.style.borderColor = 'var(--amber)'; btn.classList.add('active');
   renderHisto();
 }
 
@@ -686,7 +781,7 @@ function renderZonesManage() {
           <span style="font-size:13px;font-weight:600">${a.nom}</span>
           <span style="font-size:11px;color:var(--muted);margin-left:8px">${a.min}°C → ${a.max}°C</span>
         </div>
-        <button onclick="removeZone('${a.id}')" style="padding:4px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:12px;color:var(--red);">🗑</button>
+        <button onclick="removeZone('${a.id}')" style="padding:4px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:12px;color:var(--red);"><span class=ic-del></span></button>
       </div>`).join('')
     : '<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Aucune zone configurée.</div>';
 }

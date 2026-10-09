@@ -259,6 +259,26 @@
   .toast { border-radius:14px !important; box-shadow:var(--ui-shadow) !important; }
   .theme-toggle-global, #theme-toggle { display:none !important; }
 </style>
+<style id="sl-login">
+  /* StoreLine — connexion, design D */
+  .bg-grid, .glow { display:none !important; }
+  body { overflow:auto !important; padding:calc(env(safe-area-inset-top) + 24px) 0 calc(env(safe-area-inset-bottom) + 48px); }
+  .card { max-width:380px !important; background:none !important; border:none !important; box-shadow:none !important; padding:0 24px !important; margin:0 auto !important; }
+  .logo { margin-bottom:36px !important; }
+  .logo-icon { width:76px !important; height:76px !important; border-radius:20px !important; background:#e8a045 !important; color:#fff; margin-bottom:18px !important; box-shadow:0 12px 30px rgba(232,160,69,.35) !important; }
+  .logo-name { font-family:var(--ui-serif) !important; font-size:36px !important; font-weight:700 !important; color:var(--text) !important; letter-spacing:-.8px !important; }
+  .logo-sub { font-size:16px !important; letter-spacing:0 !important; text-transform:none !important; color:var(--muted) !important; margin-top:4px !important; }
+  .tenant-badge { justify-content:center; border:none !important; border-radius:999px !important; background:var(--surface2) !important; color:var(--text) !important; font-size:13px !important; padding:8px 14px !important; width:max-content; margin:0 auto 24px !important; }
+  .card label { font-size:13px !important; font-weight:600 !important; letter-spacing:0 !important; text-transform:none !important; color:var(--muted) !important; margin:0 0 6px 4px !important; }
+  .card input { width:100%; height:52px; padding:0 16px !important; background:var(--surface) !important; border:1px solid var(--border) !important; border-radius:14px !important; font-size:17px !important; margin-bottom:16px !important; color:var(--text) !important; }
+  .card input:focus { border-color:#e8a045 !important; box-shadow:0 0 0 4px rgba(232,160,69,.18) !important; outline:none; }
+  .btn-login { width:100%; height:54px; margin-top:10px !important; border:none !important; border-radius:999px !important; background:#e8a045 !important; color:#23201c !important; font-size:17px !important; font-weight:700 !important; letter-spacing:0 !important; text-transform:none !important; box-shadow:0 8px 22px rgba(232,160,69,.35) !important; font-family:var(--ui-sans) !important; }
+  .btn-login:disabled { opacity:.6; }
+  .forgot-link { display:block; text-align:center; margin-top:20px !important; font-size:15px !important; color:var(--amber) !important; letter-spacing:0 !important; text-transform:none !important; cursor:pointer; }
+  .error-msg { border-radius:14px !important; font-size:14px !important; }
+  .logo-mono { font-family:var(--ui-serif) !important; font-size:44px; font-weight:700; color:#fff; line-height:1; margin-top:-4px; }
+  .version { opacity:.45; letter-spacing:0 !important; }
+</style>
 </head>
 <body>
 <button class="theme-toggle-global" id="theme-toggle-global" onclick="toggleStoreLineTheme()" title="Mode clair / sombre" aria-label="Mode clair ou sombre">Clair</button>
@@ -283,7 +303,7 @@
 
 <div class="card">
   <div class="logo">
-    <div class="logo-icon">▦</div>
+    <div class="logo-icon"><span class="logo-mono">S</span></div>
     <div class="logo-name">StoreLine</div>
     <div class="logo-sub">Gestion de rayon</div>
   </div>
@@ -303,13 +323,13 @@
     onkeydown="if(event.key==='Enter') login()">
 
   <button class="btn-login" id="btn-login" onclick="login()">
-    Se connecter →
+    Se connecter
   </button>
 
   <a class="forgot-link" onclick="forgotPassword()">Mot de passe oublié ?</a>
 </div>
 
-<div class="version">StoreLine v1.4 · 09/10/2026 15:36</div>
+<div class="version">StoreLine v2.0 · 09/10/2026 16:14</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -411,7 +431,7 @@ async function login() {
 
     if (authData.error || !authData.access_token) {
       btn.disabled = false;
-      btn.textContent = 'Se connecter →';
+      btn.textContent = 'Se connecter';
       btn.classList.remove('btn-loading');
       const msg = authData.error_description || authData.message || authData.error || 'Erreur de connexion';
       if (msg.includes('Invalid login')) showError('Email ou mot de passe incorrect.');
@@ -448,7 +468,7 @@ async function login() {
 
   } catch(e) {
     btn.disabled = false;
-    btn.textContent = 'Se connecter →';
+    btn.textContent = 'Se connecter';
     btn.classList.remove('btn-loading');
     showError('Erreur réseau — vérifie ta connexion.');
     console.error(e);
