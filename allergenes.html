@@ -319,6 +319,17 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   input[style*="width:60px"], input[style*="width:64px"], input[style*="width:70px"], input[style*="width:80px"] { padding-left:10px !important; padding-right:6px !important; font-size:15px !important; width:76px !important; flex-shrink:0; }
   html:not([data-theme="light"]) :is(.filter-btn, .mode-btn, .filter-chip, .tab, .main-tab).active { background:#48413a !important; }
   .a-chip { border-radius:14px !important; border:none !important; background:var(--surface2) !important; }
+  /* Grand écran (tablette paysage, ordinateur) */
+  @media (min-width:1100px) {
+    :root { --sl-w:1040px; }
+    .main, .content { max-width:var(--sl-w) !important; padding-left:24px !important; padding-right:24px !important; }
+    .sl-title { font-size:36px; }
+    #produits-list, #list:has(> .product-card) { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; align-items:start; }
+    #produits-list > *, #list > .product-card { margin:0 !important; }
+    #produits-list > :only-child { grid-column:1 / -1; }
+    .main div:has(> .appliance-card) { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+    .appliance-card { margin:0 !important; }
+  }
 
 </style>
 </head>
@@ -409,7 +420,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">allergenes v3.0 · 09/10/2026 16:14</div>
+<div class="version-tag">allergenes v3.1 · 09/10/2026 21:40</div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";

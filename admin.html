@@ -447,6 +447,18 @@
   .form-input:focus { border-color:#e8a045 !important; background:var(--surface) !important; outline:none; }
   .loading { color:var(--muted) !important; letter-spacing:0 !important; }
   .modal-title { color:var(--text) !important; font-size:22px !important; font-weight:700 !important; }
+  .histo-filters { display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; margin-bottom:14px; }
+  @media (max-width:760px) { .histo-filters { grid-template-columns:1fr; } }
+  .histo-day { font-size:12px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); margin:18px 4px 8px; }
+  .histo-row { display:flex; align-items:center; gap:12px; background:var(--surface); border-radius:14px; padding:12px 14px; margin-bottom:8px; box-shadow:var(--ui-shadow); }
+  .histo-row.undone { opacity:.5; }
+  .histo-row-main { flex:1; min-width:0; }
+  .histo-row-name { font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .histo-row-meta { font-size:13px; color:var(--muted); }
+  .histo-row-who { font-size:12px; color:var(--amber); margin-top:2px; font-weight:500; }
+  .histo-row-tag { flex-shrink:0; font-size:12px; font-weight:600; padding:4px 10px; border-radius:999px; }
+  .bottom-nav-inner { grid-template-columns:repeat(6, minmax(0,1fr)) !important; }
+  .bnav-item { font-size:10.5px !important; }
   .adm-mtop { display:none; }
   /* Barre d'onglets mobile */
   .bottom-nav { background:color-mix(in srgb, var(--bg) 90%, transparent) !important; -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); border-top:.5px solid var(--border) !important; box-shadow:none !important; }
@@ -558,6 +570,9 @@
       <div class="nav-item" onclick="showView('blocs',this)">
         <span class="nav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 10h18M9 5V3.5M15 5V3.5"/></svg></span> Blocs DLC
       </div>
+      <div class="nav-item" onclick="showView('histo',this)">
+        <span class="nav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span> Historique DLC
+      </div>
     </nav>
     <div class="sidebar-footer">
       <div class="user-info" id="sidebar-email">—</div>
@@ -660,6 +675,27 @@
         <div id="blocs-list" class="loading">Chargement...</div>
       </div>
 
+      <!-- ══ HISTORIQUE DLC ══ -->
+      <div class="view" id="view-histo">
+        <div class="histo-filters">
+          <select id="histo-user" class="form-input" onchange="loadAdminHisto()"><option value="">Tout le monde</option></select>
+          <select id="histo-type" class="form-input" onchange="loadAdminHisto()">
+            <option value="">Toutes les actions</option>
+            <option value="ajout">Ajouts</option>
+            <option value="retrait">Retraits</option>
+            <option value="date">Dates modifiées</option>
+          </select>
+          <select id="histo-period" class="form-input" onchange="loadAdminHisto()">
+            <option value="1">Aujourd'hui</option>
+            <option value="7" selected>7 derniers jours</option>
+            <option value="30">30 derniers jours</option>
+            <option value="">Tout</option>
+          </select>
+        </div>
+        <div id="histo-admin-stats" class="users-stats"></div>
+        <div id="histo-admin-list"><div class="loading">Chargement...</div></div>
+      </div>
+
     </div>
   </main>
 </div>
@@ -681,6 +717,9 @@
     </button>
     <button class="bnav-item" id="bnav-blocs" onclick="showView('blocs',this); syncBottomNav('blocs')">
       <span class="bnav-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 10h18M9 5V3.5M15 5V3.5"/></svg></span>Blocs
+    </button>
+    <button class="bnav-item" id="bnav-histo" onclick="showView('histo',this); syncBottomNav('histo')">
+      <span class="bnav-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>Historique
     </button>
   </div>
 </nav>
@@ -801,7 +840,7 @@
 
 <div class="toast-container" id="toast-container"></div>
 <div class="version-tag" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:80;letter-spacing:1px;opacity:.4">
-  admin v2.0 · 09/10/2026 16:14
+  admin v2.1 · 09/10/2026 21:33
 </div>
 
 <script>
@@ -951,6 +990,7 @@ const TITLES = {
   modules:   ['Modules', 'Vue d\'ensemble des fonctionnalités'],
   tenants:   ['Clients', 'Gérer les commerces sur StoreLine'],
   blocs:     ['Blocs DLC', 'Grouper les marques et les assigner aux utilisateurs'],
+  histo:     ['Historique DLC', 'Ce que chaque personne a ajouté, retiré ou modifié'],
 };
 
 function syncBottomNav(name) {
@@ -972,7 +1012,86 @@ function showView(name, el) {
   if (name === 'tenants') loadTenants();
   if (name === 'blocs')   loadBlocs();
   if (name === 'modules') renderModulesOverview();
+  if (name === 'histo')   loadAdminHisto();
   syncBottomNav(name);
+}
+
+
+// ══════════════════════════════════════
+// Historique DLC par utilisateur (table dlc_historique)
+// ══════════════════════════════════════
+let histoRows = [];
+let histoUsers = [];
+async function loadAdminHisto() {
+  const list = document.getElementById('histo-admin-list');
+  list.innerHTML = '<div class="loading">Chargement...</div>';
+  try {
+    if (!allUsers.length) {
+      try { allUsers = await sbSelect('profiles', '?select=id,email,nom,role,actif,tenant_id&order=email.asc') || []; } catch(_) {}
+    }
+    const userSel = document.getElementById('histo-user');
+    const userId = userSel.value;
+    const type = document.getElementById('histo-type').value;
+    const days = document.getElementById('histo-period').value;
+    let q = '?select=id,user_id,user_email,type,nom,marque,code_barres,old_dlc,new_dlc,annule,created_at&order=created_at.desc&limit=300';
+    if (userId) q += '&user_id=eq.' + encodeURIComponent(userId);
+    if (type)   q += '&type=eq.' + encodeURIComponent(type);
+    if (days)   q += '&created_at=gte.' + encodeURIComponent(new Date(Date.now() - Number(days) * 86400000).toISOString());
+    histoRows = await sbSelect('dlc_historique', q) || [];
+    renderHistoUserOptions();
+    renderAdminHisto();
+  } catch(e) {
+    const missing = /dlc_historique/.test(e.message || '') && /(not find|does not exist|schema cache)/i.test(e.message || '');
+    list.innerHTML = `<div class="loading" style="color:var(--red)">${missing ? 'Table dlc_historique absente : exécute dlc_historique.sql dans Supabase.' : '⚠ ' + histoEsc(e.message)}</div>`;
+  }
+}
+function histoEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function histoUserName(id, email) {
+  const u = allUsers.find(x => x.id === id);
+  return (u && u.email) || email || (u && u.nom) || 'Utilisateur';
+}
+function renderHistoUserOptions() {
+  const sel = document.getElementById('histo-user');
+  const cur = sel.value;
+  const users = allUsers.slice().sort((a, b) => String(a.nom || a.email).localeCompare(String(b.nom || b.email)));
+  sel.innerHTML = '<option value="">Tout le monde</option>' + users.map(u =>
+    `<option value="${u.id}" ${u.id === cur ? 'selected' : ''}>${histoEsc(u.nom ? u.nom + ' · ' + u.email : u.email)}</option>`).join('');
+}
+function histoFmt(d) { return d ? new Date(d + 'T00:00:00').toLocaleDateString('fr-BE', { day:'2-digit', month:'short' }) : '—'; }
+function renderAdminHisto() {
+  const list = document.getElementById('histo-admin-list');
+  const stats = document.getElementById('histo-admin-stats');
+  const c = { ajout:0, retrait:0, date:0 };
+  histoRows.forEach(r => { if (c[r.type] !== undefined && !r.annule) c[r.type]++; });
+  stats.innerHTML = `
+    <div class="mini-stat"><div class="mini-stat-val">${histoRows.length}</div><div class="mini-stat-lbl">Actions</div></div>
+    <div class="mini-stat"><div class="mini-stat-val">${c.ajout}</div><div class="mini-stat-lbl">Ajouts</div></div>
+    <div class="mini-stat"><div class="mini-stat-val">${c.retrait}</div><div class="mini-stat-lbl">Retraits</div></div>
+    <div class="mini-stat"><div class="mini-stat-val">${c.date}</div><div class="mini-stat-lbl">Dates modifiées</div></div>`;
+  if (!histoRows.length) { list.innerHTML = '<div class="loading">Aucune action sur cette période.</div>'; return; }
+  const L = { ajout:['Ajouté','var(--green)','var(--green-bg)'], retrait:['Retiré','var(--red)','var(--red-bg)'], date:['Date modifiée','var(--yellow)','var(--yellow-bg)'] };
+  let lastDay = '';
+  list.innerHTML = histoRows.map(r => {
+    const d = new Date(r.created_at);
+    const day = d.toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' });
+    const head = day !== lastDay ? `<div class="histo-day">${day}</div>` : '';
+    lastDay = day;
+    const [lab, col, bg] = L[r.type] || [r.type, 'var(--muted)', 'var(--surface2)'];
+    const detail = r.type === 'retrait' ? 'DLC ' + histoFmt(r.old_dlc) : r.type === 'date' ? histoFmt(r.old_dlc) + ' → ' + histoFmt(r.new_dlc) : 'DLC ' + histoFmt(r.new_dlc);
+    return head + `<div class="histo-row${r.annule ? ' undone' : ''}">
+      <div class="histo-row-main">
+        <div class="histo-row-name">${histoEsc(r.nom)}</div>
+        <div class="histo-row-meta">${histoEsc(r.marque)} · ${detail}</div>
+        <div class="histo-row-who">${histoEsc(histoUserName(r.user_id, r.user_email))} · ${d.toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit' })}</div>
+      </div>
+      <span class="histo-row-tag" style="color:${col};background:${bg}">${lab}${r.annule ? ' · annulé' : ''}</span>
+    </div>`;
+  }).join('');
+}
+function openUserHisto(userId) {
+  const navItem = [...document.querySelectorAll('.nav-item')].find(n => (n.getAttribute('onclick') || '').includes("'histo'"));
+  document.getElementById('histo-user').innerHTML = `<option value="${userId}" selected></option>`;
+  showView('histo', navItem);
 }
 
 // ── Auth ──
@@ -1182,6 +1301,7 @@ function renderUsers() {
           <button class="btn btn-ghost" onclick="activateUser('${u.id}',${!u.actif})">${u.actif?'⏸ Désactiver':'▶ Activer'}</button>
           <button class="btn btn-green" onclick="setAllModules('${u.id}',true)">✓ Tout activer</button>
           <button class="btn btn-ghost" onclick="setAllModules('${u.id}',false)">○ Tout désactiver</button>
+          <button class="btn btn-ghost" onclick="openUserHisto('${u.id}')">Historique DLC</button>
         </div>
       </div>` : ''}
     </div>`;
