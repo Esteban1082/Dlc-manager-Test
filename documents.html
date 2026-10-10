@@ -8,7 +8,6 @@ document.documentElement.style.visibility = 'hidden';
 window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bloqué
 
 (async () => {
-  const pm  = localStorage.getItem('pm_auth') === '1';
   const sl  = localStorage.getItem('sl_auth') === '1';
   const tok = localStorage.getItem('sl_access_token');
 
@@ -17,7 +16,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     // Attendre que le body existe
     const render = () => {
       if (!document.body) { requestAnimationFrame(render); return; }
-      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🚫</div><div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">${title}</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">${sub}</div><a href="hub.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>`;
+      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#f4efe7;color:#23201c;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;padding:24px"><div style="max-width:320px"><div style="font-family:'Fraunces',Georgia,serif;font-size:28px;font-weight:700;margin-bottom:8px">${title}</div><div style="font-size:15px;color:#6e6256;margin-bottom:28px;line-height:1.4">${sub}</div><a href="hub.html" style="display:inline-block;padding:14px 28px;background:#e8a045;border-radius:999px;font-size:16px;font-weight:700;color:#23201c;text-decoration:none">Retour à l’accueil</a></div></div>`;
     };
     render();
   }
@@ -27,11 +26,8 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     document.documentElement.style.visibility = 'visible';
   }
 
-  // Pas connecté du tout
-  if (!pm && !sl) {
-    showBlock('Accès restreint', 'Connecte-toi depuis le hub');
-    return;
-  }
+  // Pas connecté avec un compte → page de connexion
+  if (!tok || !sl) { window.location.replace('login.html'); return; }
 
   // Connecté via Supabase → vérifier permission
   if (tok && sl) {
@@ -46,7 +42,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
       );
       const perms = await r.json();
       if (!Array.isArray(perms) || perms.length === 0) {
-        showBlock('Module non activé', "Parle à Esteban pour obtenir l\'accès");
+        showBlock('Module non activé', "Demande l\'accès à ton responsable");
         return;
       }
       allow();
@@ -54,8 +50,6 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     return;
   }
 
-  // PIN uniquement → accès libre
-  allow();
 })();
 </script>
 <meta charset="UTF-8">
@@ -308,6 +302,13 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   }
 
 </style>
+<style id="sl-import">
+  .import-banner { max-width:var(--sl-w); width:calc(100% - 32px); margin:14px auto 0; display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:16px; background:var(--yellow-bg); }
+  .import-banner b { display:block; font-size:15px; }
+  .import-banner span { display:block; font-size:13px; color:var(--muted); margin-top:2px; }
+  .import-banner > div { flex:1; }
+  .btn-import { border:none; border-radius:999px; background:#e8a045; color:#23201c; font-weight:700; font-size:14px; padding:10px 18px; cursor:pointer; }
+</style>
 </head>
 <body>
 <button class="theme-toggle-global" id="theme-toggle-global" onclick="toggleStoreLineTheme()" title="Mode clair / sombre" aria-label="Mode clair ou sombre">Clair</button>
@@ -331,12 +332,16 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   <div class="sl-head-in">
     <div class="sl-head-top">
       <a class="back-btn sl-back" href="hub.html"><svg width="11" height="18" viewBox="0 0 11 18" aria-hidden="true"><path d="M9 1.5 1.8 9 9 16.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Accueil</span></a>
-      <div class="sl-head-actions"><div class="sync-badge" id="sync-badge">Sync</div><button id="logout-btn" class="pill-btn" style="display:none" onclick="logoutModule()">Déco</button></div>
+      <div class="sl-head-actions"><div class="sync-badge" id="sync-badge">Sync</div></div>
     </div>
     <h1 class="sl-title">Documents</h1>
   </div>
 </header>
 
+<div id="import-banner" class="import-banner" style="display:none">
+  <div><b>Première ouverture en ligne</b><span>Récupère tes checklists, documents et contacts de l’ancien Google Sheets.</span></div>
+  <button id="import-btn" class="btn-import" onclick="importFromSheets()">Importer</button>
+</div>
 <div class="tabs">
   <button class="tab active" onclick="switchTab('checklists',this)">Checklists</button>
   <button class="tab" onclick="switchTab('docs',this)">Documents</button>
@@ -354,7 +359,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
         <button onclick="openAddChecklist()" style="padding:7px 12px;background:var(--amber);border:none;border-radius:8px;font-family:'Fraunces',serif;font-size:13px;font-weight:700;color:#000;">＋ Liste</button>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">L'état des cases se remet à zéro chaque jour. Les listes sont partagées entre tous les appareils.</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">Les cases cochées sont partagées avec toute l’équipe et se remettent à zéro chaque jour.</div>
     <div id="checklists-container"></div>
   </div>
 
@@ -435,33 +440,116 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">documents v3.1 · 09/10/2026 21:40</div>
+<div class="version-tag">documents v4.0 · 10/10/2026 17:05</div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
-let _apiCallId = 0;
+// ── Supabase (fetch natif) ──
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('sl_user') || '{}'); }
+  catch(e) { return {}; }
+}
+
+
+async function sbRpcScalar(functionName, accessToken) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON,
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: '{}',
+    });
+    if (!r.ok) return null;
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
+  } catch(e) {
+    return null;
+  }
+}
+
+async function ensureSupabaseUserReady() {
+  const token = localStorage.getItem('sl_access_token');
+  let stored = getStoredUser();
+  if (!token || stored.tenant_id) return stored;
+
+  try {
+    const authResp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` },
+    });
+    const authUser = authResp.ok ? await authResp.json() : {};
+    let profile = null;
+    const userId = authUser.id || stored.id;
+
+    if (userId) {
+      const profileResp = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=role,tenant_id`, {
+        headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` },
+      });
+      if (profileResp.ok) {
+        const data = await profileResp.json();
+        profile = Array.isArray(data) ? data[0] : null;
+      }
+    }
+
+    if (!profile?.role || !profile?.tenant_id) {
+      const [role, tenantId] = await Promise.all([
+        sbRpcScalar('my_role', token),
+        sbRpcScalar('my_tenant_id', token),
+      ]);
+      profile = {
+        role: profile?.role || role || stored.role || 'employe',
+        tenant_id: profile?.tenant_id || tenantId || null,
+      };
+    }
+
+    stored = {
+      id: userId || stored.id,
+      email: authUser.email || stored.email,
+      role: profile?.role || stored.role || 'employe',
+      tenant_id: profile?.tenant_id || stored.tenant_id || null,
+    };
+    localStorage.setItem('sl_user', JSON.stringify(stored));
+  } catch(e) {
+    console.warn('[supabase] Session repair failed:', e.message);
+  }
+
+  return stored;
+}
+
+async function sbFetch(path, options={}) {
+  const token = localStorage.getItem('sl_access_token');
+  const r = await fetch(SUPABASE_URL + path, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(options.headers || {})
+    }
+  });
+  const text = await r.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
+  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  return data;
+}
+
 
 // Données en mémoire
 let checklists = [];
 let docs = [];
 let contacts = [];
-// États des cases (reset chaque jour) — stockés localement avec date
-let checkStates = {}; // { 'cl_id:task_id': true/false }
-const todayKey = new Date().toISOString().split('T')[0];
+// Cases cochées du jour — partagées entre appareils (table checklist_etats)
+let checkStates = {}; // { 'checklist_id:tache_id': true }
+const todayKey = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })();
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safeUrl = u => /^https?:\/\//i.test(String(u || '').trim()) ? String(u).trim() : '';
 
-function api(params) {
-  return new Promise((resolve, reject) => {
-    const cbName = 'dlcCb_' + (++_apiCallId);
-    const script = document.createElement('script');
-    const timer = setTimeout(() => { cleanup(); reject(new Error('Timeout')); }, 20000);
-    window[cbName] = (data) => { cleanup(); resolve(data); };
-    function cleanup() { clearTimeout(timer); delete window[cbName]; if (script.parentNode) script.remove(); }
-    script.onerror = () => { cleanup(); reject(new Error('Erreur réseau')); };
-    const p = new URLSearchParams({ ...params, callback: cbName });
-    script.src = API_URL + '?' + p.toString();
-    document.head.appendChild(script);
-  });
-}
 
 function toast(msg, isError=false) {
   const c = document.getElementById('toast-container');
@@ -489,22 +577,14 @@ function switchTab(tab, btn) {
 }
 
 // ── États cases (local, reset quotidien) ──
-function loadCheckStates() {
+async function loadCheckStates() {
   try {
-    const saved = localStorage.getItem('pm_checkstates_' + todayKey);
-    checkStates = saved ? JSON.parse(saved) : {};
-  } catch(e) { checkStates = {}; }
-  // Nettoyer les vieux états
-  try {
-    Object.keys(localStorage).forEach(k => {
-      if (k.startsWith('pm_checkstates_') && !k.endsWith(todayKey)) localStorage.removeItem(k);
-    });
-  } catch(e) {}
+    const rows = await sbFetch(`/rest/v1/checklist_etats?jour=eq.${todayKey}&select=checklist_id,tache_id`);
+    checkStates = {};
+    (rows || []).forEach(r => { checkStates[r.checklist_id + ':' + r.tache_id] = true; });
+  } catch(e) { console.warn('[documents] états:', e.message); }
 }
 
-function saveCheckStates() {
-  try { localStorage.setItem('pm_checkstates_' + todayKey, JSON.stringify(checkStates)); } catch(e) {}
-}
 
 // ═══════════════════ CHECKLISTS ═══════════════════
 function renderChecklists() {
@@ -521,7 +601,7 @@ function renderChecklists() {
     return `<div class="checklist-card">
       <div class="checklist-header">
         <div>
-          <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700">${cl.nom}</div>
+          <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700">${esc(cl.nom)}</div>
           <div style="font-size:11px;color:${color};margin-top:3px">${done}/${tasks.length} · ${pct === 100 ? '✓ Terminé !' : pct > 0 ? 'En cours' : 'À faire'}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -538,7 +618,7 @@ function renderChecklists() {
         const isDone = !!checkStates[cl.id+':'+t.id];
         return `<div class="check-item ${isDone?'done':''}" onclick="toggleTask('${cl.id}','${t.id}')">
           <div class="checkbox">${isDone?'<span style="color:#000;font-size:14px;font-weight:900">✓</span>':''}</div>
-          <span class="check-label" style="font-size:14px">${t.label}</span>
+          <span class="check-label" style="font-size:14px">${esc(t.label)}</span>
         </div>`;
       }).join('')}
       <div style="padding:8px 16px;border-top:1px solid var(--border)">
@@ -551,40 +631,52 @@ function renderChecklists() {
   }).join('');
 }
 
-function toggleTask(clId, taskId) {
+async function toggleTask(clId, taskId) {
   const key = clId + ':' + taskId;
-  checkStates[key] = !checkStates[key];
-  saveCheckStates();
+  const wasDone = !!checkStates[key];
+  if (wasDone) delete checkStates[key]; else checkStates[key] = true;
   renderChecklists();
+  try {
+    if (wasDone) await sbFetch(`/rest/v1/checklist_etats?checklist_id=eq.${encodeURIComponent(clId)}&tache_id=eq.${encodeURIComponent(taskId)}&jour=eq.${todayKey}`, { method:'DELETE' });
+    else await sbFetch('/rest/v1/checklist_etats', { method:'POST', headers:{ 'Prefer':'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ tenant_id: tenantId(), checklist_id: clId, tache_id: taskId, jour: todayKey }) });
+  } catch(e) {
+    if (wasDone) checkStates[key] = true; else delete checkStates[key];
+    renderChecklists();
+    toast('⚠ ' + e.message, true);
+  }
 }
 
 async function deleteChecklist(id, e) {
   e.stopPropagation();
   if (!confirm('Supprimer cette checklist ?')) return;
-  checklists = checklists.filter(c => c.id !== id);
-  renderChecklists();
-  try { await api({ action:'deleteChecklist', id }); } catch(e) {}
+  try {
+    await sbFetch(`/rest/v1/checklists?id=eq.${encodeURIComponent(id)}`, { method:'DELETE' });
+    checklists = checklists.filter(c => c.id !== id);
+    renderChecklists();
+  } catch(err) { toast('⚠ ' + err.message, true); }
 }
 
-function resetAllChecklists() {
-  if (!confirm('Remettre toutes les tâches à zéro ?')) return;
-  checkStates = {};
-  saveCheckStates();
-  renderChecklists();
-  toast('✓ Checklists remises à zéro');
+async function resetAllChecklists() {
+  if (!confirm('Remettre toutes les tâches du jour à zéro pour toute l’équipe ?')) return;
+  try {
+    await sbFetch(`/rest/v1/checklist_etats?jour=eq.${todayKey}`, { method:'DELETE' });
+    checkStates = {};
+    renderChecklists();
+    toast('✓ Checklists remises à zéro');
+  } catch(e) { toast('⚠ ' + e.message, true); }
 }
 
-function openAddTask(clId) {
+async function openAddTask(clId) {
   const label = prompt('Nom de la tâche :');
   if (!label || !label.trim()) return;
   const cl = checklists.find(c => c.id === clId);
   if (!cl) return;
-  if (!cl.tasks) cl.tasks = [];
-  const task = { id:'t_'+Date.now(), label:label.trim() };
-  cl.tasks.push(task);
-  renderChecklists();
-  // Sauver dans Sheets
-  api({ action:'saveChecklist', id:cl.id, nom:cl.nom, tasks:JSON.stringify(cl.tasks) }).catch(()=>{});
+  const tasks = [...(cl.tasks || []), { id:'t_' + Date.now(), label:label.trim() }];
+  try {
+    await sbFetch(`/rest/v1/checklists?id=eq.${encodeURIComponent(clId)}`, { method:'PATCH', body: JSON.stringify({ taches: tasks, updated_at: new Date().toISOString() }) });
+    cl.tasks = tasks;
+    renderChecklists();
+  } catch(e) { toast('⚠ ' + e.message, true); }
 }
 
 function openAddChecklist() {
@@ -600,13 +692,13 @@ async function saveChecklist() {
   if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
   const lines = document.getElementById('cl-tasks').value.split('\n').map(l=>l.trim()).filter(Boolean);
   const tasks = lines.map((l,i) => ({ id:'t_'+Date.now()+i, label:l }));
-  const id = 'cl_' + Date.now();
-  checklists.push({ id, nom, tasks });
-  renderChecklists();
-  closeChecklistModal();
-  toast(`✓ Checklist "${nom}" créée`);
-  try { await api({ action:'saveChecklist', id, nom, tasks:JSON.stringify(tasks) }); }
-  catch(e) { toast('⚠ Erreur sauvegarde Sheets', true); }
+  try {
+    const rows = await sbFetch('/rest/v1/checklists', { method:'POST', body: JSON.stringify({ tenant_id: tenantId(), nom, taches: tasks, ordre: checklists.length, actif: true }) });
+    checklists.push(rowToChecklist(rows[0]));
+    renderChecklists();
+    closeChecklistModal();
+    toast(`✓ Checklist "${nom}" créée`);
+  } catch(e) { toast('⚠ ' + e.message, true); }
 }
 
 // ═══════════════════ DOCUMENTS ═══════════════════
@@ -628,11 +720,11 @@ function renderDocs() {
       <span style="flex:1;height:1px;background:var(--border)"></span>
     </div>`;
     html += items.map(d => `
-      <div class="doc-row" ${d.url?`onclick="window.open('${d.url}','_blank')" style="cursor:pointer"`:''}>
+      <div class="doc-row" ${safeUrl(d.url)?`onclick="window.open(this.dataset.url,'_blank','noopener')" data-url="${esc(safeUrl(d.url))}" style="cursor:pointer"`:''}>
         <div style="font-size:22px;flex-shrink:0">${DOC_ICONS[d.categorie]||'📄'}</div>
         <div style="flex:1">
-          <div style="font-size:14px;font-weight:600">${d.titre}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${d.url?'🔗 Lien disponible':'⚠ Pas de lien'}</div>
+          <div style="font-size:14px;font-weight:600">${esc(d.titre)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${safeUrl(d.url)?'Lien disponible':'Pas de lien'}</div>
         </div>
         <button onclick="event.stopPropagation();deleteDoc('${d.id}')" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);flex-shrink:0"><span class=ic-del></span></button>
       </div>`).join('');
@@ -650,20 +742,24 @@ function closeDocModal() { document.getElementById('modal-doc').style.display='n
 async function saveDoc() {
   const titre = document.getElementById('doc-titre').value.trim();
   if (!titre) { toast('⚠ Le titre est obligatoire', true); return; }
-  const doc = { id:'d_'+Date.now(), titre, url:document.getElementById('doc-url').value.trim(), categorie:document.getElementById('doc-categorie').value };
-  docs.push(doc);
-  renderDocs();
-  closeDocModal();
-  toast(`✓ "${titre}" ajouté`);
-  try { await api({ action:'saveDocument', ...doc }); }
-  catch(e) { toast('⚠ Erreur sauvegarde Sheets', true); }
+  const url = document.getElementById('doc-url').value.trim();
+  if (url && !safeUrl(url)) { toast('⚠ Le lien doit commencer par https://', true); return; }
+  try {
+    const rows = await sbFetch('/rest/v1/documents', { method:'POST', body: JSON.stringify({ tenant_id: tenantId(), titre, url, categorie: document.getElementById('doc-categorie').value }) });
+    docs.push(rows[0]);
+    renderDocs();
+    closeDocModal();
+    toast(`✓ "${titre}" ajouté`);
+  } catch(e) { toast('⚠ ' + e.message, true); }
 }
 
 async function deleteDoc(id) {
   if (!confirm('Supprimer ce document ?')) return;
-  docs = docs.filter(d => d.id !== id);
-  renderDocs();
-  try { await api({ action:'deleteDocument', id }); } catch(e) {}
+  try {
+    await sbFetch(`/rest/v1/documents?id=eq.${encodeURIComponent(id)}`, { method:'DELETE' });
+    docs = docs.filter(d => d.id !== id);
+    renderDocs();
+  } catch(e) { toast('⚠ ' + e.message, true); }
 }
 
 // ═══════════════════ CONTACTS ═══════════════════
@@ -677,10 +773,10 @@ function renderContacts() {
     <div class="contact-card">
       <div style="display:flex;align-items:flex-start;justify-content:space-between">
         <div>
-          <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700;margin-bottom:8px">${c.nom}</div>
-          ${c.tel   ? `<a href="tel:${c.tel}" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--blue);text-decoration:none;margin-bottom:4px">📞 ${c.tel}</a>` : ''}
-          ${c.email ? `<a href="mailto:${c.email}" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--amber);text-decoration:none;margin-bottom:4px">✉️ ${c.email}</a>` : ''}
-          ${c.note  ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">ℹ️ ${c.note}</div>` : ''}
+          <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700;margin-bottom:8px">${esc(c.nom)}</div>
+          ${c.tel   ? `<a href="tel:${esc(c.tel)}" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--blue);text-decoration:none;margin-bottom:4px">${esc(c.tel)}</a>` : ''}
+          ${c.email ? `<a href="mailto:${esc(c.email)}" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--amber);text-decoration:none;margin-bottom:4px">${esc(c.email)}</a>` : ''}
+          ${c.note  ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">${esc(c.note)}</div>` : ''}
         </div>
         <button onclick="deleteContact('${c.id}')" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);flex-shrink:0;margin-left:10px"><span class=ic-del></span></button>
       </div>
@@ -697,47 +793,102 @@ function closeContactModal() { document.getElementById('modal-contact').style.di
 async function saveContact() {
   const nom = document.getElementById('contact-nom').value.trim();
   if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
-  const contact = { id:'c_'+Date.now(), nom, tel:document.getElementById('contact-tel').value.trim(), email:document.getElementById('contact-email').value.trim(), note:document.getElementById('contact-note').value.trim() };
-  contacts.push(contact);
-  renderContacts();
-  closeContactModal();
-  toast(`✓ "${nom}" ajouté`);
-  try { await api({ action:'saveContact', ...contact }); }
-  catch(e) { toast('⚠ Erreur sauvegarde Sheets', true); }
+  const body = { tenant_id: tenantId(), nom, telephone: document.getElementById('contact-tel').value.trim(), email: document.getElementById('contact-email').value.trim(), note: document.getElementById('contact-note').value.trim() };
+  try {
+    const rows = await sbFetch('/rest/v1/contacts', { method:'POST', body: JSON.stringify(body) });
+    contacts.push(rowToContact(rows[0]));
+    renderContacts();
+    closeContactModal();
+    toast(`✓ "${nom}" ajouté`);
+  } catch(e) { toast('⚠ ' + e.message, true); }
 }
 
 async function deleteContact(id) {
   if (!confirm('Supprimer ce contact ?')) return;
-  contacts = contacts.filter(c => c.id !== id);
-  renderContacts();
-  try { await api({ action:'deleteContact', id }); } catch(e) {}
+  try {
+    await sbFetch(`/rest/v1/contacts?id=eq.${encodeURIComponent(id)}`, { method:'DELETE' });
+    contacts = contacts.filter(c => c.id !== id);
+    renderContacts();
+  } catch(e) { toast('⚠ ' + e.message, true); }
 }
 
 // ═══════════════════ INIT & SYNC ═══════════════════
-async function loadFromSheets() {
+function tenantId() { return (getStoredUser() || {}).tenant_id || null; }
+function rowToChecklist(r) { return { id: r.id, nom: r.nom || '', tasks: Array.isArray(r.taches) ? r.taches : [] }; }
+function rowToContact(r) { return { id: r.id, nom: r.nom || '', tel: r.telephone || '', email: r.email || '', note: r.note || '' }; }
+
+async function loadAll() {
   setSyncBadge('loading');
   try {
-    const data = await api({ action:'getDocuments' });
-    if (data.success) {
-      checklists = data.checklists || [];
-      docs       = data.docs       || [];
-      contacts   = data.contacts   || [];
-    }
+    const user = await ensureSupabaseUserReady();
+    if (!user.tenant_id) throw new Error('Magasin introuvable pour ce compte');
+    const [cl, dc, ct] = await Promise.all([
+      sbFetch('/rest/v1/checklists?actif=eq.true&select=id,nom,taches,ordre&order=ordre.asc,created_at.asc'),
+      sbFetch('/rest/v1/documents?select=id,titre,url,categorie&order=created_at.asc'),
+      sbFetch('/rest/v1/contacts?select=id,nom,telephone,email,note&order=nom.asc'),
+    ]);
+    checklists = (cl || []).map(rowToChecklist);
+    docs       = dc || [];
+    contacts   = (ct || []).map(rowToContact);
+    await loadCheckStates();
     setSyncBadge('ok');
   } catch(e) {
     setSyncBadge('error');
-    toast('⚠ Impossible de charger depuis Sheets', true);
+    toast('⚠ Chargement impossible : ' + e.message, true);
   }
   renderChecklists();
   renderDocs();
   renderContacts();
+  updateImportBanner();
 }
 
-loadCheckStates();
+// ── Import unique depuis l'ancien Google Sheets (affiché seulement si tout est vide) ──
+const LEGACY_API = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+function legacyGet(action) {
+  return new Promise((resolve, reject) => {
+    const cb = 'slImport_' + Date.now();
+    const sc = document.createElement('script');
+    const timer = setTimeout(() => { done(); reject(new Error('Délai dépassé')); }, 20000);
+    function done() { clearTimeout(timer); delete window[cb]; sc.remove(); }
+    window[cb] = d => { done(); resolve(d); };
+    sc.onerror = () => { done(); reject(new Error('Google Sheets injoignable')); };
+    sc.src = LEGACY_API + '?' + new URLSearchParams({ action, callback: cb });
+    document.head.appendChild(sc);
+  });
+}
+function updateImportBanner() {
+  const b = document.getElementById('import-banner');
+  if (b) b.style.display = (!checklists.length && !docs.length && !contacts.length) ? 'flex' : 'none';
+}
+async function importFromSheets() {
+  const btn = document.getElementById('import-btn');
+  btn.disabled = true; btn.textContent = 'Import…';
+  try {
+    const data = await legacyGet('getDocuments');
+    if (!data || !data.success) throw new Error((data && data.error) || 'Réponse invalide');
+    const t = tenantId();
+    const cl = (data.checklists || []).map((c, i) => ({ tenant_id: t, nom: c.nom || 'Checklist', taches: Array.isArray(c.tasks) ? c.tasks : (typeof c.tasks === 'string' ? JSON.parse(c.tasks || '[]') : []), ordre: i, actif: true }));
+    const dc = (data.docs || []).map(d => ({ tenant_id: t, titre: d.titre || 'Document', url: d.url || '', categorie: d.categorie || 'autre' }));
+    const ct = (data.contacts || []).map(c => ({ tenant_id: t, nom: c.nom || 'Contact', telephone: c.tel || '', email: c.email || '', note: c.note || '' }));
+    if (cl.length) await sbFetch('/rest/v1/checklists', { method:'POST', body: JSON.stringify(cl) });
+    if (dc.length) await sbFetch('/rest/v1/documents', { method:'POST', body: JSON.stringify(dc) });
+    if (ct.length) await sbFetch('/rest/v1/contacts',  { method:'POST', body: JSON.stringify(ct) });
+    toast(`✓ Importé : ${cl.length} checklist(s), ${dc.length} document(s), ${ct.length} contact(s)`);
+    await loadAll();
+  } catch(e) {
+    toast('⚠ Import impossible : ' + e.message, true);
+  } finally { btn.disabled = false; btn.textContent = 'Importer'; }
+}
+
+// Rafraîchir les cases cochées quand on revient sur la page (partage entre appareils)
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && window.__guardPassed === true) { await loadCheckStates(); renderChecklists(); }
+});
+
 // Attendre que le guard soit résolu ET que le DOM soit prêt
 function _runWhenReady() {
   if (window.__guardPassed === true) {
-    loadFromSheets();
+    loadAll();
   } else if (window.__guardPassed === false) {
     // Bloqué — ne rien faire
   } else {

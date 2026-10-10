@@ -6,7 +6,6 @@
 document.documentElement.style.visibility = 'hidden';
 window.__guardPassed = undefined;
 (async () => {
-  const pm  = localStorage.getItem('pm_auth') === '1';
   const sl  = localStorage.getItem('sl_auth') === '1';
   const tok = localStorage.getItem('sl_access_token');
   function block(title, sub) {
@@ -14,12 +13,12 @@ window.__guardPassed = undefined;
     const render = () => {
       if (!document.body) { requestAnimationFrame(render); return; }
       document.documentElement.style.visibility = 'visible';
-      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🚫</div><div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">${title}</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">${sub}</div><a href="hub.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>`;
+      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#f4efe7;color:#23201c;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;padding:24px"><div style="max-width:320px"><div style="font-family:'Fraunces',Georgia,serif;font-size:28px;font-weight:700;margin-bottom:8px">${title}</div><div style="font-size:15px;color:#6e6256;margin-bottom:28px;line-height:1.4">${sub}</div><a href="hub.html" style="display:inline-block;padding:14px 28px;background:#e8a045;border-radius:999px;font-size:16px;font-weight:700;color:#23201c;text-decoration:none">Retour à l’accueil</a></div></div>`;
     };
     render();
   }
   function allow() { window.__guardPassed = true; document.documentElement.style.visibility = 'visible'; }
-  if (!pm && !sl) { block('Accès restreint', 'Connecte-toi depuis le hub'); return; }
+  if (!tok || !sl) { window.location.replace('login.html'); return; }
   if (tok && sl) {
     const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
     if (['superadmin','admin'].includes(user.role)) { allow(); return; }
@@ -28,12 +27,11 @@ window.__guardPassed = undefined;
       const r = await fetch('https://jeqptodorjzeyhapbmrz.supabase.co/rest/v1/permissions?user_id=eq.'+user.id+'&module=eq.donnees&actif=eq.true&select=id',
         {headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk','Authorization':'Bearer '+tok}});
       const perms = await r.json();
-      if (!Array.isArray(perms)||perms.length===0){block('Module non activé',"Parle à Esteban pour obtenir l'accès");return;}
+      if (!Array.isArray(perms)||perms.length===0){block('Module non activé',"Demande l'accès à ton responsable");return;}
       allow();
     } catch(e){allow();}
     return;
   }
-  allow();
 })();
 </script>
 <meta charset="UTF-8">
@@ -512,21 +510,117 @@ window.__guardPassed = undefined;
   </div>
 </div>
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">données v2.1 · 09/10/2026 21:40</div>
+<div class="version-tag">données v3.0 · 10/10/2026 17:05</div>
 
 <script>
 // ══════════════════════════════════════
 // CONFIG
 // ══════════════════════════════════════
-const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
-let _apiCallId = 0;
+// ── Supabase (fetch natif) ──
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('sl_user') || '{}'); }
+  catch(e) { return {}; }
+}
+
+
+async function sbRpcScalar(functionName, accessToken) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON,
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: '{}',
+    });
+    if (!r.ok) return null;
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
+  } catch(e) {
+    return null;
+  }
+}
+
+async function ensureSupabaseUserReady() {
+  const token = localStorage.getItem('sl_access_token');
+  let stored = getStoredUser();
+  if (!token || stored.tenant_id) return stored;
+
+  try {
+    const authResp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` },
+    });
+    const authUser = authResp.ok ? await authResp.json() : {};
+    let profile = null;
+    const userId = authUser.id || stored.id;
+
+    if (userId) {
+      const profileResp = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=role,tenant_id`, {
+        headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` },
+      });
+      if (profileResp.ok) {
+        const data = await profileResp.json();
+        profile = Array.isArray(data) ? data[0] : null;
+      }
+    }
+
+    if (!profile?.role || !profile?.tenant_id) {
+      const [role, tenantId] = await Promise.all([
+        sbRpcScalar('my_role', token),
+        sbRpcScalar('my_tenant_id', token),
+      ]);
+      profile = {
+        role: profile?.role || role || stored.role || 'employe',
+        tenant_id: profile?.tenant_id || tenantId || null,
+      };
+    }
+
+    stored = {
+      id: userId || stored.id,
+      email: authUser.email || stored.email,
+      role: profile?.role || stored.role || 'employe',
+      tenant_id: profile?.tenant_id || stored.tenant_id || null,
+    };
+    localStorage.setItem('sl_user', JSON.stringify(stored));
+  } catch(e) {
+    console.warn('[supabase] Session repair failed:', e.message);
+  }
+
+  return stored;
+}
+
+async function sbFetch(path, options={}) {
+  const token = localStorage.getItem('sl_access_token');
+  const r = await fetch(SUPABASE_URL + path, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(options.headers || {})
+    }
+  });
+  const text = await r.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
+  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  return data;
+}
+
+const escD = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 // Définition des onglets : colonnes, mapping API, tri par défaut
 const TABS = {
   produits: {
     label: 'Produits',
-    action: 'getProducts',
-    parseData: d => d.success && d.products ? d.products : [],
+    table: 'produits',
+    query: 'select=id,nom,marque,code_barres,categorie&order=nom.asc',
+    map: r => ({ id:r.id, nom_article:r.nom, patissier:r.marque, code_barres:r.code_barres, categorie:r.categorie }),
     cols: [
       { key:'nom_article',  label:'Nom',         editable:false },
       { key:'patissier',    label:'Fournisseur',   editable:false },
@@ -537,8 +631,9 @@ const TABS = {
   },
   pertes: {
     label: 'Pertes',
-    action: 'getPertes',
-    parseData: d => d.success && d.pertes ? d.pertes : (Array.isArray(d) ? d : []),
+    table: 'pertes',
+    query: 'select=id,nom,marque,code_barres,quantite,date_perte&order=date_perte.desc,created_at.desc',
+    map: r => ({ id:r.id, name:r.nom, brand:r.marque, quantity:r.quantite, barcode:r.code_barres, date:r.date_perte }),
     cols: [
       { key:'name',      label:'Article',    editable:false },
       { key:'brand',     label:'Fournisseur',  editable:false },
@@ -551,29 +646,24 @@ const TABS = {
   },
   temperatures: {
     label: 'Températures',
-    action: 'getTemperatures',
-    parseData: d => d.success && d.temperatures ? d.temperatures : (Array.isArray(d) ? d : []),
+    table: 'temperatures',
+    query: 'select=id,zone_nom,valeur,date_releve,heure,hors_norme&order=date_releve.desc,created_at.desc',
+    map: r => ({ id:r.id, nom:r.zone_nom, temp:r.valeur, date:r.date_releve, heure:(r.heure||'').slice(0,5), hors_norme:r.hors_norme }),
     cols: [
       { key:'nom',   label:'Zone',       editable:false },
       { key:'temp',  label:'Temp. (°C)', editable:false },
       { key:'date',  label:'Date',       editable:false, type:'date' },
+      { key:'heure', label:'Heure',      editable:false },
+      { key:'hors_norme', label:'État',  editable:false, type:'badge' },
     ],
     sortKey: 'date',
     sortDir: 'desc',
   },
   allergenes: {
     label: 'Allergènes',
-    action: 'getAllergenes',
-    parseData: d => {
-      // getAllergenes retourne un tableau d'objets avec .nom et .allergenes (liste)
-      if (d.success && Array.isArray(d.fiches)) return d.fiches;
-      if (d.success && Array.isArray(d.allergenes)) return d.allergenes;
-      if (Array.isArray(d)) return d;
-      // Essayer de récupérer depuis d directement
-      const keys = Object.keys(d).filter(k => k !== 'success' && k !== 'error');
-      for (const k of keys) { if (Array.isArray(d[k])) return d[k]; }
-      return [];
-    },
+    table: 'allergenes',
+    query: 'select=id,nom_gateau,patissier,gluten,lait,oeufs,fruits_coq,arachides&order=nom_gateau.asc',
+    map: r => ({ id:r.id, nom:r.nom_gateau, patissier:r.patissier, gluten:r.gluten, lait:r.lait, oeufs:r.oeufs, fruits_coq:r.fruits_coq, arachides:r.arachides }),
     cols: [
       { key:'nom',        label:'Gâteau',    editable:false },
       { key:'patissier',  label:'Fournisseur', editable:false },
@@ -587,8 +677,9 @@ const TABS = {
   },
   transferts: {
     label: 'Transferts',
-    action: 'getTransferts',
-    parseData: d => d.success && d.transferts ? d.transferts : (Array.isArray(d) ? d : []),
+    table: 'transferts',
+    query: 'select=id,date_transfert,heure,rayon_dest,articles,prix_total,note,bon_barcode&order=date_transfert.desc,created_at.desc',
+    map: r => ({ id:r.id, date:r.date_transfert, heure:(r.heure||'').slice(0,5), rayon:r.rayon_dest, bonBarcode:r.bon_barcode, total:r.prix_total, articles:JSON.stringify(r.articles||[]), note:r.note }),
     cols: [
       { key:'date',       label:'Date',       editable:false, type:'date'         },
       { key:'rayon',      label:'Rayon',      editable:false                      },
@@ -631,26 +722,6 @@ function setStatus(msg, syncing=false) {
   document.getElementById('status-dot').style.boxShadow  = syncing ? '0 0 4px var(--amber)' : '0 0 4px var(--green)';
 }
 
-function api(params) {
-  return new Promise((resolve, reject) => {
-    const cbName = 'dlcCb_' + (++_apiCallId);
-    const timeout = setTimeout(() => {
-      delete window[cbName];
-      reject(new Error('Timeout'));
-    }, 15000);
-    window[cbName] = (data) => {
-      clearTimeout(timeout);
-      delete window[cbName];
-      resolve(data);
-    };
-    const p = new URLSearchParams({ ...params, callback: cbName });
-    const script = document.createElement('script');
-    script.onerror = () => { clearTimeout(timeout); delete window[cbName]; reject(new Error('Erreur réseau')); };
-    script.src = API_URL + '?' + p.toString();
-    document.head.appendChild(script);
-    setTimeout(() => { try { document.head.removeChild(script); } catch(e){} }, 20000);
-  });
-}
 
 // ══════════════════════════════════════
 // TABS
@@ -678,16 +749,16 @@ async function loadTab(tabId) {
   setStatus('Chargement...', true);
   renderLoading();
   try {
-    const data = await api({ action: cfg.action });
-    const rows = cfg.parseData ? cfg.parseData(data) : (data.data || data.items || []);
-    console.log('[donnees] tab:', tabId, '→', rows.length, 'lignes', rows[0] || '');
-    if (tabId === 'allergenes' && rows.length === 0) console.log('[donnees] allergenes raw:', JSON.stringify(data).substring(0, 300));
+    const user = await ensureSupabaseUserReady();
+    if (!user.tenant_id) throw new Error('Magasin introuvable pour ce compte');
+    const data = await sbFetch(`/rest/v1/${cfg.table}?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&${cfg.query}`);
+    const rows = (Array.isArray(data) ? data : []).map(cfg.map);
     allData[tabId] = rows;
     renderTable(rows);
     setStatus(`${rows.length} ligne${rows.length>1?'s':''} chargée${rows.length>1?'s':''}`);
   } catch(e) {
     setStatus('⚠ Erreur de chargement', false);
-    renderError(e.message);
+    renderError(escD(e.message));
     toast('⚠ Impossible de charger les données', true);
   }
 }
@@ -804,7 +875,7 @@ function renderCell(row, rowIdx, col) {
     try {
       const articles = JSON.parse(row.articles || '[]');
       const noms = articles.map(a => `${a.nom||a.name||'?'} ×${a.qty||a.quantity||1}`).join(', ');
-      return `<td><span class="cell-view" style="color:var(--muted);max-width:200px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${noms}">${articles.length} article${articles.length>1?'s':''} — ${noms}</span></td>`;
+      return `<td><span class="cell-view" style="color:var(--muted);max-width:200px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escD(noms)}">${articles.length} article${articles.length>1?'s':''} — ${escD(noms)}</span></td>`;
     } catch(e) {
       return `<td><span class="cell-view" style="color:var(--muted)">—</span></td>`;
     }
@@ -814,10 +885,10 @@ function renderCell(row, rowIdx, col) {
       const d = new Date(displayVal);
       if (!isNaN(d)) return `<td><span class="cell-view" style="color:var(--muted)">${d.toLocaleDateString('fr-BE')}</span></td>`;
     } catch(e){}
-    return `<td><span class="cell-view" style="color:var(--muted)">${displayVal}</span></td>`;
+    return `<td><span class="cell-view" style="color:var(--muted)">${escD(displayVal)}</span></td>`;
   }
   if (!col.editable) {
-    return `<td><span class="cell-view">${displayVal}</span></td>`;
+    return `<td><span class="cell-view">${escD(displayVal)}</span></td>`;
   }
   // Cellule éditable
   const hasPending = edited !== undefined;
@@ -897,47 +968,29 @@ function applyFilter() {
 // SAUVEGARDE
 // ══════════════════════════════════════
 async function saveChanges() {
-  const editCount = Object.keys(pendingEdits).length;
-  if (!editCount) { toast('Aucune modification à sauvegarder'); return; }
-
-  const cfg = TABS[currentTab];
-  if (!cfg.saveAction) {
-    toast('⚠ Sauvegarde non disponible pour cet onglet (disponible en P2 avec Supabase)', true);
-    return;
-  }
-
-  setStatus('Sauvegarde...', true);
-  let saved = 0;
-  for (const [rowIdx, changes] of Object.entries(pendingEdits)) {
-    const row = filteredData[rowIdx];
-    const updated = { ...row, ...changes };
-    try {
-      await api({ action: cfg.saveAction, ...updated });
-      Object.assign(filteredData[rowIdx], changes);
-      if (allData[currentTab]) Object.assign(allData[currentTab].find(r => r === row) || {}, changes);
-      saved++;
-    } catch(e) {
-      toast(`⚠ Erreur ligne ${parseInt(rowIdx)+1}: ${e.message}`, true);
-    }
-  }
-
+  // Vue en lecture : les modifications se font dans chaque module
   pendingEdits = {};
   document.getElementById('btn-save').style.display = 'none';
-  setStatus(`${saved} modification${saved>1?'s':''} sauvegardée${saved>1?'s':''}`);
-  toast(`✓ ${saved} modification${saved>1?'s':''} sauvegardée${saved>1?'s':''}`);
-  renderTable(allData[currentTab] || []);
+  toast('Pour modifier, passe par le module concerné', true);
 }
 
 // ══════════════════════════════════════
 // SUPPRESSION
 // ══════════════════════════════════════
-function confirmDelete(rowIdx) {
+async function confirmDelete(rowIdx) {
   const row = filteredData[rowIdx];
   const cfg = TABS[currentTab];
   const nom = row[cfg.cols[0].key] || 'cette ligne';
-  if (!confirm(`Supprimer "${nom}" ?`)) return;
-  // TODO: appel API suppression en P2
-  toast('⚠ Suppression disponible en P2 avec Supabase', true);
+  if (!row.id) return;
+  if (!confirm(`Supprimer définitivement "${nom}" ?`)) return;
+  try {
+    const res = await sbFetch(`/rest/v1/${cfg.table}?id=eq.${encodeURIComponent(row.id)}`, { method:'DELETE' });
+    if (Array.isArray(res) && !res.length) { toast('⚠ Tu n’as pas le droit de supprimer cette ligne', true); return; }
+    allData[currentTab] = (allData[currentTab] || []).filter(r => r.id !== row.id);
+    renderTable(allData[currentTab]);
+    setStatus(`${allData[currentTab].length} lignes`);
+    toast('✓ Ligne supprimée');
+  } catch(e) { toast('⚠ ' + e.message, true); }
 }
 
 // ══════════════════════════════════════
@@ -1050,8 +1103,8 @@ function genererRapport() {
 
   document.getElementById('rapport-tbody').innerHTML = rapportData.map(r => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:9px 14px">${r.name}</td>
-      <td style="padding:9px 14px;color:var(--muted)">${r.brand}</td>
+      <td style="padding:9px 14px">${escD(r.name)}</td>
+      <td style="padding:9px 14px;color:var(--muted)">${escD(r.brand)}</td>
       <td style="padding:9px 14px;color:var(--muted);font-size:11px">${r.barcode || '—'}</td>
       <td style="padding:9px 14px;text-align:right;color:var(--amber);font-weight:700">${r.qty}</td>
       <td style="padding:9px 14px;text-align:right;color:var(--muted)">${r.count}×</td>
@@ -1123,7 +1176,7 @@ function voirTicket(rowIdx) {
         <tbody>
           ${articles.map(a => `
             <tr style="border-bottom:1px solid var(--border)">
-              <td style="padding:8px 10px">${a.nom || a.name || '?'}</td>
+              <td style="padding:8px 10px">${escD(a.nom || a.name || '?')}</td>
               <td style="padding:8px 10px;color:var(--muted)">${a.marque || a.brand || '—'}</td>
               <td style="padding:8px 10px;text-align:center;font-weight:700;color:var(--amber)">${a.qty || a.quantity || 1}</td>
             </tr>`).join('')}
@@ -1131,7 +1184,7 @@ function voirTicket(rowIdx) {
       </table>
 
       ${total > 0 ? `<div style="padding:10px;background:rgba(232,160,69,.08);border:1px solid rgba(232,160,69,.2);border-radius:8px;color:var(--amber);font-weight:700;text-align:right">Total : ${totalFmt}</div>` : ''}
-      ${row.note ? `<div style="margin-top:10px;padding:10px;background:var(--surface2);border-radius:8px;font-size:11px;color:var(--muted)">📝 ${row.note}</div>` : ''}
+      ${row.note ? `<div style="margin-top:10px;padding:10px;background:var(--surface2);border-radius:8px;font-size:11px;color:var(--muted)">${escD(row.note)}</div>` : ''}
     </div>
   `;
 

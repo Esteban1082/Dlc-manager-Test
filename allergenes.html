@@ -8,7 +8,6 @@ document.documentElement.style.visibility = 'hidden';
 window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bloqué
 
 (async () => {
-  const pm  = localStorage.getItem('pm_auth') === '1';
   const sl  = localStorage.getItem('sl_auth') === '1';
   const tok = localStorage.getItem('sl_access_token');
 
@@ -17,7 +16,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     // Attendre que le body existe
     const render = () => {
       if (!document.body) { requestAnimationFrame(render); return; }
-      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🚫</div><div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">${title}</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">${sub}</div><a href="hub.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>`;
+      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#f4efe7;color:#23201c;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;padding:24px"><div style="max-width:320px"><div style="font-family:'Fraunces',Georgia,serif;font-size:28px;font-weight:700;margin-bottom:8px">${title}</div><div style="font-size:15px;color:#6e6256;margin-bottom:28px;line-height:1.4">${sub}</div><a href="hub.html" style="display:inline-block;padding:14px 28px;background:#e8a045;border-radius:999px;font-size:16px;font-weight:700;color:#23201c;text-decoration:none">Retour à l’accueil</a></div></div>`;
     };
     render();
   }
@@ -27,11 +26,8 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     document.documentElement.style.visibility = 'visible';
   }
 
-  // Pas connecté du tout
-  if (!pm && !sl) {
-    showBlock('Accès restreint', 'Connecte-toi depuis le hub');
-    return;
-  }
+  // Pas connecté avec un compte → page de connexion
+  if (!tok || !sl) { window.location.replace('login.html'); return; }
 
   // Connecté via Supabase → vérifier permission
   if (tok && sl) {
@@ -46,7 +42,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
       );
       const perms = await r.json();
       if (!Array.isArray(perms) || perms.length === 0) {
-        showBlock('Module non activé', "Parle à Esteban pour obtenir l\'accès");
+        showBlock('Module non activé', "Demande l\'accès à ton responsable");
         return;
       }
       allow();
@@ -54,8 +50,6 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     return;
   }
 
-  // PIN uniquement → accès libre
-  allow();
 })();
 </script>
 <meta charset="UTF-8">
@@ -355,7 +349,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   <div class="sl-head-in">
     <div class="sl-head-top">
       <a class="back-btn sl-back" href="hub.html"><svg width="11" height="18" viewBox="0 0 11 18" aria-hidden="true"><path d="M9 1.5 1.8 9 9 16.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Accueil</span></a>
-      <div class="sl-head-actions"><button id="logout-btn" class="pill-btn" style="display:none" onclick="logoutModule()">Déco</button></div>
+      <div class="sl-head-actions"></div>
     </div>
     <h1 class="sl-title">Allergènes</h1>
   </div>
@@ -420,10 +414,9 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">allergenes v3.1 · 09/10/2026 21:40</div>
+<div class="version-tag">allergenes v3.2 · 10/10/2026 17:05</div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
 
@@ -454,28 +447,13 @@ const ALLERGENS_SHEETS = [
   { id:'oeufs',      col:'Oeuf'          },
 ];
 
-let _apiCallId = 0;
 let fiches = [];
 let editingId = null;
 // editStates : Map<allergeneId, 'oui'|'non'|'inconnu'>
 let editStates = new Map();
 let filterMode = 'tous';
 let filterSelected = new Set();
-let dataSource = 'apps';
 
-function api(params) {
-  return new Promise((resolve, reject) => {
-    const cbName = 'dlcCb_' + (++_apiCallId);
-    const script = document.createElement('script');
-    const timer = setTimeout(() => { cleanup(); reject(new Error('Timeout')); }, 20000);
-    window[cbName] = (data) => { cleanup(); resolve(data); };
-    function cleanup() { clearTimeout(timer); delete window[cbName]; if (script.parentNode) script.remove(); }
-    script.onerror = () => { cleanup(); reject(new Error('Erreur réseau')); };
-    const p = new URLSearchParams({ ...params, callback: cbName });
-    script.src = API_URL + '?' + p.toString();
-    document.head.appendChild(script);
-  });
-}
 
 function getStoredUser() {
   try { return JSON.parse(localStorage.getItem('sl_user') || '{}'); }
@@ -640,7 +618,7 @@ function buildFilterChips() {
     : 'Afficher les produits AVEC ces allergènes :';
   document.getElementById('filter-chips').innerHTML = ALLERGENS.map(a => {
     const on = filterSelected.has(a.id);
-    return `<div class="filter-chip ${on?'active':''}" onclick="toggleFilter('${a.id}',this)">${a.emoji} ${a.label}</div>`;
+    return `<div class="filter-chip ${on?'active':''}" onclick="toggleFilter('${a.id}',this)">${a.label}</div>`;
   }).join('');
 }
 
@@ -666,7 +644,7 @@ function renderList() {
   }
 
   const filterInfo = filterSelected.size > 0 && filterMode !== 'tous' ? ' · filtre actif' : '';
-  const sourceInfo = dataSource === 'supabase' ? ' · Supabase' : ' · Sheets';
+  const sourceInfo = '';
   document.getElementById('stats').textContent =
     `${items.length} / ${fiches.length} fiche${fiches.length !== 1 ? 's' : ''}${filterInfo}${sourceInfo}`;
 
@@ -686,9 +664,9 @@ function renderList() {
     const absents  = ALLERGENS.filter(a => f.states[a.id] === 'non');
     const inconnus = ALLERGENS.filter(a => !f.states[a.id] || f.states[a.id] === 'inconnu');
 
-    const badgesOui = presents.map(a => `<span class="badge-oui">✗ ${a.emoji} ${a.label}</span>`).join('');
-    const badgesNon = absents.map(a => `<span class="badge-non">✓ ${a.emoji} ${a.label}</span>`).join('');
-    const badgesInc = inconnus.map(a => `<span class="badge-inconnu">? ${a.emoji} ${a.label}</span>`).join('');
+    const badgesOui = presents.map(a => `<span class="badge-oui">${a.label}</span>`).join('');
+    const badgesNon = absents.map(a => `<span class="badge-non">${a.label}</span>`).join('');
+    const badgesInc = inconnus.map(a => `<span class="badge-inconnu">${a.label}</span>`).join('');
 
     return `<div class="product-card">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
@@ -715,7 +693,6 @@ function buildChipsEdit() {
     const state = editStates.get(a.id) || 'inconnu';
     return `<div class="a-chip">
       <div class="a-chip-left">
-        <span style="font-size:20px">${a.emoji}</span>
         <span class="a-chip-label">${a.label}</span>
       </div>
       <div class="a-chip-toggle">
@@ -772,7 +749,7 @@ async function saveAllergens() {
   editStates.forEach((v, k) => statesObj[k] = v);
   toast('⏳ Enregistrement…');
   closeEditModal();
-  if (dataSource === 'supabase' && canUseSupabase()) {
+  {
     try {
       const payload = ficheToSupabasePayload(nom, patissier, statesObj);
       if (editingId && !String(editingId).startsWith('row_')) {
@@ -793,26 +770,12 @@ async function saveAllergens() {
     }
     return;
   }
-  try {
-    const data = await api({
-      action: editingId ? 'updateAllergenes' : 'saveAllergenes',
-      id: editingId || '',
-      nom, patissier,
-      states: JSON.stringify(statesObj),
-    });
-    if (data && data.success) {
-      toast(`✓ Fiche "${nom}" enregistrée`);
-      await loadFiches();
-    } else {
-      toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action saveAllergenes)'}`, true);
-    }
-  } catch(e) { toast('⚠ Erreur réseau', true); }
 }
 
 async function deleteFiche(id) {
   const f = fiches.find(x => x.id === id);
   if (!f || !confirm(`Supprimer la fiche "${f.nom}" ?`)) return;
-  if (dataSource === 'supabase' && !String(id).startsWith('row_')) {
+  {
     try {
       await sbFetch(`/rest/v1/allergenes?id=eq.${encodeURIComponent(id)}`, { method:'DELETE' });
       fiches = fiches.filter(x => x.id !== id);
@@ -823,19 +786,9 @@ async function deleteFiche(id) {
     }
     return;
   }
-  try {
-    const data = await api({ action:'deleteAllergenes', id });
-    if (data && data.success) {
-      fiches = fiches.filter(x => x.id !== id);
-      renderList();
-      toast('✓ Fiche supprimée');
-    } else {
-      toast(`⚠ ${data?.error || 'Erreur Apps Script'}`, true);
-    }
-  } catch(e) { toast('⚠ Erreur réseau', true); }
 }
 
-// ── Chargement depuis Sheets ──
+// ── Chargement ──
 async function loadFiches() {
   const list = document.getElementById('list');
   list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
@@ -844,34 +797,16 @@ async function loadFiches() {
     try {
       if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
       const rows = await sbFetch(`/rest/v1/allergenes?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=*&order=nom_gateau.asc`);
-      dataSource = 'supabase';
       fiches = (Array.isArray(rows) ? rows : []).map(rowToFiche);
       renderList();
       return;
     } catch(e) {
       console.warn('[allergenes] Supabase indisponible:', e.message);
-      dataSource = 'supabase';
       fiches = [];
       renderList();
       toast('Impossible de charger les allergenes Supabase', true);
       return;
     }
-  }
-  try {
-    dataSource = 'apps';
-    const data = await api({ action:'getAllergenes' });
-    let raw = [];
-    if (data.success && data.fiches) raw = data.fiches;
-    else if (data.success && data.allergenes) raw = data.allergenes;
-    else if (data.success) {
-      const maybeArray = Object.values(data).find(Array.isArray);
-      if (maybeArray) raw = maybeArray;
-    }
-
-    fiches = raw.map(rowToFiche);
-    renderList();
-  } catch(e) {
-    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Impossible de charger — vérifie Apps Script</div>';
   }
 }
 

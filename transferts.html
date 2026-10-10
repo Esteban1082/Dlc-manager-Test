@@ -8,7 +8,6 @@ document.documentElement.style.visibility = 'hidden';
 window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bloqué
 
 (async () => {
-  const pm  = localStorage.getItem('pm_auth') === '1';
   const sl  = localStorage.getItem('sl_auth') === '1';
   const tok = localStorage.getItem('sl_access_token');
 
@@ -17,7 +16,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     // Attendre que le body existe
     const render = () => {
       if (!document.body) { requestAnimationFrame(render); return; }
-      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#0f0f0d;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">🚫</div><div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:#e8a045;margin-bottom:8px">${title}</div><div style="font-size:13px;color:#7a7a6e;margin-bottom:24px">${sub}</div><a href="hub.html" style="padding:14px 28px;background:#e8a045;border-radius:12px;font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:#000;text-decoration:none">← Retour au hub</a></div></div>`;
+      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#f4efe7;color:#23201c;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;padding:24px"><div style="max-width:320px"><div style="font-family:'Fraunces',Georgia,serif;font-size:28px;font-weight:700;margin-bottom:8px">${title}</div><div style="font-size:15px;color:#6e6256;margin-bottom:28px;line-height:1.4">${sub}</div><a href="hub.html" style="display:inline-block;padding:14px 28px;background:#e8a045;border-radius:999px;font-size:16px;font-weight:700;color:#23201c;text-decoration:none">Retour à l’accueil</a></div></div>`;
     };
     render();
   }
@@ -27,11 +26,8 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     document.documentElement.style.visibility = 'visible';
   }
 
-  // Pas connecté du tout
-  if (!pm && !sl) {
-    showBlock('Accès restreint', 'Connecte-toi depuis le hub');
-    return;
-  }
+  // Pas connecté avec un compte → page de connexion
+  if (!tok || !sl) { window.location.replace('login.html'); return; }
 
   // Connecté via Supabase → vérifier permission
   if (tok && sl) {
@@ -46,7 +42,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
       );
       const perms = await r.json();
       if (!Array.isArray(perms) || perms.length === 0) {
-        showBlock('Module non activé', "Parle à Esteban pour obtenir l\'accès");
+        showBlock('Module non activé', "Demande l\'accès à ton responsable");
         return;
       }
       allow();
@@ -54,8 +50,6 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     return;
   }
 
-  // PIN uniquement → accès libre
-  allow();
 })();
 </script>
 <meta charset="UTF-8">
@@ -422,7 +416,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   <div class="sl-head-in">
     <div class="sl-head-top">
       <a class="back-btn sl-back" href="hub.html"><svg width="11" height="18" viewBox="0 0 11 18" aria-hidden="true"><path d="M9 1.5 1.8 9 9 16.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Accueil</span></a>
-      <div class="sl-head-actions"><button id="logout-btn" class="pill-btn" style="display:none" onclick="logoutModule()">Déco</button></div>
+      <div class="sl-head-actions"></div>
     </div>
     <h1 class="sl-title">Transferts</h1>
   </div>
@@ -596,10 +590,9 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">transferts v2.1 · 09/10/2026 21:40</div>
+<div class="version-tag">transferts v2.2 · 10/10/2026 17:05</div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
 
@@ -615,26 +608,12 @@ let rayons        = lsGet('rayons', ['Traiteur','Boulangerie','Fromagerie','Pois
 let rayonRows     = [];
 let histoData     = [];
 let histoFilter   = 'semaine';
-let _apiCallId    = 0;
 let html5Scanner  = null;
 let currentBon    = null; // bon en cours pour impression
-let dataSource    = 'apps';
+let dataSource    = 'supabase';
 let rayonsSource  = 'local';
 
 // ── API ──
-function api(params) {
-  return new Promise((resolve, reject) => {
-    const cbName = 'dlcCb_' + (++_apiCallId);
-    const script = document.createElement('script');
-    const timer  = setTimeout(() => { cleanup(); reject(new Error('Timeout')); }, 20000);
-    window[cbName] = (data) => { cleanup(); resolve(data); };
-    function cleanup() { clearTimeout(timer); delete window[cbName]; if (script.parentNode) script.remove(); }
-    script.onerror = () => { cleanup(); reject(new Error('Erreur réseau')); };
-    const p = new URLSearchParams({ ...params, callback: cbName });
-    script.src = API_URL + '?' + p.toString();
-    document.head.appendChild(script);
-  });
-}
 
 function getStoredUser() {
   try { return JSON.parse(localStorage.getItem('sl_user') || '{}'); }
@@ -738,19 +717,13 @@ async function loadProductsFromSupabase() {
 }
 
 async function loadProducts() {
-  if (canUseSupabase()) {
-    try {
-      const rows = await loadProductsFromSupabase();
-      sheetProducts = Array.isArray(rows) ? rows : [];
-      return;
-    } catch(e) {
-      console.warn('[transferts] Produits Supabase indisponibles:', e.message);
-      sheetProducts = [];
-      return;
-    }
+  try {
+    const rows = await loadProductsFromSupabase();
+    sheetProducts = Array.isArray(rows) ? rows : [];
+  } catch(e) {
+    console.warn('[transferts] Produits indisponibles:', e.message);
+    sheetProducts = [];
   }
-  const d = await api({ action:'getProducts' });
-  if (d.success) sheetProducts = d.products || [];
 }
 
 function normalizeRayon(row) {
@@ -1109,7 +1082,7 @@ async function confirmerTransfert() {
   closeValiderModal();
   toast('⏳ Enregistrement…');
 
-  if (canUseSupabase()) {
+  {
     const user = await ensureSupabaseUserReady();
     try {
       await sbFetch('/rest/v1/transferts', {
@@ -1134,38 +1107,9 @@ async function confirmerTransfert() {
       renderPanier();
       return;
     } catch(e) {
-      toast(`⚠ Supabase : ${e.message}`, true);
+      toast(`⚠ Bon non enregistré : ${e.message}`, true);
     }
   }
-
-  try {
-    const data = await api({
-      action:   'saveTransfert',
-      date:     today,
-      heure,
-      rayon:    rayonActuel,
-      articles: JSON.stringify(panier),
-      prix:     String(prix),
-      note,
-      bonBarcode,
-    });
-
-    if (data && data.success) {
-      toast(`✓ Transfert enregistré — ${fmtEur(prix)}`);
-    } else {
-      toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action saveTransfert)'}`, true);
-    }
-  } catch(e) {
-    toast('⚠ Erreur réseau — bon non enregistré', true);
-  }
-
-  // Afficher le bon imprimable
-  currentBon = bon;
-  showBon(bon);
-
-  // Vider le panier
-  panier = [];
-  renderPanier();
 }
 
 // ══════════════════════════════════════
@@ -1234,7 +1178,6 @@ function setHistoFilter(f, btn) {
 }
 
 async function loadHistorique() {
-  const list = document.getElementById('histo-list');
   if (canUseSupabase()) {
     const user = await ensureSupabaseUserReady();
     try {
@@ -1252,15 +1195,6 @@ async function loadHistorique() {
       toast('Impossible de charger les transferts Supabase', true);
       return;
     }
-  }
-  list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
-  try {
-    dataSource = 'apps';
-    const data = await api({ action:'getTransferts' });
-    histoData = (data.success && data.transferts) ? data.transferts.map(normalizeTransfertRow) : [];
-    renderHistorique();
-  } catch(e) {
-    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur réseau</div>';
   }
 }
 

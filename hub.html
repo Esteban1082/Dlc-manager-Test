@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<script>try{if(!(localStorage.getItem('sl_auth')==='1'&&localStorage.getItem('sl_access_token')))location.replace('login.html');}catch(e){}</script>
 <meta http-equiv="Content-Security-Policy" content="default-src * blob: data:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; style-src * 'unsafe-inline'; connect-src *; img-src * blob: data:; worker-src * blob:; media-src * blob:;">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -55,10 +56,6 @@
   .chev { color:var(--muted); opacity:.6; display:flex; }
   .tile.locked { pointer-events:none; opacity:.4; }
   .version-tag { text-align:center; font-size:10px; color:var(--muted); opacity:.5; margin-top:28px; }
-  #lock-screen { position:fixed; inset:0; z-index:9999; background:var(--bg); display:none; align-items:center; justify-content:center; }
-  #pwd-input { width:100%; padding:16px 18px; background:var(--surface); border:1px solid var(--border); border-radius:14px; color:var(--text); font-size:26px; text-align:center; letter-spacing:12px; outline:none; margin-bottom:8px; }
-  #pwd-input:focus { border-color:var(--accent); }
-  .primary { width:100%; height:52px; background:var(--accent); border:none; border-radius:26px; font-size:17px; font-weight:700; color:#23201c; }
   @media (min-width:900px) { .wrap { padding-top:48px; } h1 { font-size:40px; } }
   .dlc-preview { display:none; }
   .tool-ico svg { display:block; }
@@ -113,17 +110,6 @@
 </head>
 <body>
 
-<div id="lock-screen">
-  <div style="text-align:center;width:320px;padding:20px">
-    <div class="serif" style="font-size:30px;font-weight:600;margin-bottom:4px">StoreLine</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:32px">Entre ton code d'accès</div>
-    <label for="pwd-input" style="position:absolute;left:-9999px">Code d'accès</label>
-    <input id="pwd-input" type="password" placeholder="• • • •" autocomplete="off"
-      onkeydown="if(event.key==='Enter')checkPassword()">
-    <div id="pwd-error" style="color:var(--red);font-size:12px;min-height:18px;margin-bottom:12px"></div>
-    <button class="primary" onclick="checkPassword()">Entrer</button>
-  </div>
-</div>
 
 <div class="wrap">
   <div class="top">
@@ -177,7 +163,7 @@
   </div>
   </div>
 
-  <div class="version-tag">hub v2.2 · 09/10/2026 21:40</div>
+  <div class="version-tag">hub v2.3 · 10/10/2026 17:05</div>
 </div>
 
 <script>
@@ -199,45 +185,20 @@
 // ── Auth : check immédiat avant le rendu ──
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
-const PWD_HASH = "15197cf7214b58e67cae565e573ffd9aa44bcb81f8ee5d7185dfe8da0a16ef43";
 
-function isAuth() { return localStorage.getItem('sl_auth') === '1' || localStorage.getItem('pm_auth') === '1'; }
+function isAuth() { return localStorage.getItem('sl_auth') === '1' && !!localStorage.getItem('sl_access_token'); }
+// Pas de compte connecté → page de connexion (avant même l'affichage)
+if (!isAuth()) { localStorage.removeItem('pm_auth'); window.location.replace('login.html'); }
 
-function showLock() {
-  const ls = document.getElementById('lock-screen');
-  ls.style.display = 'flex';
-  document.querySelectorAll('.tile').forEach(t => t.classList.add('locked'));
-  setTimeout(() => document.getElementById('pwd-input').focus(), 100);
-}
 
-function hideLock() {
-  document.getElementById('lock-screen').style.display = 'none';
+function unlockTiles() {
   document.querySelectorAll('.tile').forEach(t => t.classList.remove('locked'));
 }
 
-async function checkPassword() {
-  const val = document.getElementById('pwd-input').value;
-  const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
-  const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-  if (hash === PWD_HASH) {
-    localStorage.setItem('pm_auth', '1');
-    localStorage.setItem('sl_auth', '1');
-    hideLock();
-  } else {
-    const err = document.getElementById('pwd-error');
-    err.textContent = '⚠ Code incorrect';
-    document.getElementById('pwd-input').value = '';
-    setTimeout(() => err.textContent = '', 2000);
-  }
-}
 
 // Exécuté dès que le DOM est prêt
 document.addEventListener('DOMContentLoaded', () => {
-  if (isAuth()) {
-    hideLock();
-  } else {
-    showLock();
-  }
+  if (isAuth()) unlockTiles();
 });
 
 function logout() {
@@ -246,7 +207,7 @@ function logout() {
   localStorage.removeItem('sl_refresh_token');
   localStorage.removeItem('sl_user');
   localStorage.removeItem('pm_auth');
-  window.location.replace('index.html');
+  window.location.replace('login.html');
 }
 
 async function sbRpcScalar(functionName, accessToken) {
