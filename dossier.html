@@ -151,6 +151,11 @@ window.__guardPassed = undefined;
   .paper table.grid td:first-child, .paper table.grid th:first-child { text-align:left; white-space:nowrap; }
   .paper h4 { font-size:13px; margin:14px 0 4px; }
   .paper .ok { color:#2f6b45; font-weight:600; }
+  .paper .warn { color:#8a5a00; font-weight:700; }
+  .paper .ph-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px; }
+  .paper figure { break-inside:avoid; border:1px solid #e2d7c9; border-radius:8px; padding:6px; }
+  .paper figure img { width:100%; max-height:120mm; object-fit:contain; display:block; background:#f4efe7; }
+  .paper figcaption { font-size:11px; margin-top:4px; }
   .paper .ko { color:#b3261e; font-weight:700; }
   .paper .note { color:#6e6256; font-size:11px; margin-top:6px; }
   .paper .foot { margin-top:28px; padding-top:10px; border-top:1px solid #e2d7c9; color:#6e6256; font-size:10.5px; }
@@ -174,6 +179,7 @@ window.__guardPassed = undefined;
     .paper h3 { break-after:avoid; }
     .paper tr { break-inside:avoid; }
     .sec-allerg { page:paysage; break-before:page; }
+    .annex { break-before:page; }
   }
 </style>
 </head>
@@ -205,9 +211,18 @@ window.__guardPassed = undefined;
       <span class="lbl">Contenu</span>
       <div class="checks">
         <label class="chk"><input type="checkbox" id="s-temp" checked> Températures</label>
+        <label class="chk"><input type="checkbox" id="s-rec" checked onchange="syncRecOpt()"> Réceptions de marchandises</label>
         <label class="chk"><input type="checkbox" id="s-dlc" checked> Retraits de produits (DLC)</label>
         <label class="chk"><input type="checkbox" id="s-net" checked> Nettoyage (checklists)</label>
         <label class="chk"><input type="checkbox" id="s-all" checked> Fiches allergènes</label>
+      </div>
+      <div id="rec-opt">
+        <span class="lbl">Photos des bons de livraison</span>
+        <div class="seg" id="rec-ph">
+          <button type="button" data-v="nc" class="on" onclick="setRecPh('nc')">Réserves et refus</button>
+          <button type="button" data-v="all" onclick="setRecPh('all')">Toutes</button>
+          <button type="button" data-v="none" onclick="setRecPh('none')">Aucune</button>
+        </div>
       </div>
       <div class="btns">
         <button class="btn primary" id="go" type="button" onclick="build()">Préparer le dossier</button>
@@ -224,7 +239,7 @@ window.__guardPassed = undefined;
     <div class="paper" id="paper"></div>
   </div>
 </div>
-<div class="version-tag no-print" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);opacity:.45">dossier v1.0 · 12/10/2026 15:10</div>
+<div class="version-tag no-print" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);opacity:.45">dossier v1.1 · 12/10/2026 16:30</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -283,18 +298,37 @@ function setPeriod(p) {
 }
 function customPeriod() { document.querySelectorAll('#period button').forEach(b => b.classList.remove('on')); }
 function status(msg, err) { const el = document.getElementById('status'); el.className = 'status' + (err ? ' err' : ''); el.textContent = msg || ''; }
+let recPh = 'nc';
+function setRecPh(v) { recPh = v; document.querySelectorAll('#rec-ph button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); }
+function syncRecOpt() { document.getElementById('rec-opt').style.display = document.getElementById('s-rec').checked ? 'block' : 'none'; }
+// Liens temporaires vers les photos (stockage privé), par paquets
+async function signPhotos(paths) {
+  const out = new Map();
+  for (let i = 0; i < paths.length; i += 100) {
+    try {
+      const r = await slFetch(SUPABASE_URL + '/storage/v1/object/sign/receptions', { method: 'POST', headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + localStorage.getItem('sl_access_token'), 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 3600, paths: paths.slice(i, i + 100) }) });
+      const d = await r.json().catch(() => []);
+      (Array.isArray(d) ? d : []).forEach(x => { const u = x.signedURL || x.signedUrl; if (u && !x.error) out.set(x.path, SUPABASE_URL + '/storage/v1' + u); });
+    } catch (e) { /* photos manquantes signalées dans le dossier */ }
+  }
+  return out;
+}
+function waitImages(root, ms) {
+  const imgs = [...root.querySelectorAll('img')].filter(i => !i.complete);
+  return Promise.race([Promise.all(imgs.map(i => new Promise(res => { i.onload = i.onerror = res; }))), new Promise(res => setTimeout(res, ms))]);
+}
 function backToSetup() { document.getElementById('report').style.display = 'none'; document.getElementById('setup').style.display = 'block'; }
 
 async function build() {
   const from = document.getElementById('d-from').value, to = document.getElementById('d-to').value;
   if (!from || !to || from > to) { status('Choisis une période valide', true); return; }
-  const want = { temp: document.getElementById('s-temp').checked, dlc: document.getElementById('s-dlc').checked, net: document.getElementById('s-net').checked, all: document.getElementById('s-all').checked };
+  const want = { temp: document.getElementById('s-temp').checked, dlc: document.getElementById('s-dlc').checked, net: document.getElementById('s-net').checked, all: document.getElementById('s-all').checked, rec: document.getElementById('s-rec').checked };
   if (!Object.values(want).some(Boolean)) { status('Coche au moins un contenu', true); return; }
   const btn = document.getElementById('go'); btn.disabled = true; status('Préparation du dossier…');
   try {
     const t = encodeURIComponent(me.tenant_id);
     const toNext = addDays(to, 1);
-    const [ten, temps, zones, histo, cls, etats, alls] = await Promise.all([
+    const [ten, temps, zones, histo, cls, etats, alls, recs] = await Promise.all([
       tryAll(`/rest/v1/tenants?id=eq.${t}&select=nom`),
       want.temp ? tryAll(`/rest/v1/temperatures?tenant_id=eq.${t}&date_releve=gte.${from}&date_releve=lte.${to}&select=zone_id,zone_nom,valeur,date_releve,heure,hors_norme,action_corrective,action_par&order=date_releve.asc,heure.asc`,
                          `/rest/v1/temperatures?tenant_id=eq.${t}&date_releve=gte.${from}&date_releve=lte.${to}&select=zone_id,zone_nom,valeur,date_releve,heure,hors_norme&order=date_releve.asc,heure.asc`) : { rows: [] },
@@ -303,8 +337,15 @@ async function build() {
       want.net ? tryAll(`/rest/v1/checklists?tenant_id=eq.${t}&actif=eq.true&select=id,nom,taches&order=ordre.asc`) : { rows: [] },
       want.net ? tryAll(`/rest/v1/checklist_etats?tenant_id=eq.${t}&jour=gte.${from}&jour=lte.${to}&select=checklist_id,tache_id,jour`) : { rows: [] },
       want.all ? tryAll(`/rest/v1/allergenes?tenant_id=eq.${t}&select=*&order=nom_gateau.asc`) : { rows: [] },
+      want.rec ? tryAll(`/rest/v1/receptions?tenant_id=eq.${t}&jour=gte.${from}&jour=lte.${to}&select=jour,recu_le,fournisseur,temp_frais,temp_surgele,statut,motifs,remarque,bon_path,user_email&order=jour.asc,recu_le.asc`) : { rows: [] },
     ]);
-    render({ from, to, want, magasin: (ten.rows[0] || {}).nom || 'Mon magasin', temps, zones: zones.rows, histo, cls, etats: etats.rows, alls });
+    let photos = new Map(), annex = [];
+    if (want.rec && recPh !== 'none') {
+      annex = recs.rows.filter(r => r.bon_path && (recPh === 'all' || r.statut !== 'conforme')).slice(0, 200);
+      if (annex.length) { status('Préparation des photos des bons…'); photos = await signPhotos(annex.map(r => r.bon_path)); }
+    }
+    render({ from, to, want, magasin: (ten.rows[0] || {}).nom || 'Mon magasin', temps, zones: zones.rows, histo, cls, etats: etats.rows, alls, recs, annex, photos });
+    await waitImages(document.getElementById('paper'), 15000);
     document.getElementById('setup').style.display = 'none';
     document.getElementById('report').style.display = 'block';
     window.scrollTo(0, 0);
@@ -314,6 +355,7 @@ async function build() {
 }
 
 function render(d) {
+  let secN = 0; const sec = () => ++secN;
   const nbDays = Math.round((parseISO(d.to) - parseISO(d.from)) / 86400000) + 1;
   const days = Array.from({ length: nbDays }, (_, i) => addDays(d.from, i));
   const T = d.temps.rows, Z = d.zones;
@@ -345,7 +387,7 @@ function render(d) {
     </div>`;
 
   if (d.want.temp) {
-    h += `<h3>1. Températures des équipements frigorifiques</h3>`;
+    h += `<h3>${sec()}. Températures des équipements frigorifiques</h3>`;
     if (d.temps.err) h += `<div class="empty">Section indisponible : ${esc(d.temps.err)}</div>`;
     else if (!T.length) h += `<div class="empty">Aucun relevé sur la période.</div>`;
     else {
@@ -370,8 +412,23 @@ function render(d) {
     if (missing.length) h += `<div class="note">${missing.length} jour${missing.length > 1 ? 's' : ''} sans relevé (dimanches exclus) : ${missing.map(x => fmt(x, { day: '2-digit', month: '2-digit' })).join(', ')}.</div>`;
   }
 
+  if (d.want.rec) {
+    const R = d.recs.rows, rNc = R.filter(r => r.statut !== 'conforme'), rNoPh = R.filter(r => !r.bon_path);
+    h += `<h3>${sec()}. Réceptions de marchandises</h3>`;
+    if (d.recs.err) h += `<div class="empty">Aucune réception enregistrée (module Réception pas encore activé).</div>`;
+    else if (!R.length) h += `<div class="empty">Aucune livraison enregistrée sur la période.</div>`;
+    else {
+      h += `<div class="note">${R.length} livraison${R.length > 1 ? 's' : ''} · ${rNc.length} avec réserve ou refus · ${R.length - rNoPh.length} bon${R.length - rNoPh.length > 1 ? 's' : ''} photographié${R.length - rNoPh.length > 1 ? 's' : ''}${rNoPh.length ? ` (${rNoPh.length} classé${rNoPh.length > 1 ? 's' : ''} sur papier ou manquant${rNoPh.length > 1 ? 's' : ''})` : ''}. Seuils : frais 4 °C (7 °C selon produit), surgelé −18 °C (−15 °C toléré au déchargement).</div>`;
+      const tc = (v, frais) => { if (v == null) return '<span class="note">—</span>'; const n = Number(v), ko = frais ? n > 7 : n > -15, warn = frais ? n > 4 : n > -18; return `<span class="${ko ? 'ko' : warn ? 'warn' : ''}">${dec(n)} °C</span>`; };
+      const ST = { conforme: '<span class="ok">Conforme</span>', reserve: '<span class="warn">Réserve</span>', refuse: '<span class="ko">Refusé</span>' };
+      h += `<table><thead><tr><th>Date</th><th>Fournisseur</th><th>Frais</th><th>Surgelé</th><th>Contrôle</th><th>Problème / action</th><th>Bon</th></tr></thead><tbody>`
+        + R.map(r => `<tr class="${r.statut === 'refuse' ? 'nc' : ''}"><td style="white-space:nowrap">${fmt(r.jour, { day: '2-digit', month: '2-digit' })} ${esc(new Date(r.recu_le).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' }))}</td><td>${esc(r.fournisseur)}</td><td>${tc(r.temp_frais, true)}</td><td>${tc(r.temp_surgele, false)}</td><td>${ST[r.statut] || esc(r.statut)}</td><td>${[r.motifs, r.remarque].filter(Boolean).map(esc).join(' — ')}</td><td>${r.bon_path ? '✓ photo' : '<span class="note">papier</span>'}</td></tr>`).join('')
+        + `</tbody></table>`;
+    }
+  }
+
   if (d.want.dlc) {
-    h += `<h3>${d.want.temp ? 2 : 1}. Retraits de produits arrivés à date limite</h3>`;
+    h += `<h3>${sec()}. Retraits de produits arrivés à date limite</h3>`;
     if (d.histo.err) h += `<div class="empty">Section indisponible : ${esc(d.histo.err)}</div>`;
     else if (!H.length) h += `<div class="empty">Aucun retrait enregistré sur la période.</div>`;
     else h += `<table><thead><tr><th>Retiré le</th><th>Produit</th><th>Marque</th><th>DLC</th><th>Par</th></tr></thead><tbody>`
@@ -379,8 +436,7 @@ function render(d) {
   }
 
   if (d.want.net) {
-    const n = [d.want.temp, d.want.dlc].filter(Boolean).length + 1;
-    h += `<h3>${n}. Nettoyage et tâches quotidiennes</h3>`;
+    h += `<h3>${sec()}. Nettoyage et tâches quotidiennes</h3>`;
     const C = d.cls.rows || [];
     if (d.cls.err) h += `<div class="empty">Section indisponible : ${esc(d.cls.err)}</div>`;
     else if (!C.length) h += `<div class="empty">Aucune checklist configurée (module Documents).</div>`;
@@ -396,8 +452,8 @@ function render(d) {
   }
 
   if (d.want.all) {
-    const n = [d.want.temp, d.want.dlc, d.want.net].filter(Boolean).length + 1;
-    h += `<div class="sec-allerg"><h3>${n}. Allergènes — denrées vendues non préemballées</h3>`;
+    h += annexHtml(d);
+    h += `<div class="sec-allerg"><h3>${sec()}. Allergènes — denrées vendues non préemballées</h3>`;
     if (d.alls.err) h += `<div class="empty">Section indisponible : ${esc(d.alls.err)}</div>`;
     else if (!A.length) h += `<div class="empty">Aucune fiche allergènes.</div>`;
     else {
@@ -409,10 +465,19 @@ function render(d) {
     h += `__FOOT__</div>`;
   }
 
+  if (!d.want.all) h += annexHtml(d);
   h += `<div class="foot">Document généré par StoreLine à partir des enregistrements de l’autocontrôle du magasin. Il rassemble les traces disponibles et ne remplace pas la validation officielle du système d’autocontrôle.</div>`;
   const foot = h.slice(h.lastIndexOf('<div class="foot">'));
   if (h.includes('__FOOT__')) h = h.slice(0, h.lastIndexOf('<div class="foot">')).replace('__FOOT__', foot);
   document.getElementById('paper').innerHTML = h;
+}
+
+function annexHtml(d) {
+  const A = d.annex || [];
+  if (!d.want.rec || !A.length) return '';
+  let h = `<div class="annex"><h3>Annexe — bons de livraison${recPh === 'nc' ? ' (réserves et refus)' : ''}</h3><div class="ph-grid">`;
+  h += A.map(r => { const u = d.photos.get(r.bon_path); return `<figure>${u ? `<img src="${esc(u)}" alt="">` : '<div class="empty">Photo indisponible</div>'}<figcaption><b>${esc(r.fournisseur)}</b> · ${fmt(r.jour)}${r.statut !== 'conforme' ? ` · <span class="${r.statut === 'refuse' ? 'ko' : 'warn'}">${r.statut === 'refuse' ? 'Refusé' : 'Réserve'}</span>` : ''}</figcaption></figure>`; }).join('');
+  return h + `</div></div>`;
 }
 
 function init() {

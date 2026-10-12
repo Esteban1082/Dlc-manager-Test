@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
+<script id="sl-session">
+// StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
+(function () {
+  var U = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+  var K = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+  var busy = null;
+  function exp(t) { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; } catch (e) { return 0; } }
+  function logoutExpired() {
+    ['sl_access_token', 'sl_refresh_token', 'sl_auth', 'sl_user'].forEach(function (k) { localStorage.removeItem(k); });
+    location.replace('login.html?expired=1');
+  }
+  function refresh() {
+    if (busy) return busy;
+    var rt = localStorage.getItem('sl_refresh_token');
+    if (!rt) return Promise.resolve(false);
+    busy = fetch(U + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': K }, body: JSON.stringify({ refresh_token: rt })
+    }).then(function (r) {
+      if (r.status === 400 || r.status === 401 || r.status === 403) { logoutExpired(); return false; }
+      if (!r.ok) return false;
+      return r.json().then(function (d) {
+        localStorage.setItem('sl_access_token', d.access_token);
+        if (d.refresh_token) localStorage.setItem('sl_refresh_token', d.refresh_token);
+        return true;
+      });
+    }).catch(function () { return false; }).then(function (v) { busy = null; return v; });
+    return busy;
+  }
+  window.slEnsureSession = function () {
+    var t = localStorage.getItem('sl_access_token');
+    if (!t) return Promise.resolve(false);
+    return exp(t) - Date.now() < 5 * 60 * 1000 ? refresh() : Promise.resolve(true);
+  };
+  window.slSessionReady = window.slEnsureSession();
+  setInterval(window.slEnsureSession, 4 * 60 * 1000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') window.slEnsureSession(); });
+})();
+</script>
+<script>
+// Accès : admin / manager du magasin, ou permission « reception »
+document.documentElement.style.visibility = 'hidden';
+window.__guardPassed = undefined;
+(async () => {
+  if (window.slSessionReady) await window.slSessionReady;
+  const tok = localStorage.getItem('sl_access_token');
+  const sl  = localStorage.getItem('sl_auth') === '1';
+  function block(title, sub) {
+    window.__guardPassed = false;
+    document.documentElement.style.visibility = 'visible';
+    const render = () => {
+      if (!document.body) { requestAnimationFrame(render); return; }
+      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#f4efe7;color:#23201c;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;padding:24px"><div style="max-width:320px"><div style="font-family:'Fraunces',Georgia,serif;font-size:28px;font-weight:700;margin-bottom:8px">${title}</div><div style="font-size:15px;color:#6e6256;margin-bottom:28px;line-height:1.4">${sub}</div><a href="hub.html" style="display:inline-block;padding:14px 28px;background:#e8a045;border-radius:999px;font-size:16px;font-weight:700;color:#23201c;text-decoration:none">Retour à l’accueil</a></div></div>`;
+    };
+    render();
+  }
+  function allow() { window.__guardPassed = true; document.documentElement.style.visibility = 'visible'; }
+  if (!tok || !sl) { window.location.replace('login.html'); return; }
+  const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
+  if (['superadmin', 'admin', 'manager'].includes(user.role) || !user.id) { allow(); return; }
+  try {
+    const r = await fetch('https://jeqptodorjzeyhapbmrz.supabase.co/rest/v1/permissions?user_id=eq.' + user.id + '&module=eq.reception&actif=eq.true&select=id',
+      { headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk', 'Authorization': 'Bearer ' + tok } });
+    const perms = await r.json();
+    if (!Array.isArray(perms) || !perms.length) { block('Module non activé', 'Demande l’accès à ton responsable'); return; }
+    allow();
+  } catch (e) { allow(); }
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f4efe7">
+<title>Réception · StoreLine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<script>
+(function(){ try { var t = localStorage.getItem('sl_ui_theme') || 'light'; if (t === 'light') document.documentElement.dataset.theme = 'light'; } catch(e) {} })();
+</script>
+<style>
+  html[data-theme="light"] { --bg:#f4efe7; --surface:#fffcf7; --surface2:#f1e6d6; --border:#e2d7c9; --text:#23201c; --muted:#6e6256; --fill:#e8a045; --accent:#ad5a10; --red:#b3261e; --red-bg:#fbece9; --green:#2f6b45; --green-bg:#e7f1e9; --yellow:#8a5a00; --yellow-bg:#fbf0d9; --shadow:0 1px 2px rgba(60,40,20,.05), 0 10px 28px rgba(60,40,20,.08); }
+  html:not([data-theme="light"]) { --bg:#161412; --surface:#211e1b; --surface2:#2b2723; --border:#3a342e; --text:#f4efe7; --muted:#a3978a; --fill:#e8a045; --accent:#f0b264; --red:#ff7a6e; --red-bg:rgba(255,122,110,.13); --green:#6fcf97; --green-bg:rgba(111,207,151,.13); --yellow:#f5c842; --yellow-bg:rgba(245,200,66,.13); --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.25); }
+  :root { --sans:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', sans-serif; --serif:'Fraunces', Georgia, serif; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { background:var(--bg); color:var(--text); font-family:var(--sans); font-size:15px; -webkit-font-smoothing:antialiased; }
+  button, input, select, textarea { font:inherit; color:inherit; }
+  button { cursor:pointer; }
+  :focus-visible { outline:2px solid var(--fill); outline-offset:2px; }
+  header.sl-head { position:sticky; top:0; z-index:50; padding:calc(env(safe-area-inset-top) + 10px) 0 12px; background:color-mix(in srgb, var(--bg) 86%, transparent); -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); border-bottom:.5px solid var(--border); }
+  .in { max-width:720px; margin:0 auto; padding:0 20px; }
+  .top { display:flex; align-items:center; justify-content:space-between; min-height:34px; }
+  .back { display:inline-flex; align-items:center; gap:6px; color:var(--accent); font-size:16px; font-weight:500; text-decoration:none; }
+  h1 { font-family:var(--serif); font-size:32px; font-weight:700; letter-spacing:-.6px; margin-top:6px; }
+  .main { padding-top:14px; padding-bottom:70px; }
+  .seg { display:flex; background:var(--surface2); border-radius:10px; padding:2px; margin-bottom:14px; }
+  .seg button { flex:1 1 0; height:34px; border:none; border-radius:8px; background:transparent; font-size:14px; font-weight:500; }
+  .seg button.on { background:var(--surface); font-weight:600; box-shadow:0 1px 3px rgba(60,40,20,.15); }
+  .card { background:var(--surface); border-radius:18px; box-shadow:var(--shadow); padding:18px; margin-bottom:14px; }
+  .card h2 { font-family:var(--serif); font-size:20px; font-weight:700; letter-spacing:-.2px; }
+  .lbl { display:block; font-size:12px; font-weight:600; color:var(--muted); margin:16px 0 6px; }
+  .inp { width:100%; height:48px; border-radius:12px; border:1.5px solid transparent; background:var(--surface2); padding:0 14px; font-size:16px; }
+  .inp:focus { border-color:var(--fill); outline:none; }
+  textarea.inp { height:72px; padding:10px 14px; resize:vertical; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip { height:34px; padding:0 13px; border-radius:17px; border:1px solid var(--border); background:var(--surface); font-size:13.5px; font-weight:600; }
+  .chip.on { background:var(--text); color:var(--bg); border-color:var(--text); }
+  .photo-btn { display:flex; align-items:center; gap:14px; width:100%; min-height:76px; padding:12px 14px; border-radius:14px; border:1.5px dashed var(--border); background:var(--surface2); text-align:left; }
+  .photo-btn .pi { width:46px; height:46px; border-radius:12px; background:var(--surface); display:flex; align-items:center; justify-content:center; color:var(--accent); flex:none; overflow:hidden; }
+  .photo-btn .pi img { width:100%; height:100%; object-fit:cover; }
+  .photo-btn b { display:block; font-size:15px; }
+  .photo-btn span { font-size:13px; color:var(--muted); }
+  .photo-btn.has { border-style:solid; border-color:var(--green); background:var(--green-bg); }
+  .temps { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .tbox { background:var(--surface2); border-radius:14px; padding:10px 12px; }
+  .tbox label { font-size:12px; font-weight:600; color:var(--muted); }
+  .tbox .row { display:flex; align-items:center; gap:6px; margin-top:4px; }
+  .tbox input { width:100%; height:40px; border:none; background:transparent; font-size:24px; font-weight:700; font-family:var(--serif); }
+  .tbox input:focus { outline:none; }
+  .tbox .u { color:var(--muted); font-size:14px; }
+  .tbox .st { font-size:12px; font-weight:600; min-height:16px; margin-top:2px; }
+  .tbox.ok { background:var(--green-bg); } .tbox.ok .st { color:var(--green); }
+  .tbox.warn { background:var(--yellow-bg); } .tbox.warn .st { color:var(--yellow); }
+  .tbox.ko { background:var(--red-bg); } .tbox.ko .st { color:var(--red); }
+  .sign { width:34px; height:34px; border-radius:10px; border:1px solid var(--border); background:var(--surface); font-weight:700; flex:none; }
+  .hint { font-size:12px; color:var(--muted); line-height:1.45; margin-top:8px; }
+  .stat3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
+  .stat3 button { height:48px; border-radius:12px; border:1.5px solid var(--border); background:var(--surface); font-weight:700; font-size:14px; }
+  .stat3 button.on.conforme { background:var(--green-bg); border-color:var(--green); color:var(--green); }
+  .stat3 button.on.reserve { background:var(--yellow-bg); border-color:var(--yellow); color:var(--yellow); }
+  .stat3 button.on.refuse { background:var(--red-bg); border-color:var(--red); color:var(--red); }
+  .btn { width:100%; height:52px; border-radius:999px; border:1px solid var(--border); background:var(--surface); font-weight:700; font-size:16px; margin-top:18px; }
+  .btn.primary { background:var(--fill); border-color:var(--fill); color:#23201c; box-shadow:0 4px 14px rgba(232,160,69,.28); }
+  .btn:disabled { opacity:.55; }
+  .sec { font-size:12px; font-weight:700; letter-spacing:.06em; color:var(--muted); margin:22px 4px 8px; display:flex; justify-content:space-between; }
+  .list { background:var(--surface); border-radius:18px; box-shadow:var(--shadow); overflow:hidden; }
+  .rec { display:flex; gap:12px; padding:13px 14px; border-bottom:.5px solid var(--border); align-items:flex-start; }
+  .rec:last-child { border-bottom:none; }
+  .rec .time { font-size:13px; font-weight:600; color:var(--muted); width:42px; flex:none; padding-top:2px; }
+  .rec .body { flex:1; min-width:0; }
+  .rec .f { font-weight:700; font-size:15.5px; }
+  .rec .meta { display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; }
+  .pill { font-size:12px; font-weight:600; padding:3px 8px; border-radius:8px; background:var(--surface2); }
+  .pill.ok { background:var(--green-bg); color:var(--green); }
+  .pill.warn { background:var(--yellow-bg); color:var(--yellow); }
+  .pill.ko { background:var(--red-bg); color:var(--red); }
+  .rec .why { font-size:13px; color:var(--muted); margin-top:5px; line-height:1.4; }
+  .rec .ph { flex:none; height:34px; padding:0 11px; border-radius:10px; border:1px solid var(--border); background:var(--surface); font-size:13px; font-weight:600; color:var(--accent); }
+  .rec .ph.missing { color:var(--muted); border-style:dashed; }
+  .empty { padding:22px 16px; text-align:center; color:var(--muted); font-size:14px; }
+  .day-h { padding:10px 14px; background:var(--surface2); font-size:13px; font-weight:700; display:flex; justify-content:space-between; }
+  .filters { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .select { height:42px; border-radius:12px; border:none; background:var(--surface2); padding:0 10px; font-size:14px; width:100%; }
+  .summary { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-top:12px; }
+  .summary div { background:var(--surface2); border-radius:12px; padding:9px 8px; }
+  .summary b { display:block; font-family:var(--serif); font-size:20px; }
+  .summary span { font-size:11px; color:var(--muted); }
+  .summary .bad b { color:var(--red); }
+  .ov { position:fixed; inset:0; background:rgba(20,16,12,.55); z-index:300; display:none; align-items:flex-end; justify-content:center; }
+  .ov.open { display:flex; }
+  .sheet { background:var(--surface); width:100%; max-width:640px; max-height:92vh; overflow:auto; border-radius:22px 22px 0 0; padding:18px 18px calc(env(safe-area-inset-bottom) + 18px); }
+  .sheet h3 { font-family:var(--serif); font-size:20px; }
+  .sheet .sub { color:var(--muted); font-size:13px; margin-top:3px; }
+  .sheet img { width:100%; border-radius:12px; margin-top:12px; background:var(--surface2); min-height:120px; }
+  .sheet .btns { display:flex; gap:8px; margin-top:14px; }
+  .sheet .btns .btn { margin-top:0; height:46px; font-size:15px; }
+  .btn.danger { color:var(--red); }
+  .btn.danger.armed { background:var(--red); color:#fff; border-color:var(--red); }
+  .toast-c { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 20px); z-index:400; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; }
+  .toast { background:var(--text); color:var(--bg); padding:11px 16px; border-radius:14px; font-size:14px; font-weight:500; box-shadow:var(--shadow); max-width:min(92vw, 420px); text-align:center; }
+  .toast.err { background:var(--red); color:#fff; }
+  .version-tag { text-align:center; font-size:10px; color:var(--muted); opacity:.5; margin-top:28px; }
+  body:not(.mgr) .mgr-only { display:none !important; }
+  @media (max-width:640px) { .in { padding:0 16px; } h1 { font-size:30px; } .summary { grid-template-columns:repeat(2, 1fr); } }
+  @media (min-width:700px) { .ov { align-items:center; } .sheet { border-radius:22px; } }
+</style>
+</head>
+<body>
+<header class="sl-head">
+  <div class="in">
+    <div class="top">
+      <a class="back" href="hub.html"><svg width="11" height="18" viewBox="0 0 11 18" aria-hidden="true"><path d="M9 1.5 1.8 9 9 16.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Accueil</span></a>
+    </div>
+    <h1>Réception</h1>
+  </div>
+</header>
+
+<div class="main in">
+  <div class="seg mgr-only" role="tablist" aria-label="Vues">
+    <button type="button" id="tab-new" class="on" onclick="setTab('new')">Livraisons du jour</button>
+    <button type="button" id="tab-hist" onclick="setTab('hist')">Historique</button>
+  </div>
+
+  <div id="view-new">
+    <div class="card">
+      <h2>Nouvelle livraison</h2>
+      <label class="lbl" for="f-fourn">Fournisseur</label>
+      <input class="inp" id="f-fourn" list="dl-fourn" autocomplete="off" placeholder="Nom du fournisseur" maxlength="120">
+      <datalist id="dl-fourn"></datalist>
+      <div class="chips" id="fourn-chips"></div>
+
+      <span class="lbl">Bon de livraison</span>
+      <button type="button" class="photo-btn" id="photo-btn" onclick="document.getElementById('f-photo').click()">
+        <span class="pi" id="photo-ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>
+        <span><b id="photo-title">Photographier le bon</b><span id="photo-sub">Le bon reste classé 6 mois minimum</span></span>
+      </button>
+      <input type="file" id="f-photo" accept="image/*" capture="environment" style="display:none" onchange="pickPhoto(event)">
+
+      <span class="lbl">Température à cœur ou en surface (si produits concernés)</span>
+      <div class="temps">
+        <div class="tbox" id="tb-frais">
+          <label for="t-frais">Frais</label>
+          <div class="row"><input id="t-frais" inputmode="decimal" autocomplete="off" placeholder="—" oninput="evalTemps()"><span class="u">°C</span></div>
+          <div class="st" id="st-frais"></div>
+        </div>
+        <div class="tbox" id="tb-surg">
+          <label for="t-surg">Surgelé</label>
+          <div class="row"><button type="button" class="sign" onclick="flipSign()" aria-label="Changer le signe">±</button><input id="t-surg" inputmode="decimal" autocomplete="off" placeholder="—" oninput="evalTemps()"><span class="u">°C</span></div>
+          <div class="st" id="st-surg"></div>
+        </div>
+      </div>
+      <div class="hint">Frais : 4 °C max pour viande, poisson, traiteur ; 7 °C pour la plupart des produits laitiers (voir l’étiquette). Surgelé : −18 °C, jusqu’à −15 °C toléré au déchargement.</div>
+
+      <span class="lbl">Contrôle</span>
+      <div class="stat3" id="stat3">
+        <button type="button" class="conforme on" data-s="conforme" onclick="setStatut('conforme')">Conforme</button>
+        <button type="button" class="reserve" data-s="reserve" onclick="setStatut('reserve')">Avec réserve</button>
+        <button type="button" class="refuse" data-s="refuse" onclick="setStatut('refuse')">Refusé</button>
+      </div>
+      <div id="nc-wrap" style="display:none">
+        <span class="lbl">Problème constaté</span>
+        <div class="chips" id="motif-chips"></div>
+        <label class="lbl" for="f-rem">Ce qui a été fait</label>
+        <textarea class="inp" id="f-rem" maxlength="500" placeholder="Ex. : 2 colis refusés et rendus au chauffeur, avoir demandé"></textarea>
+      </div>
+
+      <button type="button" class="btn primary" id="save-btn" onclick="saveReception()">Enregistrer la livraison</button>
+    </div>
+
+    <div class="sec"><span>AUJOURD’HUI</span><span id="today-count"></span></div>
+    <div class="list" id="today-list"><div class="empty">Chargement…</div></div>
+  </div>
+
+  <div id="view-hist" style="display:none">
+    <div class="card">
+      <div class="seg" style="margin:0" id="hist-period">
+        <button type="button" data-d="7" class="on" onclick="setHistPeriod(7)">7 jours</button>
+        <button type="button" data-d="31" onclick="setHistPeriod(31)">1 mois</button>
+        <button type="button" data-d="183" onclick="setHistPeriod(183)">6 mois</button>
+      </div>
+      <div class="filters">
+        <select class="select" id="h-fourn" onchange="renderHist()" aria-label="Fournisseur"><option value="">Tous les fournisseurs</option></select>
+        <select class="select" id="h-stat" onchange="renderHist()" aria-label="Statut">
+          <option value="">Tous les statuts</option><option value="nc">Réserves et refus</option><option value="nophoto">Sans photo du bon</option>
+        </select>
+      </div>
+      <div class="summary" id="h-sum"></div>
+    </div>
+    <div class="list" id="hist-list"><div class="empty">Chargement…</div></div>
+  </div>
+
+  <div class="version-tag">reception v1.0 · 12/10/2026 16:30</div>
+</div>
+
+<!-- Photo du bon -->
+<div class="ov" id="ov-photo" onclick="if(event.target===this)closePhoto()">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ph-title">
+    <h3 id="ph-title">Bon de livraison</h3>
+    <div class="sub" id="ph-sub"></div>
+    <img id="ph-img" alt="Photo du bon de livraison">
+    <div class="btns">
+      <button type="button" class="btn" onclick="closePhoto()">Fermer</button>
+      <button type="button" class="btn danger" id="ph-del" onclick="deleteCurrent(this)">Supprimer la livraison</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="f-photo-later" accept="image/*" capture="environment" style="display:none" onchange="addPhotoLater(event)">
+
+<div class="toast-c" id="toasts" aria-live="polite"></div>
+
+<script>
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+const BUCKET = 'receptions';
+const MOTIFS = ['Température', 'Emballage abîmé', 'DLC trop courte', 'Produit manquant', 'Quantité erronée', 'Étiquetage', 'Hygiène du camion', 'Autre'];
+
+let me = {}, isMgr = false;
+let statut = 'conforme', motifs = new Set(), photoBlob = null, photoUrl = null;
+let todayRows = [], histRows = [], histDays = 7, current = null, laterId = null, saving = false;
+
+const hdr = (extra) => ({ 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + localStorage.getItem('sl_access_token'), ...(extra || {}) });
+async function sb(path, opts) {
+  opts = opts || {};
+  const r = await slFetch(SUPABASE_URL + path, { ...opts, headers: hdr({ 'Content-Type': 'application/json', 'Prefer': 'return=representation', ...(opts.headers || {}) }) });
+  const text = await r.text();
+  let data = null; try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+  if (!r.ok) {
+    if (r.status === 404 && /receptions/.test(String(data && data.message))) throw new Error('Module pas encore installé : lance p5_reception.sql dans Supabase');
+    throw new Error(slErrMsg(r.status, data));
+  }
+  return data;
+}
+function toast(msg, err) {
+  const c = document.getElementById('toasts'), t = document.createElement('div');
+  t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg; c.appendChild(t);
+  setTimeout(() => t.remove(), err ? 5000 : 3000);
+}
+const num = s => { const v = parseFloat(String(s || '').trim().replace(',', '.').replace('−', '-')); return isNaN(v) ? null : Math.round(v * 10) / 10; };
+const dec = v => String(v).replace('.', ',').replace('-', '−');
+const hm = ts => new Date(ts).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' });
+function dayLabel(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d, 12).toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' }); }
+
+// ── Températures ──
+function evalFrais(v) { if (v == null) return null; if (v <= 4) return ['ok', 'Conforme']; if (v <= 7) return ['warn', 'Limite : vérifie le produit']; return ['ko', 'Hors norme']; }
+function evalSurg(v) { if (v == null) return null; if (v <= -18) return ['ok', 'Conforme']; if (v <= -15) return ['warn', 'Tolérance déchargement']; return ['ko', 'Hors norme']; }
+function evalTemps() {
+  let anyKo = false;
+  [['frais', evalFrais], ['surg', evalSurg]].forEach(([k, fn]) => {
+    const raw = document.getElementById('t-' + k).value.trim(), v = num(raw), r = fn(v);
+    const box = document.getElementById('tb-' + k), st = document.getElementById('st-' + k);
+    box.className = 'tbox' + (r ? ' ' + r[0] : '');
+    st.textContent = raw && v == null && raw !== '-' ? 'Valeur invalide' : (r ? r[1] : '');
+    if (r && r[0] === 'ko') anyKo = true;
+  });
+  // Température hors norme : on passe en réserve avec le motif, l'équipe peut corriger
+  if (anyKo && statut === 'conforme') { setStatut('reserve'); motifs.add('Température'); renderMotifs(); }
+}
+function flipSign() {
+  const el = document.getElementById('t-surg'), v = el.value.trim();
+  el.value = v.startsWith('-') ? v.slice(1) : '-' + v; el.focus(); evalTemps();
+}
+
+// ── Statut et motifs ──
+function setStatut(s) {
+  statut = s;
+  document.querySelectorAll('#stat3 button').forEach(b => b.classList.toggle('on', b.dataset.s === s));
+  document.getElementById('nc-wrap').style.display = s === 'conforme' ? 'none' : 'block';
+}
+function renderMotifs() {
+  document.getElementById('motif-chips').innerHTML = MOTIFS.map((m, i) => `<button type="button" class="chip ${motifs.has(m) ? 'on' : ''}" onclick="toggleMotif(${i})">${esc(m)}</button>`).join('');
+}
+function toggleMotif(i) { const m = MOTIFS[i]; if (motifs.has(m)) motifs.delete(m); else motifs.add(m); renderMotifs(); }
+
+// ── Photo : compressée sur l'appareil (≈ 150-300 Ko) avant l'envoi ──
+async function compress(file) {
+  const MAX = 1600;
+  let src;
+  try { src = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+  catch (e) {
+    src = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('Photo illisible')); im.src = URL.createObjectURL(file); });
+  }
+  const w = src.width, h = src.height, k = Math.min(1, MAX / Math.max(w, h));
+  const c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.72));
+  if (!blob) throw new Error('Photo illisible');
+  return blob;
+}
+async function pickPhoto(ev) {
+  const f = ev.target.files && ev.target.files[0]; ev.target.value = '';
+  if (!f) return;
+  try {
+    photoBlob = await compress(f);
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+    photoUrl = URL.createObjectURL(photoBlob);
+    document.getElementById('photo-ico').innerHTML = `<img src="${photoUrl}" alt="">`;
+    document.getElementById('photo-title').textContent = 'Bon photographié';
+    document.getElementById('photo-sub').textContent = Math.round(photoBlob.size / 1024) + ' Ko · toucher pour reprendre';
+    document.getElementById('photo-btn').classList.add('has');
+  } catch (e) { toast(e.message, true); }
+}
+function resetPhoto() {
+  photoBlob = null; if (photoUrl) URL.revokeObjectURL(photoUrl); photoUrl = null;
+  document.getElementById('photo-ico').innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+  document.getElementById('photo-title').textContent = 'Photographier le bon';
+  document.getElementById('photo-sub').textContent = 'Le bon reste classé 6 mois minimum';
+  document.getElementById('photo-btn').classList.remove('has');
+}
+async function uploadPhoto(blob) {
+  const path = `${me.tenant_id}/${localISO().slice(0, 7)}/${crypto.randomUUID()}.jpg`;
+  const r = await slFetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, { method: 'POST', headers: hdr({ 'Content-Type': 'image/jpeg', 'x-upsert': 'false' }), body: blob });
+  if (!r.ok) {
+    let d = null; try { d = await r.json(); } catch (e) {}
+    const m = String((d && (d.message || d.error)) || '');
+    if (/bucket not found/i.test(m)) throw new Error('Stockage des photos pas encore installé : lance p5_reception.sql');
+    if (r.status === 413 || /size/i.test(m)) throw new Error('Photo trop lourde');
+    throw new Error('Envoi de la photo impossible : ' + (m || r.status));
+  }
+  return path;
+}
+async function removePhoto(path) {
+  try { await slFetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: hdr({ 'Content-Type': 'application/json' }), body: JSON.stringify({ prefixes: [path] }) }); } catch (e) {}
+}
+async function signedUrl(path) {
+  const r = await slFetch(`${SUPABASE_URL}/storage/v1/object/sign/${BUCKET}/${path}`, { method: 'POST', headers: hdr({ 'Content-Type': 'application/json' }), body: JSON.stringify({ expiresIn: 900 }) });
+  const d = await r.json().catch(() => null);
+  if (!r.ok || !d || !(d.signedURL || d.signedUrl)) throw new Error('Photo introuvable');
+  return SUPABASE_URL + '/storage/v1' + (d.signedURL || d.signedUrl);
+}
+
+// ── Enregistrer ──
+async function saveReception() {
+  if (saving) return;
+  const fournisseur = document.getElementById('f-fourn').value.trim().replace(/\s+/g, ' ');
+  if (!fournisseur) { toast('Indique le fournisseur', true); document.getElementById('f-fourn').focus(); return; }
+  const rawF = document.getElementById('t-frais').value.trim(), rawS = document.getElementById('t-surg').value.trim();
+  const tf = num(rawF), ts = num(rawS);
+  if ((rawF && tf == null) || (rawS && ts == null)) { toast('Température invalide', true); return; }
+  const remarque = document.getElementById('f-rem').value.trim();
+  if (statut !== 'conforme' && !motifs.size && !remarque) { toast('Indique le problème constaté', true); return; }
+  saving = true;
+  const btn = document.getElementById('save-btn'); btn.disabled = true; btn.textContent = photoBlob ? 'Envoi de la photo…' : 'Enregistrement…';
+  let path = null;
+  try {
+    if (photoBlob) path = await uploadPhoto(photoBlob);
+    btn.textContent = 'Enregistrement…';
+    await sb('/rest/v1/receptions', { method: 'POST', body: JSON.stringify({
+      tenant_id: me.tenant_id, jour: localISO(), fournisseur, temp_frais: tf, temp_surgele: ts, statut,
+      motifs: statut === 'conforme' ? null : ([...motifs].join(', ') || null), remarque: statut === 'conforme' ? null : (remarque || null),
+      bon_path: path, user_email: me.email || null,
+    }) });
+    toast(statut === 'conforme' ? `Livraison ${fournisseur} enregistrée` : `Livraison ${fournisseur} enregistrée avec ${statut === 'refuse' ? 'refus' : 'réserve'}`);
+    if (!path) setTimeout(() => toast('Pense à classer le bon papier (ou ajoute la photo plus tard)'), 600);
+    resetForm();
+    await loadToday();
+    loadFournisseurs();
+  } catch (e) {
+    if (path) removePhoto(path);
+    toast(e.message, true);
+  } finally {
+    saving = false; btn.disabled = false; btn.textContent = 'Enregistrer la livraison';
+  }
+}
+function resetForm() {
+  document.getElementById('f-fourn').value = '';
+  document.getElementById('t-frais').value = ''; document.getElementById('t-surg').value = '';
+  document.getElementById('f-rem').value = '';
+  motifs = new Set(); renderMotifs(); setStatut('conforme'); evalTemps(); resetPhoto();
+}
+
+// ── Listes ──
+function recHtml(r, showTime) {
+  const sf = evalFrais(r.temp_frais == null ? null : Number(r.temp_frais)), ss = evalSurg(r.temp_surgele == null ? null : Number(r.temp_surgele));
+  const st = { conforme: ['ok', 'Conforme'], reserve: ['warn', 'Avec réserve'], refuse: ['ko', 'Refusé'] }[r.statut] || ['', r.statut];
+  const canEdit = isMgr || r.user_id === me.id;
+  const why = [r.motifs, r.remarque].filter(Boolean).map(esc).join(' — ');
+  return `<div class="rec">
+    ${showTime ? `<div class="time">${hm(r.recu_le)}</div>` : ''}
+    <div class="body">
+      <div class="f">${esc(r.fournisseur)}</div>
+      <div class="meta"><span class="pill ${st[0]}">${st[1]}</span>${sf ? `<span class="pill ${sf[0] === 'ok' ? '' : sf[0]}">Frais ${dec(r.temp_frais)} °C</span>` : ''}${ss ? `<span class="pill ${ss[0] === 'ok' ? '' : ss[0]}">Surgelé ${dec(r.temp_surgele)} °C</span>` : ''}</div>
+      ${why ? `<div class="why">${why}</div>` : ''}
+      ${r.user_email ? `<div class="why" style="font-size:12px">${esc(r.user_email)}</div>` : ''}
+    </div>
+    ${r.bon_path ? `<button type="button" class="ph" onclick="openPhoto('${r.id}')">Voir le bon</button>`
+      : canEdit ? `<button type="button" class="ph missing" onclick="photoLater('${r.id}')">+ Bon</button>` : ''}
+  </div>`;
+}
+async function loadToday() {
+  try {
+    todayRows = await sb(`/rest/v1/receptions?tenant_id=eq.${encodeURIComponent(me.tenant_id)}&jour=eq.${localISO()}&select=*&order=recu_le.desc`) || [];
+    renderToday();
+  } catch (e) {
+    document.getElementById('today-list').innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+  }
+}
+function renderToday() {
+  const el = document.getElementById('today-list');
+  document.getElementById('today-count').textContent = todayRows.length ? todayRows.length + ' livraison' + (todayRows.length > 1 ? 's' : '') : '';
+  el.innerHTML = todayRows.length ? todayRows.map(r => recHtml(r, true)).join('') : '<div class="empty">Aucune livraison enregistrée aujourd’hui.</div>';
+}
+async function loadFournisseurs() {
+  try {
+    const rows = await sb(`/rest/v1/receptions?tenant_id=eq.${encodeURIComponent(me.tenant_id)}&select=fournisseur&order=recu_le.desc&limit=400`) || [];
+    const count = new Map();
+    rows.forEach(r => { const k = r.fournisseur.trim(); const key = norm(k); const c = count.get(key) || { nom: k, n: 0 }; c.n++; count.set(key, c); });
+    const list = [...count.values()].sort((a, b) => b.n - a.n);
+    document.getElementById('dl-fourn').innerHTML = list.map(f => `<option value="${esc(f.nom)}">`).join('');
+    document.getElementById('fourn-chips').innerHTML = list.slice(0, 8).map(f => `<button type="button" class="chip" onclick="pickFourn(this)">${esc(f.nom)}</button>`).join('');
+  } catch (e) { /* la saisie reste possible */ }
+}
+function pickFourn(btn) { document.getElementById('f-fourn').value = btn.textContent; }
+
+// ── Historique (responsables) ──
+function setTab(t) {
+  document.getElementById('tab-new').classList.toggle('on', t === 'new');
+  document.getElementById('tab-hist').classList.toggle('on', t === 'hist');
+  document.getElementById('view-new').style.display = t === 'new' ? 'block' : 'none';
+  document.getElementById('view-hist').style.display = t === 'hist' ? 'block' : 'none';
+  if (t === 'hist') loadHist();
+}
+function setHistPeriod(d) { histDays = d; document.querySelectorAll('#hist-period button').forEach(b => b.classList.toggle('on', +b.dataset.d === d)); loadHist(); }
+async function loadHist() {
+  const el = document.getElementById('hist-list'); el.innerHTML = '<div class="empty">Chargement…</div>';
+  const d = new Date(); d.setDate(d.getDate() - (histDays - 1));
+  try {
+    const out = [];
+    for (let off = 0; ; off += 1000) {
+      const page = await sb(`/rest/v1/receptions?tenant_id=eq.${encodeURIComponent(me.tenant_id)}&jour=gte.${localISO(d)}&select=*&order=jour.desc,recu_le.desc&limit=1000&offset=${off}`) || [];
+      out.push(...page); if (page.length < 1000) break;
+    }
+    histRows = out;
+    const sel = document.getElementById('h-fourn'), cur = sel.value;
+    const names = [...new Set(histRows.map(r => r.fournisseur))].sort((a, b) => a.localeCompare(b, 'fr'));
+    sel.innerHTML = '<option value="">Tous les fournisseurs</option>' + names.map(n => `<option ${n === cur ? 'selected' : ''}>${esc(n)}</option>`).join('');
+    renderHist();
+  } catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function renderHist() {
+  const f = document.getElementById('h-fourn').value, s = document.getElementById('h-stat').value;
+  const rows = histRows.filter(r => (!f || r.fournisseur === f) && (!s || (s === 'nc' ? r.statut !== 'conforme' : !r.bon_path)));
+  const nc = rows.filter(r => r.statut !== 'conforme').length, noPh = rows.filter(r => !r.bon_path).length;
+  const fourn = new Set(rows.map(r => norm(r.fournisseur))).size;
+  document.getElementById('h-sum').innerHTML = `<div><b>${rows.length}</b><span>livraisons</span></div><div class="${nc ? 'bad' : ''}"><b>${nc}</b><span>réserves / refus</span></div><div class="${noPh ? 'bad' : ''}"><b>${noPh}</b><span>sans photo du bon</span></div><div><b>${fourn}</b><span>fournisseurs</span></div>`;
+  const el = document.getElementById('hist-list');
+  if (!rows.length) { el.innerHTML = '<div class="empty">Aucune livraison sur cette période.</div>'; return; }
+  const byDay = new Map(); rows.forEach(r => { if (!byDay.has(r.jour)) byDay.set(r.jour, []); byDay.get(r.jour).push(r); });
+  el.innerHTML = [...byDay.entries()].map(([day, rs]) => `<div class="day-h"><span>${esc(dayLabel(day).replace(/^./, c => c.toUpperCase()))}</span><span>${rs.length}</span></div>` + rs.map(r => recHtml(r, true)).join('')).join('');
+}
+
+// ── Photo du bon ──
+const findRow = id => todayRows.find(r => r.id === id) || histRows.find(r => r.id === id);
+async function openPhoto(id) {
+  const r = findRow(id); if (!r) return;
+  current = r;
+  document.getElementById('ph-title').textContent = r.fournisseur;
+  document.getElementById('ph-sub').textContent = dayLabel(r.jour) + ' · ' + hm(r.recu_le) + (r.user_email ? ' · ' + r.user_email : '');
+  const img = document.getElementById('ph-img'); img.removeAttribute('src'); img.style.display = 'block';
+  const del = document.getElementById('ph-del'); del.classList.remove('armed'); del.textContent = 'Supprimer la livraison';
+  del.style.display = isMgr || (r.user_id === me.id && r.jour === localISO()) ? '' : 'none';
+  document.getElementById('ov-photo').classList.add('open');
+  try { img.src = await signedUrl(r.bon_path); } catch (e) { img.style.display = 'none'; toast(e.message, true); }
+}
+function closePhoto() { document.getElementById('ov-photo').classList.remove('open'); current = null; }
+async function deleteCurrent(btn) {
+  if (!current) return;
+  if (!btn.classList.contains('armed')) { btn.classList.add('armed'); btn.textContent = 'Confirmer la suppression'; setTimeout(() => { btn.classList.remove('armed'); btn.textContent = 'Supprimer la livraison'; }, 4000); return; }
+  const r = current;
+  try {
+    const del = await sb(`/rest/v1/receptions?id=eq.${encodeURIComponent(r.id)}`, { method: 'DELETE' });
+    if (!Array.isArray(del) || !del.length) throw new Error("Tu n'as pas les droits pour cette action");
+    if (r.bon_path) await removePhoto(r.bon_path);
+    closePhoto(); toast('Livraison supprimée');
+    await loadToday(); if (document.getElementById('view-hist').style.display === 'block') loadHist();
+  } catch (e) { toast(e.message, true); }
+}
+function photoLater(id) { laterId = id; document.getElementById('f-photo-later').click(); }
+async function addPhotoLater(ev) {
+  const f = ev.target.files && ev.target.files[0]; ev.target.value = '';
+  if (!f || !laterId) return;
+  let path = null;
+  try {
+    toast('Envoi de la photo…');
+    path = await uploadPhoto(await compress(f));
+    await sb(`/rest/v1/receptions?id=eq.${encodeURIComponent(laterId)}`, { method: 'PATCH', body: JSON.stringify({ bon_path: path }) });
+    toast('Bon ajouté');
+    await loadToday(); if (document.getElementById('view-hist').style.display === 'block') loadHist();
+  } catch (e) { if (path) removePhoto(path); toast(e.message, true); }
+  laterId = null;
+}
+
+// ── Démarrage ──
+function init() {
+  me = JSON.parse(localStorage.getItem('sl_user') || '{}');
+  isMgr = ['superadmin', 'admin', 'manager'].includes(me.role);
+  if (isMgr) document.body.classList.add('mgr');
+  renderMotifs();
+  if (!me.tenant_id) { document.getElementById('today-list').innerHTML = '<div class="empty">Magasin introuvable pour ce compte.</div>'; return; }
+  loadToday();
+  loadFournisseurs();
+}
+function _runWhenReady() {
+  if (window.__guardPassed === true) init();
+  else if (window.__guardPassed === false) {}
+  else setTimeout(_runWhenReady, 50);
+}
+_runWhenReady();
+</script>
+</body>
+</html>

@@ -910,7 +910,7 @@ window.slErrMsg = function (status, data) {
 
 <div class="toast-container" id="toast-container"></div>
 <div class="version-tag" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:80;letter-spacing:1px;opacity:.4">
-  admin v2.4 · 12/10/2026 12:45
+  admin v2.5 · 12/10/2026 16:30
 </div>
 
 <script>
@@ -1000,15 +1000,16 @@ const MODULES = [
   { id:'commandes', label:'Commandes', ico:'' },
   { id:'donnees', label:'Données', ico:'' },
   { id:'planning', label:'Planning', ico:'' },
+  { id:'reception', label:'Réception', ico:'' },
 ];
 
 // Modules actifs par défaut selon le rôle
 const ROLE_LABELS = { superadmin:'Superadmin', admin:'Admin', manager:'Manager', employe:'Employé' };
 const roleLabel = r => ROLE_LABELS[r] || r;
 const DEFAULT_MODULES = {
-  employe: ['dlc','pertes','temperatures','planning'],
-  manager: ['dlc','pertes','produits','allergenes','temperatures','documents','transferts','commandes','donnees','planning'],
-  admin:   ['dlc','pertes','produits','allergenes','temperatures','documents','transferts','commandes','donnees','planning'],
+  employe: ['dlc','pertes','temperatures','planning','reception'],
+  manager: ['dlc','pertes','produits','allergenes','temperatures','documents','transferts','commandes','donnees','planning','reception'],
+  admin:   ['dlc','pertes','produits','allergenes','temperatures','documents','transferts','commandes','donnees','planning','reception'],
 };
 
 const DEFAULT_RAYONS = [
@@ -1564,7 +1565,8 @@ function moduleDesc(id) {
     transferts:   'Bons de transfert inter-rayons avec impression',
     commandes:    'Bons de commande fournisseurs, envoi email direct',
     donnees:      'Vue tableur de toutes les données, export CSV',
-    planning:     'Horaires de l’équipe, import photo de l’horaire papier, heures',
+    planning:     'Horaires de l’équipe, saisie et import JSON, publication',
+    reception:    'Contrôle des livraisons : photo du bon, températures, réserves',
   }[id] || '';
 }
 
