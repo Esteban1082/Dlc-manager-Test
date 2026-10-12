@@ -209,6 +209,9 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     padding:10px 8px; outline:none; transition:border-color .15s;
   }
   .temp-input:focus { border-color:var(--amber); }
+  .preset-btn { height:32px; padding:0 12px; border-radius:16px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-weight:600; }
+  .act-btn { height:34px; padding:0 12px; border-radius:17px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-weight:600; }
+  .act-btn.on { background:var(--amber); border-color:var(--amber); color:#23201c; }
   .sign-btn { width:44px; height:44px; border-radius:12px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:18px; font-weight:700; flex-shrink:0; }
 
   .histo-row {
@@ -441,6 +444,20 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <!-- Modal gestion appareils -->
+<div class="modal-overlay" id="modal-action" onclick="if(event.target.id==='modal-action')closeActionModal()">
+  <div class="modal">
+    <div class="modal-title">Relevé hors norme</div>
+    <div id="action-intro" style="font-size:14px;color:var(--muted);margin:-8px 0 14px;line-height:1.4"></div>
+    <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">Qu’as-tu fait ? (gardé dans l’autocontrôle)</div>
+    <div id="action-quick" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+    <textarea id="action-text" class="form-input" rows="2" placeholder="Précise si besoin (ex : produits déplacés dans la chambre froide 2)" style="width:100%;resize:vertical"></textarea>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button onclick="closeActionModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:13px;">Plus tard</button>
+      <button onclick="saveAction()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-weight:700;color:#000;">Enregistrer l’action</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-zones" onclick="if(event.target.id==='modal-zones')closeZoneModal()">
   <div class="modal">
     <div class="modal-title">Zones de relevé</div>
@@ -451,7 +468,13 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
       <input id="new-zone-min" class="form-input" type="number" placeholder="Min" style="margin-bottom:0;width:70px">
       <input id="new-zone-max" class="form-input" type="number" placeholder="Max" style="margin-bottom:0;width:70px">
     </div>
-    <div style="font-size:10px;color:var(--muted);margin-bottom:14px">Plage normale (ex: 0 à 4°C pour un frigo)</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Plage normale — raccourcis :</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+      <button type="button" class="preset-btn" onclick="zonePreset(0,4)">Frais 0 à 4 °C</button>
+      <button type="button" class="preset-btn" onclick="zonePreset(0,7)">Frais 0 à 7 °C</button>
+      <button type="button" class="preset-btn" onclick="zonePreset(-30,-18)">Surgelé ≤ −18 °C</button>
+      <button type="button" class="preset-btn" onclick="zonePreset(60,95)">Chaud ≥ 60 °C</button>
+    </div>
     <div style="display:flex;gap:10px">
       <button onclick="closeZoneModal()" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Fermer</button>
       <button onclick="addZone()" style="flex:1;padding:12px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:#000;">＋ Ajouter</button>
@@ -460,7 +483,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">temperatures v2.4 · 12/10/2026 12:45</div>
+<div class="version-tag">temperatures v2.5 · 12/10/2026 15:10</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -581,8 +604,15 @@ function normalizeZone(row) {
   };
 }
 
+const ACTIONS = ['Thermostat réglé', 'Porte refermée / dégivrage', 'Produits déplacés au froid', 'Produits jetés', 'Technicien appelé', 'Nouveau relevé conforme'];
+let actionQueue = [], actionSel = new Set(), hasActionCols = true;
+function zonePreset(min, max) { document.getElementById('new-zone-min').value = min; document.getElementById('new-zone-max').value = max; }
+
 function normalizeTempRow(row) {
   return {
+    rowId: row.id || null,
+    action: row.action_corrective || '',
+    actionPar: row.action_par || '',
     id: row.zone_id || row.id || '',
     nom: row.zone_nom || row.nom || '',
     temp: String(row.valeur ?? row.temp ?? ''),
@@ -716,19 +746,59 @@ async function saveAllTemps() {
     created_by: user.id || null
   }));
   try {
-    await sbFetch('/rest/v1/temperatures', { method:'POST', body: JSON.stringify(rows) });
+    const saved = await sbFetch('/rest/v1/temperatures', { method:'POST', body: JSON.stringify(rows) });
     const nbHors = rows.filter(r => r.hors_norme).length;
-    toast(`Relevé enregistré : ${entries.length} appareil${entries.length > 1 ? 's' : ''}${nbHors ? ` · ${nbHors} hors norme` : ''}`, nbHors > 0);
     zones.forEach(a => {
       const inp = document.getElementById('temp-' + a.id);
       if (inp) inp.value = '';
       const card = document.getElementById('card-' + a.id); if (card) card.className = 'appliance-card';
       const st = document.getElementById('status-' + a.id); if (st) st.textContent = '';
     });
-    loadHisto();
+    await loadHisto();
+    // Hors norme : on demande tout de suite l'action corrective (trace exigée par l'autocontrôle)
+    const hors = (Array.isArray(saved) ? saved : []).filter(r => r.hors_norme);
+    const askAction = hors.length && hasActionCols;
+    // Le toast couvrirait les boutons de la fenêtre d'action : on ne l'affiche que s'il n'y en a pas
+    if (!askAction) toast(`Relevé enregistré : ${entries.length} appareil${entries.length > 1 ? 's' : ''}${nbHors ? ` · ${nbHors} hors norme` : ''}`, nbHors > 0);
+    if (askAction) openActionFor(hors.map(r => ({ id: r.id, nom: r.zone_nom, val: r.valeur, zone: zones.find(z => z.id === r.zone_id || z.nom === r.zone_nom) })));
   } catch(e) {
     toast(e.message, true);
   }
+}
+
+// ── Action corrective ──
+function openActionFor(items) {
+  actionQueue = items.slice();
+  showNextAction();
+}
+function showNextAction() {
+  const it = actionQueue[0];
+  if (!it) { closeActionModal(); return; }
+  actionSel = new Set();
+  const plage = it.zone ? ` (attendu ${it.zone.min} à ${it.zone.max} °C)` : '';
+  document.getElementById('action-intro').innerHTML = `<b style="color:var(--red)">${esc(it.nom)} : ${esc(String(it.val).replace('.', ','))} °C</b>${esc(plage)}${actionQueue.length > 1 ? ` · encore ${actionQueue.length - 1} après` : ''}`;
+  document.getElementById('action-quick').innerHTML = ACTIONS.map((a, i) => `<button type="button" class="act-btn" data-i="${i}" onclick="toggleAct(${i}, this)">${esc(a)}</button>`).join('');
+  document.getElementById('action-text').value = '';
+  document.getElementById('modal-action').style.display = 'flex';
+}
+function toggleAct(i, btn) { if (actionSel.has(i)) actionSel.delete(i); else actionSel.add(i); btn.classList.toggle('on', actionSel.has(i)); }
+function closeActionModal() { actionQueue = []; document.getElementById('modal-action').style.display = 'none'; }
+async function saveAction() {
+  const it = actionQueue[0]; if (!it) return;
+  const txt = [...actionSel].sort().map(i => ACTIONS[i]).concat(document.getElementById('action-text').value.trim() ? [document.getElementById('action-text').value.trim()] : []).join(' · ');
+  if (!txt) { toast('Choisis ou écris l’action réalisée', true); return; }
+  const me = getStoredUser();
+  try {
+    await sbFetch(`/rest/v1/temperatures?id=eq.${encodeURIComponent(it.id)}`, { method: 'PATCH', body: JSON.stringify({ action_corrective: txt, action_par: me.email || null, action_le: new Date().toISOString() }) });
+    actionQueue.shift();
+    toast('Action enregistrée');
+    await loadHisto();
+    showNextAction();
+  } catch (e) { toast(e.message, true); }
+}
+function actionForRow(rowId) {
+  const h = histoData.find(x => x.rowId === rowId); if (!h) return;
+  openActionFor([{ id: rowId, nom: h.nom, val: h.temp, zone: zones.find(z => z.id === h.id || z.nom === h.nom) }]);
 }
 
 // ── Historique ──
@@ -746,7 +816,10 @@ async function loadHisto() {
     const user = await ensureSupabaseUserReady();
     try {
       if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
-      const rows = await sbFetch(`/rest/v1/temperatures?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,zone_id,zone_nom,valeur,date_releve,heure,hors_norme,created_at&order=date_releve.desc,created_at.desc`);
+      const base = `/rest/v1/temperatures?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&order=date_releve.desc,created_at.desc&select=id,zone_id,zone_nom,valeur,date_releve,heure,hors_norme,created_at`;
+      let rows;
+      try { rows = await sbFetch(base + (hasActionCols ? ',action_corrective,action_par' : '')); }
+      catch (e) { if (!hasActionCols || !/action_/.test(e.message)) throw e; hasActionCols = false; rows = await sbFetch(base); }
       dataSource = 'supabase';
       histoData = (Array.isArray(rows) ? rows : []).map(normalizeTempRow);
       renderHisto();
@@ -812,7 +885,9 @@ function renderHisto() {
         <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:${ok?'var(--text)':'var(--red)'}">
           ${isNaN(v) ? '—' : String(v).replace('.', ',') + '°C'}
         </div>
-      </div>`;
+      </div>${ok ? '' : (h.action
+        ? `<div style="margin:-4px 0 8px;padding:8px 12px;border-radius:10px;background:var(--surface2);font-size:12px;color:var(--muted)"><b style="color:var(--text)">Action :</b> ${esc(h.action)}${h.actionPar ? ` · ${esc(h.actionPar)}` : ''}</div>`
+        : (hasActionCols && h.rowId ? `<div style="margin:-4px 0 8px"><button type="button" class="act-btn" style="color:var(--red)" onclick="actionForRow('${esc(h.rowId)}')">Noter l’action corrective</button></div>` : ''))}`;
     }).join('');
   }
   list.innerHTML = html;

@@ -484,7 +484,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">allergenes v3.4 · 12/10/2026 12:45</div>
+<div class="version-tag">allergenes v3.5 · 12/10/2026 15:10</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -505,7 +505,9 @@ const ALLERGENS = [
   { id:'sesame',     label:'Sésame',           emoji:'🌱' },
   { id:'sulfites',   label:'Sulfites',         emoji:'🍷' },
   { id:'lupin',      label:'Lupin',            emoji:'🌼' },
-  { id:'gelatine',   label:'Gélatine',         emoji:'🧪' },
+  { id:'mollusques', label:'Mollusques',       emoji:'' },
+  // Hors liste officielle : information utile (végétarien, halal…), pas une obligation légale
+  { id:'gelatine',   label:'Gélatine',         emoji:'', extra:true },
 ];
 
 // Colonnes Sheets existantes (pour lecture)
@@ -763,7 +765,7 @@ function buildChipsEdit() {
     const state = editStates.get(a.id) || 'inconnu';
     return `<div class="a-chip">
       <div class="a-chip-left">
-        <span class="a-chip-label">${a.label}</span>
+        <span class="a-chip-label">${a.label}${a.extra ? ' <span style="font-size:11px;color:var(--muted)">(info, hors liste officielle)</span>' : ''}</span>
       </div>
       <div class="a-chip-toggle">
         <button onclick="setState('${a.id}','non',this.parentElement)" class="${state==='non'?'sel-non':''}" aria-label="${a.label} absent">Non</button>
@@ -814,31 +816,28 @@ async function saveAllergens() {
   const nom = document.getElementById('edit-nom').value.trim();
   if (!nom) { toast('Le nom est obligatoire', true); return; }
   const patissier = document.getElementById('edit-patissier').value.trim();
-  // Sérialiser les états : { gluten:'oui', lait:'non', ... }
   const statesObj = {};
   editStates.forEach((v, k) => statesObj[k] = v);
-  toast('Enregistrement…');
-  closeEditModal();
-  {
-    try {
-      const payload = ficheToSupabasePayload(nom, patissier, statesObj);
-      if (editingId && !String(editingId).startsWith('row_')) {
-        await sbFetch(`/rest/v1/allergenes?id=eq.${encodeURIComponent(editingId)}`, {
-          method: 'PATCH',
-          body: JSON.stringify(payload)
-        });
-      } else {
-        await sbFetch('/rest/v1/allergenes', {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
-      }
-      toast(`Fiche "${nom}" enregistrée`);
-      await loadFiches();
-    } catch(e) {
-      toast(`${e.message}`, true);
+  const send = async (payload) => {
+    if (editingId && !String(editingId).startsWith('row_')) {
+      await sbFetch(`/rest/v1/allergenes?id=eq.${encodeURIComponent(editingId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+    } else {
+      await sbFetch('/rest/v1/allergenes', { method: 'POST', body: JSON.stringify(payload) });
     }
-    return;
+  };
+  try {
+    const payload = ficheToSupabasePayload(nom, patissier, statesObj);
+    try { await send(payload); }
+    catch (e) {
+      if (!/mollusques/i.test(e.message)) throw e;
+      delete payload.mollusques; // base pas encore mise à jour (p4_afsca.sql)
+      await send(payload);
+    }
+    closeEditModal();
+    toast(`Fiche « ${nom} » enregistrée`);
+    await loadFiches();
+  } catch(e) {
+    toast(e.message, true);
   }
 }
 

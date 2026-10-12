@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
+<script id="sl-session">
+// StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
+(function () {
+  var U = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+  var K = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+  var busy = null;
+  function exp(t) { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; } catch (e) { return 0; } }
+  function logoutExpired() {
+    ['sl_access_token', 'sl_refresh_token', 'sl_auth', 'sl_user'].forEach(function (k) { localStorage.removeItem(k); });
+    location.replace('login.html?expired=1');
+  }
+  function refresh() {
+    if (busy) return busy;
+    var rt = localStorage.getItem('sl_refresh_token');
+    if (!rt) return Promise.resolve(false);
+    busy = fetch(U + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': K }, body: JSON.stringify({ refresh_token: rt })
+    }).then(function (r) {
+      if (r.status === 400 || r.status === 401 || r.status === 403) { logoutExpired(); return false; }
+      if (!r.ok) return false;
+      return r.json().then(function (d) {
+        localStorage.setItem('sl_access_token', d.access_token);
+        if (d.refresh_token) localStorage.setItem('sl_refresh_token', d.refresh_token);
+        return true;
+      });
+    }).catch(function () { return false; }).then(function (v) { busy = null; return v; });
+    return busy;
+  }
+  window.slEnsureSession = function () {
+    var t = localStorage.getItem('sl_access_token');
+    if (!t) return Promise.resolve(false);
+    return exp(t) - Date.now() < 5 * 60 * 1000 ? refresh() : Promise.resolve(true);
+  };
+  window.slSessionReady = window.slEnsureSession();
+  setInterval(window.slEnsureSession, 4 * 60 * 1000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') window.slEnsureSession(); });
+})();
+</script>
+<script>
+// Accès : admin et manager du magasin
+document.documentElement.style.visibility = 'hidden';
+window.__guardPassed = undefined;
+(async () => {
+  if (window.slSessionReady) await window.slSessionReady;
+  const tok = localStorage.getItem('sl_access_token');
+  const sl = localStorage.getItem('sl_auth') === '1';
+  if (!tok || !sl) { window.location.replace('login.html'); return; }
+  const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
+  if (['superadmin', 'admin', 'manager'].includes(user.role)) { window.__guardPassed = true; document.documentElement.style.visibility = 'visible'; return; }
+  window.__guardPassed = false;
+  document.documentElement.style.visibility = 'visible';
+  const render = () => {
+    if (!document.body) { requestAnimationFrame(render); return; }
+    document.body.innerHTML = `<div style="position:fixed;inset:0;background:#f4efe7;color:#23201c;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;padding:24px"><div style="max-width:320px"><div style="font-family:'Fraunces',Georgia,serif;font-size:28px;font-weight:700;margin-bottom:8px">Réservé aux responsables</div><div style="font-size:15px;color:#6e6256;margin-bottom:28px;line-height:1.4">Le dossier AFSCA est accessible aux admins et managers.</div><a href="hub.html" style="display:inline-block;padding:14px 28px;background:#e8a045;border-radius:999px;font-size:16px;font-weight:700;color:#23201c;text-decoration:none">Retour à l’accueil</a></div></div>`;
+  };
+  render();
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f4efe7">
+<title>Dossier AFSCA · StoreLine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<script>
+(function(){ try { var t = localStorage.getItem('sl_ui_theme') || 'light'; if (t === 'light') document.documentElement.dataset.theme = 'light'; } catch(e) {} })();
+</script>
+<style>
+  html[data-theme="light"] { --bg:#f4efe7; --surface:#fffcf7; --surface2:#f1e6d6; --border:#e2d7c9; --text:#23201c; --muted:#6e6256; --fill:#e8a045; --accent:#ad5a10; --red:#b3261e; --red-bg:#fbece9; --green:#2f6b45; --green-bg:#e7f1e9; --shadow:0 1px 2px rgba(60,40,20,.05), 0 10px 28px rgba(60,40,20,.08); }
+  html:not([data-theme="light"]) { --bg:#161412; --surface:#211e1b; --surface2:#2b2723; --border:#3a342e; --text:#f4efe7; --muted:#a3978a; --fill:#e8a045; --accent:#f0b264; --red:#ff7a6e; --red-bg:rgba(255,122,110,.13); --green:#6fcf97; --green-bg:rgba(111,207,151,.13); --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.25); }
+  :root { --sans:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', sans-serif; --serif:'Fraunces', Georgia, serif; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { background:var(--bg); color:var(--text); font-family:var(--sans); font-size:15px; -webkit-font-smoothing:antialiased; }
+  button, input, select { font:inherit; color:inherit; }
+  button { cursor:pointer; }
+  :focus-visible { outline:2px solid var(--fill); outline-offset:2px; }
+  header.sl-head { position:sticky; top:0; z-index:50; padding:calc(env(safe-area-inset-top) + 10px) 0 12px; background:color-mix(in srgb, var(--bg) 86%, transparent); -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); border-bottom:.5px solid var(--border); }
+  .in { max-width:860px; margin:0 auto; padding:0 20px; }
+  .top { display:flex; align-items:center; justify-content:space-between; min-height:34px; }
+  .back { display:inline-flex; align-items:center; gap:6px; color:var(--accent); font-size:16px; font-weight:500; text-decoration:none; }
+  h1 { font-family:var(--serif); font-size:32px; font-weight:700; letter-spacing:-.6px; margin-top:6px; }
+  .main { padding-top:16px; padding-bottom:60px; }
+  .card { background:var(--surface); border-radius:18px; box-shadow:var(--shadow); padding:18px; margin-bottom:14px; }
+  .lead { font-size:14px; color:var(--muted); line-height:1.5; }
+  .lbl { display:block; font-size:12px; font-weight:600; color:var(--muted); margin:14px 0 6px; }
+  .seg { display:flex; background:var(--surface2); border-radius:10px; padding:2px; overflow-x:auto; scrollbar-width:none; }
+  .seg button { flex:1 1 0; min-width:max-content; height:32px; padding:0 12px; border:none; border-radius:8px; background:transparent; font-size:13px; font-weight:500; display:inline-flex; align-items:center; justify-content:center; }
+  .seg button.on { background:var(--surface); font-weight:600; box-shadow:0 1px 3px rgba(60,40,20,.15); }
+  .dates { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+  .inp { width:100%; height:44px; border-radius:12px; border:1.5px solid transparent; background:var(--surface2); padding:0 12px; font-size:16px; }
+  .checks { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:8px; }
+  .chk { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; background:var(--surface2); font-size:14px; font-weight:500; }
+  .chk input { width:20px; height:20px; accent-color:var(--fill); }
+  .btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+  .btn { flex:1; min-width:150px; height:48px; border-radius:999px; border:1px solid var(--border); background:var(--surface); font-weight:600; font-size:15px; }
+  .btn.primary { background:var(--fill); border-color:var(--fill); color:#23201c; font-weight:700; box-shadow:0 4px 14px rgba(232,160,69,.28); }
+  .btn:disabled { opacity:.5; }
+  .status { font-size:13px; color:var(--muted); margin-top:10px; min-height:18px; }
+  .status.err { color:var(--red); }
+
+  /* Le rapport (aperçu = papier) */
+  #report { display:none; }
+  .paper { background:#fff; color:#1d1b18; border-radius:6px; box-shadow:var(--shadow); padding:34px 36px; font-family:var(--sans); font-size:12px; line-height:1.45; }
+  .paper h2 { font-family:var(--serif); font-size:24px; letter-spacing:-.3px; }
+  .paper h3 { font-family:var(--serif); font-size:17px; margin:26px 0 8px; padding-bottom:6px; border-bottom:2px solid #e8a045; }
+  .paper .meta { color:#6e6256; margin-top:4px; }
+  .paper .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin-top:16px; }
+  .paper .kpi { border:1px solid #e2d7c9; border-radius:10px; padding:10px; }
+  .paper .kpi b { display:block; font-family:var(--serif); font-size:20px; }
+  .paper .kpi span { color:#6e6256; font-size:11px; }
+  .paper .kpi.bad b { color:#b3261e; }
+  .paper table { width:100%; border-collapse:collapse; margin-top:6px; }
+  .paper th { text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; color:#6e6256; border-bottom:1px solid #cfc2b2; padding:5px 6px; }
+  .paper td { border-bottom:1px solid #eee5d9; padding:5px 6px; vertical-align:top; }
+  .paper tr.nc td { background:#fbece9; }
+  .paper tr.miss td { background:#fbf3ea; }
+  .paper table.grid td, .paper table.grid th { text-align:center; }
+  .paper table.grid td:first-child, .paper table.grid th:first-child { text-align:left; white-space:nowrap; }
+  .paper h4 { font-size:13px; margin:14px 0 4px; }
+  .paper .ok { color:#2f6b45; font-weight:600; }
+  .paper .ko { color:#b3261e; font-weight:700; }
+  .paper .note { color:#6e6256; font-size:11px; margin-top:6px; }
+  .paper .foot { margin-top:28px; padding-top:10px; border-top:1px solid #e2d7c9; color:#6e6256; font-size:10.5px; }
+  .paper .al td, .paper .al th { text-align:center; padding:4px 3px; font-size:10.5px; }
+  .paper .al td:first-child, .paper .al th:first-child { text-align:left; }
+  .paper .al .c { color:#b3261e; font-weight:700; }
+  .paper .al .a { color:#9a9086; }
+  .paper .al .u { color:#8a5a00; font-weight:700; }
+  .paper .vert { writing-mode:vertical-rl; transform:rotate(180deg); white-space:nowrap; height:84px; }
+  .empty { color:#6e6256; font-style:italic; padding:6px 0; }
+
+  @media (max-width:640px) { .in { padding:0 16px; } h1 { font-size:30px; } .paper { padding:20px 16px; } .paper .kpis { grid-template-columns:repeat(2, 1fr); } .dates { grid-template-columns:1fr; } }
+  @page { size:A4; margin:14mm 12mm; }
+  @page paysage { size:A4 landscape; margin:12mm; }
+  @media print {
+    html, body { background:#fff; }
+    header, #setup, .no-print { display:none !important; }
+    .main, .in { max-width:none; padding:0; }
+    #report { display:block !important; }
+    .paper { box-shadow:none; border-radius:0; padding:0; }
+    .paper h3 { break-after:avoid; }
+    .paper tr { break-inside:avoid; }
+    .sec-allerg { page:paysage; break-before:page; }
+  }
+</style>
+</head>
+<body>
+<header class="sl-head">
+  <div class="in">
+    <div class="top">
+      <a class="back" href="hub.html"><svg width="11" height="18" viewBox="0 0 11 18" aria-hidden="true"><path d="M9 1.5 1.8 9 9 16.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Accueil</span></a>
+    </div>
+    <h1>Dossier AFSCA</h1>
+  </div>
+</header>
+
+<div class="main in">
+  <div id="setup">
+    <div class="card">
+      <p class="lead">Rassemble les enregistrements de ton autocontrôle sur une période, prêts à montrer ou à imprimer lors d’un contrôle.</p>
+      <span class="lbl">Période</span>
+      <div class="seg" id="period">
+        <button type="button" data-p="m0" class="on" onclick="setPeriod('m0')">Ce mois-ci</button>
+        <button type="button" data-p="m1" onclick="setPeriod('m1')">Mois dernier</button>
+        <button type="button" data-p="d90" onclick="setPeriod('d90')">3 derniers mois</button>
+        <button type="button" data-p="d183" onclick="setPeriod('d183')">6 derniers mois</button>
+      </div>
+      <div class="dates">
+        <label><span class="lbl" style="margin-top:0">Du</span><input class="inp" type="date" id="d-from" onchange="customPeriod()"></label>
+        <label><span class="lbl" style="margin-top:0">Au</span><input class="inp" type="date" id="d-to" onchange="customPeriod()"></label>
+      </div>
+      <span class="lbl">Contenu</span>
+      <div class="checks">
+        <label class="chk"><input type="checkbox" id="s-temp" checked> Températures</label>
+        <label class="chk"><input type="checkbox" id="s-dlc" checked> Retraits de produits (DLC)</label>
+        <label class="chk"><input type="checkbox" id="s-net" checked> Nettoyage (checklists)</label>
+        <label class="chk"><input type="checkbox" id="s-all" checked> Fiches allergènes</label>
+      </div>
+      <div class="btns">
+        <button class="btn primary" id="go" type="button" onclick="build()">Préparer le dossier</button>
+      </div>
+      <div class="status" id="status" role="status"></div>
+    </div>
+  </div>
+
+  <div id="report">
+    <div class="btns no-print" style="margin:0 0 14px">
+      <button class="btn" type="button" onclick="backToSetup()">Modifier</button>
+      <button class="btn primary" type="button" onclick="window.print()">Imprimer / PDF</button>
+    </div>
+    <div class="paper" id="paper"></div>
+  </div>
+</div>
+<div class="version-tag no-print" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);opacity:.45">dossier v1.0 · 12/10/2026 15:10</div>
+
+<script>
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+const ALLERGENS = [
+  ['gluten', 'Gluten'], ['crustaces', 'Crustacés'], ['oeufs', 'Œufs'], ['poissons', 'Poissons'], ['arachides', 'Arachides'],
+  ['soja', 'Soja'], ['lait', 'Lait'], ['fruits_coq', 'Fruits à coque'], ['celeri', 'Céleri'], ['moutarde', 'Moutarde'],
+  ['sesame', 'Sésame'], ['sulfites', 'Sulfites'], ['lupin', 'Lupin'], ['mollusques', 'Mollusques'],
+];
+let me = {};
+
+async function sbFetch(path) {
+  const r = await slFetch(SUPABASE_URL + path, { headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + localStorage.getItem('sl_access_token') } });
+  const text = await r.text();
+  let data = null; try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+  if (!r.ok) throw new Error(slErrMsg(r.status, data));
+  return data;
+}
+async function sbAll(path) {
+  const out = [];
+  for (let off = 0; ; off += 1000) {
+    const page = await sbFetch(path + (path.includes('?') ? '&' : '?') + 'limit=1000&offset=' + off);
+    if (!Array.isArray(page) || !page.length) break;
+    out.push(...page);
+    if (page.length < 1000) break;
+  }
+  return out;
+}
+// Lecture tolérante : une section indisponible (droits, colonne manquante) n'empêche pas le reste
+async function tryAll(path, fallback) {
+  try { return { rows: await sbAll(path) }; }
+  catch (e) {
+    if (fallback) { try { return { rows: await sbAll(fallback) }; } catch (e2) { return { rows: [], err: e2.message }; } }
+    return { rows: [], err: e.message };
+  }
+}
+
+// Dates locales
+function parseISO(s) { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d, 12); }
+function addDays(s, n) { const d = parseISO(s); d.setDate(d.getDate() + n); return localISO(d); }
+function fmt(s, o) { return parseISO(s).toLocaleDateString('fr-BE', o || { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+function fmtTs(ts) { const d = new Date(ts); return d.toLocaleDateString('fr-BE', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' }); }
+function dayStartUTC(s) { return new Date(parseISO(s).setHours(0, 0, 0, 0)).toISOString(); }
+function dec(v) { return String(v).replace('.', ','); }
+
+function setPeriod(p) {
+  document.querySelectorAll('#period button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
+  const today = localISO(), d = parseISO(today);
+  let from = today, to = today;
+  if (p === 'm0') { from = localISO(new Date(d.getFullYear(), d.getMonth(), 1)); }
+  if (p === 'm1') { from = localISO(new Date(d.getFullYear(), d.getMonth() - 1, 1)); to = localISO(new Date(d.getFullYear(), d.getMonth(), 0)); }
+  if (p === 'd90') from = addDays(today, -89);
+  if (p === 'd183') from = addDays(today, -182);
+  document.getElementById('d-from').value = from;
+  document.getElementById('d-to').value = to;
+}
+function customPeriod() { document.querySelectorAll('#period button').forEach(b => b.classList.remove('on')); }
+function status(msg, err) { const el = document.getElementById('status'); el.className = 'status' + (err ? ' err' : ''); el.textContent = msg || ''; }
+function backToSetup() { document.getElementById('report').style.display = 'none'; document.getElementById('setup').style.display = 'block'; }
+
+async function build() {
+  const from = document.getElementById('d-from').value, to = document.getElementById('d-to').value;
+  if (!from || !to || from > to) { status('Choisis une période valide', true); return; }
+  const want = { temp: document.getElementById('s-temp').checked, dlc: document.getElementById('s-dlc').checked, net: document.getElementById('s-net').checked, all: document.getElementById('s-all').checked };
+  if (!Object.values(want).some(Boolean)) { status('Coche au moins un contenu', true); return; }
+  const btn = document.getElementById('go'); btn.disabled = true; status('Préparation du dossier…');
+  try {
+    const t = encodeURIComponent(me.tenant_id);
+    const toNext = addDays(to, 1);
+    const [ten, temps, zones, histo, cls, etats, alls] = await Promise.all([
+      tryAll(`/rest/v1/tenants?id=eq.${t}&select=nom`),
+      want.temp ? tryAll(`/rest/v1/temperatures?tenant_id=eq.${t}&date_releve=gte.${from}&date_releve=lte.${to}&select=zone_id,zone_nom,valeur,date_releve,heure,hors_norme,action_corrective,action_par&order=date_releve.asc,heure.asc`,
+                         `/rest/v1/temperatures?tenant_id=eq.${t}&date_releve=gte.${from}&date_releve=lte.${to}&select=zone_id,zone_nom,valeur,date_releve,heure,hors_norme&order=date_releve.asc,heure.asc`) : { rows: [] },
+      want.temp ? tryAll(`/rest/v1/zones?tenant_id=eq.${t}&select=id,nom,temp_min,temp_max,actif&order=ordre.asc`) : { rows: [] },
+      want.dlc ? tryAll(`/rest/v1/dlc_historique?tenant_id=eq.${t}&type=eq.retrait&annule=eq.false&created_at=gte.${encodeURIComponent(dayStartUTC(from))}&created_at=lt.${encodeURIComponent(dayStartUTC(toNext))}&select=created_at,user_email,nom,marque,code_barres,old_dlc&order=created_at.asc`) : { rows: [] },
+      want.net ? tryAll(`/rest/v1/checklists?tenant_id=eq.${t}&actif=eq.true&select=id,nom,taches&order=ordre.asc`) : { rows: [] },
+      want.net ? tryAll(`/rest/v1/checklist_etats?tenant_id=eq.${t}&jour=gte.${from}&jour=lte.${to}&select=checklist_id,tache_id,jour`) : { rows: [] },
+      want.all ? tryAll(`/rest/v1/allergenes?tenant_id=eq.${t}&select=*&order=nom_gateau.asc`) : { rows: [] },
+    ]);
+    render({ from, to, want, magasin: (ten.rows[0] || {}).nom || 'Mon magasin', temps, zones: zones.rows, histo, cls, etats: etats.rows, alls });
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('report').style.display = 'block';
+    window.scrollTo(0, 0);
+    status('');
+  } catch (e) { status(e.message, true); }
+  finally { btn.disabled = false; }
+}
+
+function render(d) {
+  const nbDays = Math.round((parseISO(d.to) - parseISO(d.from)) / 86400000) + 1;
+  const days = Array.from({ length: nbDays }, (_, i) => addDays(d.from, i));
+  const T = d.temps.rows, Z = d.zones;
+  const zoneOf = r => Z.find(z => z.id === r.zone_id) || Z.find(z => z.nom === r.zone_nom);
+  const daysWithTemp = new Set(T.map(r => r.date_releve));
+  const today = localISO();
+  const firstTemp = T.reduce((m, r) => (!m || r.date_releve < m ? r.date_releve : m), '');
+  // Jours manquants : depuis le premier relevé enregistré, dimanches exclus, aujourd'hui pas encore compté
+  const missing = firstTemp ? days.filter(x => x >= firstTemp && x < today && !daysWithTemp.has(x) && parseISO(x).getDay() !== 0) : [];
+  const nc = T.filter(r => r.hors_norme);
+  const ncNoAction = nc.filter(r => !r.action_corrective);
+  const H = d.histo.rows;
+  let netDone = 0, netTotal = 0;
+  const etatSet = new Set(d.etats.map(e => e.checklist_id + '|' + e.tache_id + '|' + e.jour));
+  const firstNet = d.etats.reduce((m, e) => (!m || e.jour < m ? e.jour : m), '');
+  const daysNet = firstNet ? days.filter(x => parseISO(x).getDay() !== 0 && x >= firstNet && (x < today || d.etats.some(e => e.jour === x))) : [];
+  (d.cls.rows || []).forEach(c => (c.taches || []).forEach(tk => daysNet.forEach(x => { netTotal++; if (etatSet.has(c.id + '|' + tk.id + '|' + x)) netDone++; })));
+  const A = d.alls.rows;
+  const unknownAll = A.filter(f => ALLERGENS.some(([k]) => !f[k] || f[k] === 'inconnu'));
+
+  let h = `<h2>Dossier d’autocontrôle</h2>
+    <div class="meta"><b>${esc(d.magasin)}</b> · du ${fmt(d.from)} au ${fmt(d.to)} · généré le ${new Date().toLocaleDateString('fr-BE')} à ${new Date().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' })} par ${esc(me.email || '')}</div>
+    <div class="kpis">
+      ${d.want.temp ? `<div class="kpi ${missing.length ? 'bad' : ''}"><b>${daysWithTemp.size}/${daysWithTemp.size + missing.length}</b><span>jours avec relevé de températures</span></div>
+      <div class="kpi ${ncNoAction.length ? 'bad' : ''}"><b>${nc.length}</b><span>hors norme${nc.length ? `, dont ${nc.length - ncNoAction.length} avec action corrective` : ''}</span></div>` : ''}
+      ${d.want.dlc ? `<div class="kpi"><b>${H.length}</b><span>produits retirés à date (DLC)</span></div>` : ''}
+      ${d.want.net ? `<div class="kpi"><b>${netTotal ? Math.round(netDone / netTotal * 100) + ' %' : '—'}</b><span>tâches de nettoyage cochées</span></div>` : ''}
+      ${d.want.all ? `<div class="kpi ${unknownAll.length ? 'bad' : ''}"><b>${A.length}</b><span>fiches allergènes${unknownAll.length ? `, ${unknownAll.length} incomplète${unknownAll.length > 1 ? 's' : ''}` : ''}</span></div>` : ''}
+    </div>`;
+
+  if (d.want.temp) {
+    h += `<h3>1. Températures des équipements frigorifiques</h3>`;
+    if (d.temps.err) h += `<div class="empty">Section indisponible : ${esc(d.temps.err)}</div>`;
+    else if (!T.length) h += `<div class="empty">Aucun relevé sur la période.</div>`;
+    else {
+      // Grille : une ligne par jour, une colonne par équipement (comme le registre papier)
+      const cols = Z.filter(z => z.actif !== false || T.some(r => r.zone_id === z.id));
+      T.forEach(r => { if (!zoneOf(r) && !cols.some(c => c._nom === r.zone_nom)) cols.push({ id: null, _nom: r.zone_nom, nom: r.zone_nom }); });
+      const colOf = r => cols.find(c => (c.id && c.id === r.zone_id)) || cols.find(c => c.nom === r.zone_nom);
+      const byDay = new Map();
+      T.forEach(r => { const k = r.date_releve; if (!byDay.has(k)) byDay.set(k, new Map()); const m = byDay.get(k), c = colOf(r); if (!m.has(c)) m.set(c, []); m.get(c).push(r); });
+      const gridDays = days.filter(x => byDay.has(x) || missing.includes(x));
+      if (firstTemp > d.from) h += `<div class="note">Premier relevé enregistré dans StoreLine le ${fmt(firstTemp)}.</div>`;
+      h += `<table class="grid"><thead><tr><th>Date</th>${cols.map(c => `<th>${esc(c.nom)}${c.temp_min != null ? `<span class="note"><br>${dec(c.temp_min)} à ${dec(c.temp_max)} °C</span>` : ''}</th>`).join('')}</tr></thead><tbody>`
+        + gridDays.map(x => { const m = byDay.get(x); if (!m) return `<tr class="miss"><td>${fmt(x, { weekday: 'short', day: '2-digit', month: '2-digit' })}</td><td colspan="${cols.length}"><span class="ko">Pas de relevé</span></td></tr>`;
+            return `<tr><td>${fmt(x, { weekday: 'short', day: '2-digit', month: '2-digit' })}</td>${cols.map(c => { const rs = m.get(c) || []; return `<td>${rs.map(r => `<span class="${r.hors_norme ? 'ko' : ''}">${dec(r.valeur)}</span>`).join(' / ') || '<span class="note">—</span>'}</td>`; }).join('')}</tr>`; }).join('')
+        + `</tbody></table>`;
+      h += `<h4>Écarts et actions correctives</h4>`;
+      if (!nc.length) h += `<div class="empty">Aucun relevé hors norme sur la période.</div>`;
+      else h += `<table><thead><tr><th>Date</th><th>Heure</th><th>Équipement</th><th>Relevé</th><th>Action corrective</th></tr></thead><tbody>`
+        + nc.map(r => { const z = zoneOf(r); return `<tr class="nc"><td>${fmt(r.date_releve)}</td><td>${esc(String(r.heure || '').slice(0, 5))}</td><td>${esc(r.zone_nom)}</td><td><b class="ko">${dec(r.valeur)} °C</b>${z ? `<span class="note"> (${dec(z.temp_min)} à ${dec(z.temp_max)})</span>` : ''}</td><td>${r.action_corrective ? esc(r.action_corrective) + (r.action_par ? `<span class="note"> — ${esc(r.action_par)}</span>` : '') : '<span class="ko">Non renseignée</span>'}</td></tr>`; }).join('')
+        + `</tbody></table>`;
+    }
+    if (missing.length) h += `<div class="note">${missing.length} jour${missing.length > 1 ? 's' : ''} sans relevé (dimanches exclus) : ${missing.map(x => fmt(x, { day: '2-digit', month: '2-digit' })).join(', ')}.</div>`;
+  }
+
+  if (d.want.dlc) {
+    h += `<h3>${d.want.temp ? 2 : 1}. Retraits de produits arrivés à date limite</h3>`;
+    if (d.histo.err) h += `<div class="empty">Section indisponible : ${esc(d.histo.err)}</div>`;
+    else if (!H.length) h += `<div class="empty">Aucun retrait enregistré sur la période.</div>`;
+    else h += `<table><thead><tr><th>Retiré le</th><th>Produit</th><th>Marque</th><th>DLC</th><th>Par</th></tr></thead><tbody>`
+      + H.map(r => `<tr><td>${fmtTs(r.created_at)}</td><td>${esc(r.nom)}</td><td>${esc(r.marque)}</td><td>${r.old_dlc ? fmt(r.old_dlc) : '—'}</td><td>${esc(r.user_email || '')}</td></tr>`).join('') + `</tbody></table>`;
+  }
+
+  if (d.want.net) {
+    const n = [d.want.temp, d.want.dlc].filter(Boolean).length + 1;
+    h += `<h3>${n}. Nettoyage et tâches quotidiennes</h3>`;
+    const C = d.cls.rows || [];
+    if (d.cls.err) h += `<div class="empty">Section indisponible : ${esc(d.cls.err)}</div>`;
+    else if (!C.length) h += `<div class="empty">Aucune checklist configurée (module Documents).</div>`;
+    else {
+      const rows = daysNet;
+      if (!rows.length) h += `<div class="empty">Aucune tâche cochée sur la période.</div>`;
+      else if (firstNet > d.from) h += `<div class="note">Première tâche cochée dans StoreLine le ${fmt(firstNet)}.</div>`;
+      if (rows.length) h += `<table><thead><tr><th>Date</th>${C.map(c => `<th>${esc(c.nom)}</th>`).join('')}</tr></thead><tbody>`
+        + rows.map(x => `<tr><td style="white-space:nowrap">${fmt(x, { weekday: 'short', day: '2-digit', month: '2-digit' })}</td>${C.map(c => { const tot = (c.taches || []).length, done = (c.taches || []).filter(tk => etatSet.has(c.id + '|' + tk.id + '|' + x)).length; return `<td class="${tot && done === tot ? 'ok' : done ? '' : 'ko'}">${done}/${tot}</td>`; }).join('')}</tr>`).join('')
+        + `</tbody></table>`;
+      h += `<div class="note">Tâches actuelles : ${C.map(c => `<b>${esc(c.nom)}</b> — ${(c.taches || []).map(tk => esc(tk.label)).join(', ')}`).join(' · ')}</div>`;
+    }
+  }
+
+  if (d.want.all) {
+    const n = [d.want.temp, d.want.dlc, d.want.net].filter(Boolean).length + 1;
+    h += `<div class="sec-allerg"><h3>${n}. Allergènes — denrées vendues non préemballées</h3>`;
+    if (d.alls.err) h += `<div class="empty">Section indisponible : ${esc(d.alls.err)}</div>`;
+    else if (!A.length) h += `<div class="empty">Aucune fiche allergènes.</div>`;
+    else {
+      h += `<div class="note">● contient · — absent · ? à vérifier. Les 14 allergènes du règlement (UE) n° 1169/2011.</div>
+        <table class="al"><thead><tr><th>Produit</th>${ALLERGENS.map(([, l]) => `<th><div class="vert">${l}</div></th>`).join('')}</tr></thead><tbody>`
+        + A.map(f => `<tr><td><b>${esc(f.nom_gateau)}</b>${f.patissier ? `<span class="note"> · ${esc(f.patissier)}</span>` : ''}</td>${ALLERGENS.map(([k]) => { const v = f[k]; return v === 'oui' ? '<td class="c">●</td>' : v === 'non' ? '<td class="a">—</td>' : '<td class="u">?</td>'; }).join('')}</tr>`).join('')
+        + `</tbody></table>`;
+    }
+    h += `__FOOT__</div>`;
+  }
+
+  h += `<div class="foot">Document généré par StoreLine à partir des enregistrements de l’autocontrôle du magasin. Il rassemble les traces disponibles et ne remplace pas la validation officielle du système d’autocontrôle.</div>`;
+  const foot = h.slice(h.lastIndexOf('<div class="foot">'));
+  if (h.includes('__FOOT__')) h = h.slice(0, h.lastIndexOf('<div class="foot">')).replace('__FOOT__', foot);
+  document.getElementById('paper').innerHTML = h;
+}
+
+function init() {
+  me = JSON.parse(localStorage.getItem('sl_user') || '{}');
+  setPeriod('m0');
+  if (!me.tenant_id) status('Magasin introuvable pour ce compte', true);
+}
+function _runWhenReady() {
+  if (window.__guardPassed === true) init();
+  else if (window.__guardPassed === false) {}
+  else setTimeout(_runWhenReady, 50);
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _runWhenReady); else _runWhenReady();
+</script>
+</body>
+</html>
