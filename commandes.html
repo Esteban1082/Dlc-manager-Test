@@ -1,11 +1,51 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<script id="sl-session">
+// StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
+(function () {
+  var U = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+  var K = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+  var busy = null;
+  function exp(t) { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; } catch (e) { return 0; } }
+  function logoutExpired() {
+    ['sl_access_token', 'sl_refresh_token', 'sl_auth', 'sl_user'].forEach(function (k) { localStorage.removeItem(k); });
+    location.replace('login.html?expired=1');
+  }
+  function refresh() {
+    if (busy) return busy;
+    var rt = localStorage.getItem('sl_refresh_token');
+    if (!rt) return Promise.resolve(false);
+    busy = fetch(U + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': K }, body: JSON.stringify({ refresh_token: rt })
+    }).then(function (r) {
+      if (r.status === 400 || r.status === 401 || r.status === 403) { logoutExpired(); return false; }
+      if (!r.ok) return false;
+      return r.json().then(function (d) {
+        localStorage.setItem('sl_access_token', d.access_token);
+        if (d.refresh_token) localStorage.setItem('sl_refresh_token', d.refresh_token);
+        return true;
+      });
+    }).catch(function () { return false; }).then(function (v) { busy = null; return v; });
+    return busy;
+  }
+  window.slEnsureSession = function () {
+    var t = localStorage.getItem('sl_access_token');
+    if (!t) return Promise.resolve(false);
+    return exp(t) - Date.now() < 5 * 60 * 1000 ? refresh() : Promise.resolve(true);
+  };
+  window.slSessionReady = window.slEnsureSession();
+  setInterval(window.slEnsureSession, 4 * 60 * 1000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') window.slEnsureSession(); });
+})();
+</script>
+
 <meta http-equiv="Content-Security-Policy" content="default-src * blob: data:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; style-src * 'unsafe-inline'; connect-src *; img-src * blob: data:; worker-src * blob:; media-src * blob:;">
 <script>
 document.documentElement.style.visibility = 'hidden';
 window.__guardPassed = undefined;
 (async () => {
+  if (window.slSessionReady) await window.slSessionReady;
   const sl  = localStorage.getItem('sl_auth') === '1';
   const tok = localStorage.getItem('sl_access_token');
   function block(title, sub) {
@@ -494,7 +534,7 @@ window.__guardPassed = undefined;
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">commandes v3.0 · 10/10/2026 17:05</div>
+<div class="version-tag">commandes v3.1 · 11/10/2026 12:35</div>
 
 <script>
 const LS = 'pm_cmd_';

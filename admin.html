@@ -1,6 +1,45 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<script id="sl-session">
+// StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
+(function () {
+  var U = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+  var K = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+  var busy = null;
+  function exp(t) { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; } catch (e) { return 0; } }
+  function logoutExpired() {
+    ['sl_access_token', 'sl_refresh_token', 'sl_auth', 'sl_user'].forEach(function (k) { localStorage.removeItem(k); });
+    location.replace('login.html?expired=1');
+  }
+  function refresh() {
+    if (busy) return busy;
+    var rt = localStorage.getItem('sl_refresh_token');
+    if (!rt) return Promise.resolve(false);
+    busy = fetch(U + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': K }, body: JSON.stringify({ refresh_token: rt })
+    }).then(function (r) {
+      if (r.status === 400 || r.status === 401 || r.status === 403) { logoutExpired(); return false; }
+      if (!r.ok) return false;
+      return r.json().then(function (d) {
+        localStorage.setItem('sl_access_token', d.access_token);
+        if (d.refresh_token) localStorage.setItem('sl_refresh_token', d.refresh_token);
+        return true;
+      });
+    }).catch(function () { return false; }).then(function (v) { busy = null; return v; });
+    return busy;
+  }
+  window.slEnsureSession = function () {
+    var t = localStorage.getItem('sl_access_token');
+    if (!t) return Promise.resolve(false);
+    return exp(t) - Date.now() < 5 * 60 * 1000 ? refresh() : Promise.resolve(true);
+  };
+  window.slSessionReady = window.slEnsureSession();
+  setInterval(window.slEnsureSession, 4 * 60 * 1000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') window.slEnsureSession(); });
+})();
+</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StoreLine — Admin</title>
@@ -459,6 +498,11 @@
   .histo-row-tag { flex-shrink:0; font-size:12px; font-weight:600; padding:4px 10px; border-radius:999px; }
   .bottom-nav-inner { grid-template-columns:repeat(6, minmax(0,1fr)) !important; }
   .bnav-item { font-size:10.5px !important; }
+  .inv-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .inv-modules { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .inv-mod { display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:12px; background:var(--surface2); font-size:14px; cursor:pointer; }
+  .inv-mod input { width:18px; height:18px; accent-color:#e8a045; }
+  @media (max-width:480px) { .inv-grid { grid-template-columns:1fr; } }
   .adm-mtop { display:none; }
   /* Barre d'onglets mobile */
   .bottom-nav { background:color-mix(in srgb, var(--bg) 90%, transparent) !important; -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); border-top:.5px solid var(--border) !important; box-shadow:none !important; }
@@ -493,6 +537,7 @@
   const SB_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
   const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
 
+  if (window.slSessionReady) await window.slSessionReady;
   const token = localStorage.getItem('sl_access_token');
   if (!token) { window.location.replace('login.html?from=admin'); return; }
 
@@ -727,44 +772,31 @@
 <!-- Modal inviter utilisateur -->
 <div class="modal-overlay" id="modal-invite" onclick="if(event.target.id==='modal-invite')closeModal('modal-invite')">
   <div class="modal">
-    <div class="modal-title">＋ Ajouter un utilisateur</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:20px">L'invitation se fait en 3 étapes rapides.</div>
-
-    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
-      <div style="display:flex;gap:12px;padding:12px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
-        <div style="width:28px;height:28px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center;font-weight:700;color:#000;flex-shrink:0">1</div>
-        <div>
-          <div style="font-size:13px;font-weight:600;margin-bottom:4px">Inviter depuis Supabase</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Authentication → Users → Invite user → entre l'email</div>
-          <a href="https://supabase.com/dashboard/project/jeqptodorjzeyhapbmrz/auth/users" target="_blank"
-            style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:var(--amber);border-radius:8px;font-size:12px;font-weight:700;color:#000;text-decoration:none">
-            Ouvrir Supabase →
-          </a>
-        </div>
+    <div class="modal-title">Inviter un utilisateur</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.4">Il reçoit un e-mail pour choisir son mot de passe. Il pourra aussi se connecter avec Google ou Microsoft si l’adresse est la même.</div>
+    <label class="form-label">Adresse e-mail *</label>
+    <input id="inv-email" class="form-input" type="email" placeholder="prenom@magasin.be" autocomplete="off">
+    <label class="form-label">Nom</label>
+    <input id="inv-nom" class="form-input" type="text" placeholder="Prénom Nom">
+    <div class="inv-grid">
+      <div>
+        <label class="form-label">Rôle</label>
+        <select id="inv-role" class="form-input" onchange="renderInviteModules()">
+          <option value="employe">Employé</option>
+          <option value="manager">Manager</option>
+        </select>
       </div>
-
-      <div style="display:flex;gap:12px;padding:12px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
-        <div style="width:28px;height:28px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted);flex-shrink:0">2</div>
-        <div>
-          <div style="font-size:13px;font-weight:600;margin-bottom:4px">Il crée son mot de passe</div>
-          <div style="font-size:11px;color:var(--muted)">Il reçoit un email et clique le lien pour définir son mot de passe.</div>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:12px;padding:12px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
-        <div style="width:28px;height:28px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted);flex-shrink:0">3</div>
-        <div>
-          <div style="font-size:13px;font-weight:600;margin-bottom:4px">Configurer depuis ce dashboard</div>
-          <div style="font-size:11px;color:var(--muted)">Son profil apparaît dans la liste. Clique dessus pour assigner le rôle et activer les modules.</div>
-        </div>
+      <div id="inv-tenant-wrap" class="only-super">
+        <label class="form-label">Magasin</label>
+        <select id="inv-tenant" class="form-input"></select>
       </div>
     </div>
-
-    <div style="background:rgba(232,160,69,.08);border:1px solid rgba(232,160,69,.2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--amber2);margin-bottom:16px">
-      Après l'étape 1, reviens ici et clique sur "↻" pour rafraîchir la liste — le nouveau profil apparaîtra dès qu'il aura créé son mot de passe.
+    <label class="form-label">Modules</label>
+    <div id="inv-modules" class="inv-modules"></div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn btn-ghost" onclick="closeModal('modal-invite')" style="flex:1">Annuler</button>
+      <button class="btn btn-primary" id="inv-btn" onclick="sendInvite()" style="flex:1">Envoyer l’invitation</button>
     </div>
-
-    <button class="btn btn-ghost" onclick="closeModal('modal-invite')" style="width:100%">Fermer</button>
   </div>
 </div>
 
@@ -831,16 +863,22 @@
         style="width:44px;height:44px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;padding:2px"
         oninput="document.getElementById('ten-accent').value=this.value">
     </div>
+    <div style="font-size:13px;font-weight:700;margin:16px 0 8px">Premier administrateur du magasin</div>
+    <label class="form-label">E-mail</label>
+    <input id="ten-admin-email" class="form-input" type="email" placeholder="gerant@magasin.be" autocomplete="off">
+    <label class="form-label">Nom</label>
+    <input id="ten-admin-nom" class="form-input" type="text" placeholder="Prénom Nom">
+    <div style="font-size:12px;color:var(--muted);margin:-2px 0 14px;line-height:1.4">Le magasin est créé avec des rayons et zones de température par défaut, modifiables ensuite. L’administrateur reçoit son invitation par e-mail.</div>
     <div style="display:flex;gap:10px">
       <button class="btn btn-ghost" onclick="closeModal('modal-tenant')" style="flex:1">Annuler</button>
-      <button class="btn btn-primary" onclick="createTenant()" style="flex:1">Créer le client</button>
+      <button class="btn btn-primary" id="ten-btn" onclick="createTenant()" style="flex:1">Créer le magasin</button>
     </div>
   </div>
 </div>
 
 <div class="toast-container" id="toast-container"></div>
 <div class="version-tag" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:80;letter-spacing:1px;opacity:.4">
-  admin v2.2 · 10/10/2026 17:05
+  admin v2.3 · 11/10/2026 12:35
 </div>
 
 <script>
@@ -1293,6 +1331,7 @@ function renderUsers() {
           <button class="btn btn-green" onclick="setAllModules('${u.id}',true)">✓ Tout activer</button>
           <button class="btn btn-ghost" onclick="setAllModules('${u.id}',false)">○ Tout désactiver</button>
           <button class="btn btn-ghost" onclick="openUserHisto('${u.id}')">Historique DLC</button>
+          <button class="btn btn-ghost" onclick="sendAccess('${u.id}')">Renvoyer un lien d’accès</button>
         </div>
       </div>` : ''}
     </div>`;
@@ -1364,13 +1403,11 @@ async function changeTenant(userId, tenantId) {
 
 async function activateUser(userId, active) {
   try {
-    const result = await sbUpdate('profiles', `?id=eq.${userId}`, { actif: active });
-    const error = result?.error || null;
-    if (error) throw error;
+    await adminFn('set_active', { user_id: userId, actif: active });
     const u = allUsers.find(u => u.id === userId);
     if (u) u.actif = active;
     renderUsers();
-    toast(active ? '✓ Utilisateur activé' : '⏸ Utilisateur désactivé');
+    toast(active ? '✓ Utilisateur réactivé' : '⏸ Utilisateur désactivé — il ne peut plus se connecter');
   } catch(e) {
     toast('⚠ ' + e.message, true);
   }
@@ -1393,8 +1430,77 @@ async function setAllModules(userId, active) {
 
 
 // ── Inviter un utilisateur — guide vers Supabase ──
-function openInviteModal() {
+// ── Fonction serveur admin-users ──
+function pageUrl(name) { return location.origin + location.pathname.replace(/[^/]*$/, '') + name; }
+async function adminFn(action, payload = {}) {
+  if (window.slEnsureSession) await window.slEnsureSession();
+  let r;
+  try {
+    r = await fetch(`${SUPABASE_URL}/functions/v1/admin-users`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${localStorage.getItem('sl_access_token')}` },
+      body: JSON.stringify({ action, redirect_to: pageUrl('set-password.html'), ...payload }),
+    });
+  } catch(e) { throw new Error('Serveur injoignable'); }
+  if (r.status === 404) throw new Error('Fonction serveur non déployée (admin-users)');
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.ok) throw new Error(d.error || `Erreur ${r.status}`);
+  return d;
+}
+
+// ── Inviter un utilisateur ──
+async function openInviteModal() {
+  const isSuper = ME.role === 'superadmin';
+  document.querySelectorAll('#modal-invite .only-super').forEach(el => { el.style.display = isSuper ? '' : 'none'; });
+  document.getElementById('inv-email').value = '';
+  document.getElementById('inv-nom').value = '';
+  document.getElementById('inv-role').innerHTML = '<option value="employe">Employé</option><option value="manager">Manager</option>' + (isSuper ? '<option value="admin">Admin du magasin</option>' : '');
+  document.getElementById('inv-role').value = 'employe';
+  if (isSuper) {
+    await ensureTenantsLoaded();
+    document.getElementById('inv-tenant').innerHTML = allTenants.map(t =>
+      `<option value="${t.id}" ${t.id === ME.tenant_id ? 'selected' : ''}>${escapeHtml(t.nom)}</option>`).join('');
+  }
+  renderInviteModules();
   document.getElementById('modal-invite').style.display = 'flex';
+  setTimeout(() => document.getElementById('inv-email').focus(), 100);
+}
+
+function renderInviteModules() {
+  const role = document.getElementById('inv-role').value;
+  const all = role === 'admin';
+  document.getElementById('inv-modules').innerHTML = all
+    ? '<div style="font-size:13px;color:var(--muted)">Un admin a accès à tous les modules.</div>'
+    : MODULES.map(m => `<label class="inv-mod"><input type="checkbox" value="${m.id}" ${['dlc'].includes(m.id) ? 'checked' : ''}><span>${m.label}</span></label>`).join('');
+}
+
+async function sendInvite() {
+  const email = document.getElementById('inv-email').value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('⚠ Adresse e-mail invalide', true); return; }
+  const btn = document.getElementById('inv-btn');
+  btn.disabled = true; btn.textContent = 'Envoi…';
+  try {
+    await adminFn('invite', {
+      email,
+      nom: document.getElementById('inv-nom').value.trim(),
+      role: document.getElementById('inv-role').value,
+      tenant_id: ME.role === 'superadmin' ? document.getElementById('inv-tenant').value : undefined,
+      modules: [...document.querySelectorAll('#inv-modules input:checked')].map(i => i.value),
+    });
+    closeModal('modal-invite');
+    toast(`✓ Invitation envoyée à ${email}`);
+    loadUsers();
+  } catch(e) { toast('⚠ ' + e.message, true); }
+  finally { btn.disabled = false; btn.textContent = 'Envoyer l’invitation'; }
+}
+
+async function sendAccess(userId) {
+  const u = allUsers.find(x => x.id === userId);
+  if (!confirm(`Envoyer un lien d’accès à ${u ? u.email : 'cet utilisateur'} ?`)) return;
+  try {
+    const d = await adminFn('send_access', { user_id: userId });
+    toast(d.sent === 'invite' ? '✓ Invitation renvoyée' : '✓ Lien de nouveau mot de passe envoyé');
+  } catch(e) { toast('⚠ ' + e.message, true); }
 }
 
 // ── Modules overview ──
@@ -1432,6 +1538,8 @@ function openNewTenantModal() {
   document.getElementById('ten-slug').value = '';
   document.getElementById('ten-accent').value = '#e8a045';
   document.getElementById('ten-accent-picker').value = '#e8a045';
+  document.getElementById('ten-admin-email').value = '';
+  document.getElementById('ten-admin-nom').value = '';
   document.getElementById('modal-tenant').style.display = 'flex';
 }
 
@@ -1448,24 +1556,20 @@ async function createTenant() {
   const nom    = document.getElementById('ten-nom').value.trim();
   const slug   = document.getElementById('ten-slug').value.trim();
   const accent = document.getElementById('ten-accent').value.trim() || '#e8a045';
-  if (!nom || !slug) { toast('⚠ Nom et slug obligatoires', true); return; }
-
+  const adminEmail = document.getElementById('ten-admin-email').value.trim();
+  if (!nom || !slug) { toast('⚠ Nom et identifiant obligatoires', true); return; }
+  if (adminEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) { toast('⚠ E-mail de l’administrateur invalide', true); return; }
+  const btn = document.getElementById('ten-btn');
+  btn.disabled = true; btn.textContent = 'Création…';
   try {
-    const insertResult = await sbInsert('tenants', {
-      nom, slug,
-      theme_accent:  accent,
-      theme_bg:      '#0f0f0d',
-      theme_surface: '#1a1a16',
-      theme_text:    '#f0ede4',
-      actif: true,
-    });
-    if (!insertResult || insertResult.error) throw new Error(insertResult?.error?.message || 'Erreur');
-    toast(`✓ Client "${nom}" créé`);
+    await adminFn('create_tenant', { nom, slug, accent, admin_email: adminEmail || undefined, admin_nom: document.getElementById('ten-admin-nom').value.trim() });
+    toast(adminEmail ? `✓ Magasin "${nom}" créé — invitation envoyée à ${adminEmail}` : `✓ Magasin "${nom}" créé`);
     closeModal('modal-tenant');
+    allTenants = [];
     loadTenants();
   } catch(e) {
     toast('⚠ ' + e.message, true);
-  }
+  } finally { btn.disabled = false; btn.textContent = 'Créer le magasin'; }
 }
 
 async function loadTenants() {
@@ -1546,7 +1650,7 @@ async function copyTenantSlug(slug) {
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 // ── Init ──
-loadDashboard();
+(window.slSessionReady || Promise.resolve()).then(() => loadDashboard());
 
 // ══════════════════════════════════════════════════════════════
 // BLOCS DLC
