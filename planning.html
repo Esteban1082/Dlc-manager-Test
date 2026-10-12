@@ -291,6 +291,42 @@ window.__guardPassed = undefined;
     .main { padding-top:14px; }
     .types { grid-template-columns:repeat(2, 1fr); }
   }
+
+  /* Téléphone en paysage : grille compacte, toute l'équipe tient à l'écran */
+  @media (orientation:landscape) and (max-height:560px) {
+    header.sl-head { position:static; padding:calc(env(safe-area-inset-top) + 6px) 0 6px; }
+    .sl-head-top { min-height:30px; }
+    .sl-title { display:none; }
+    .main { padding-top:8px; padding-left:max(16px, env(safe-area-inset-left)); padding-right:max(16px, env(safe-area-inset-right)); }
+    .seg { margin-bottom:8px; }
+    .seg-btn { height:28px; }
+    .status:empty { display:none; }
+    .weeknav { margin-bottom:6px; gap:8px; scroll-margin-top:4px; }
+    .weeknav .nav-btn { width:32px; height:32px; }
+    .wk-title { font-size:16px; display:inline; }
+    .wk-sub { display:inline-flex; margin:0 0 0 8px; }
+    .wk-sub > span:first-child { display:none; }
+    .grid th { padding:4px 3px; font-size:10px; }
+    .grid th .num { display:inline; font-size:13px; margin-left:3px; }
+    .grid td { padding:2px 3px; }
+    .grid td.name, .grid th.name-h { width:96px; padding-left:8px; }
+    .grid .nn { display:none; }
+    .grid .pn { font-size:12px; }
+    .grid .chip { min-height:0; padding:3px 6px; border-radius:6px; flex-direction:row; align-items:center; }
+    .grid .chip b { font-size:11.5px; white-space:nowrap; letter-spacing:-.2px; }
+    .grid .chip.special:has(b) span { display:none !important; }
+    .grid .chip span { display:none; }
+    .grid .chip.special span { display:block; font-size:10.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .grid .chip.off, .grid .chip.undef { font-size:11px; padding:3px 6px; }
+    .grid .count-row td { padding:2px; font-size:10px; }
+    .wk-foot { padding:8px; }
+  }
+  @media (orientation:landscape) and (max-height:560px) and (max-width:720px) {
+    .grid td.name, .grid th.name-h { width:78px; padding-left:6px; }
+    .grid td { padding:2px; }
+    .grid .chip { padding:3px 4px; border-left-width:2px; }
+    .grid .chip b { font-size:10.5px; letter-spacing:-.3px; }
+  }
   @media print {
     header, .seg, .weeknav .nav-btn, .wk-foot, .toast-c, .status, .version-tag, .ov { display:none !important; }
     body, html { background:#fff; color:#000; }
@@ -320,7 +356,6 @@ window.__guardPassed = undefined;
     <button class="seg-btn" id="tab-today" type="button" onclick="setView('today')">Aujourd’hui</button>
     <button class="seg-btn" id="tab-week" type="button" onclick="setView('week')">Semaine</button>
     <button class="seg-btn" id="tab-emp" type="button" onclick="setView('emp')">Par personne</button>
-    <button class="seg-btn" id="tab-stats" type="button" onclick="setView('stats')">Heures</button>
     <button class="seg-btn mgr-only" id="tab-prep" type="button" onclick="setView('prep')">À préparer</button>
   </div>
   <div class="status" id="status" role="status"></div>
@@ -429,7 +464,7 @@ window.__guardPassed = undefined;
 </div>
 
 <div class="toast-c" id="toasts" aria-live="polite"></div>
-<div class="version-tag">planning v1.0 · 12/10/2026 12:45</div>
+<div class="version-tag">planning v1.1 · 12/10/2026 13:40</div>
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
@@ -521,9 +556,6 @@ function family(s) {
   const st = mins(s.debut);
   return st === null ? '' : (st < 12 * 60 ? 'ouv' : 'ferm');
 }
-// Amplitude ≥ 9 h : 1 h de pause repas non payée
-function hours(s) { if (!isWorking(s)) return 0; let h = (mins(s.fin) - mins(s.debut)) / 60; if (h < 0) h += 24; return h >= 9 ? h - 1 : h; }
-function fmtH(h) { const H = Math.floor(h), M = Math.round((h - H) * 60); return M ? `${H} h ${String(M).padStart(2, '0')}` : `${H} h`; }
 
 function chip(s) {
   if (!s) return '<div class="chip undef">À définir</div>';
@@ -584,13 +616,12 @@ async function loadAll() {
 // ── Vues ──
 function setView(v) {
   view = v;
-  ['today', 'week', 'emp', 'stats', 'prep'].forEach(k => document.getElementById('tab-' + k).classList.toggle('active', k === v));
+  ['today', 'week', 'emp', 'prep'].forEach(k => document.getElementById('tab-' + k).classList.toggle('active', k === v));
   render();
 }
 function render() {
   if (view === 'week') renderWeek();
   else if (view === 'emp') renderEmp();
-  else if (view === 'stats') renderStats();
   else if (view === 'prep') renderPrep();
   else renderToday();
 }
@@ -618,7 +649,7 @@ function moveWeek(dir) {
   const next = dir > 0 ? list.find(m => m > weekMon) : [...list].reverse().find(m => m < weekMon);
   if (next) { weekMon = next; render(); }
 }
-function goWeek(mon) { weekMon = mon; if (view !== 'week' && view !== 'stats') view = 'week'; setView(view); }
+function goWeek(mon) { weekMon = mon; setView('week'); }
 
 function renderWeek() {
   const el = document.getElementById('view');
@@ -649,6 +680,10 @@ function renderWeek() {
       <button class="pill" type="button" onclick="openEmp()">Ajouter une personne</button>
     </div>` : '';
   el.innerHTML = weekNavHTML() + `<div class="card">${grid}${cards}${foot}</div>`;
+  if (matchMedia('(orientation:landscape) and (max-height:560px)').matches) {
+    const nav = el.querySelector('.weeknav');
+    if (nav) requestAnimationFrame(() => nav.scrollIntoView({ block: 'start' }));
+  }
   if (weekMon === mondayOf(today) && window.innerWidth < 760) {
     const t = document.getElementById('day-' + today);
     if (t && !renderWeek._scrolled) { renderWeek._scrolled = true; setTimeout(() => t.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60); }
@@ -672,7 +707,7 @@ function renderToday() {
   html += `<div class="card"><div class="list-h"><div><div class="big-date">${esc(fmtDay(today, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, c => c.toUpperCase()))}</div>
       <div class="sub">${working.length} en poste${undef && isMgr ? ` · ${undef} à définir` : ''}</div></div>
       <button class="pill" type="button" onclick="goWeek('${mon}')">Semaine</button></div>
-    ${working.length ? working.map(x => `<div class="li ${isMgr ? 'click' : ''}" ${isMgr ? `onclick="openEdit('${x.e.id}','${today}')"` : ''}><div><div class="t1">${esc(empName(x.e))}</div><div class="t2">${fmtH(hours(x.s))}</div></div>${chip(x.s)}</div>`).join('')
+    ${working.length ? working.map(x => `<div class="li ${isMgr ? 'click' : ''}" ${isMgr ? `onclick="openEdit('${x.e.id}','${today}')"` : ''}><div><div class="t1">${esc(empName(x.e))}</div></div>${chip(x.s)}</div>`).join('')
       : `<div class="empty" style="padding:28px 20px">${people.length ? 'Personne en poste aujourd’hui.' : 'Le planning n’a pas encore été rempli.'}</div>`}
   </div>`;
   if (absent.length) {
@@ -697,8 +732,7 @@ function renderEmp() {
     ${isMgr ? `<div class="actions"><button class="pill" type="button" onclick="openEmp('${e.id}')">Modifier</button>${e.actif ? `<button class="pill" type="button" style="color:var(--red)" onclick="removeEmp('${e.id}')">Retirer</button>` : `<button class="pill" type="button" onclick="reactivateEmp('${e.id}')">Réintégrer</button>`}</div>` : ''}</div></div>`;
   html += mons.map(m => {
     const days = weekDays(m);
-    const h = days.reduce((a, d) => a + hours(shiftOf(e.id, d)), 0);
-    return `<div class="card"><div class="list-h"><div><h2 style="font-size:17px">${esc(weekTitle(m))}</h2><div class="sub">${esc(weekRange(m))} · ${fmtH(h)}</div></div></div>
+    return `<div class="card"><div class="list-h"><div><h2 style="font-size:17px">${esc(weekTitle(m))}</h2><div class="sub">${esc(weekRange(m))}</div></div></div>
       ${days.map(d => `<div class="li ${d === today ? 'today-hl' : d < today ? 'past' : ''} ${isMgr ? 'click' : ''}" data-date="${d}" ${isMgr ? `onclick="openEdit('${e.id}','${d}')"` : ''}><div><div class="t1">${esc(fmtDay(d, { weekday: 'long', day: 'numeric', month: 'short' }).replace(/^./, c => c.toUpperCase()))}</div></div>${chip(shiftOf(e.id, d))}</div>`).join('')}</div>`;
   }).join('') || `<div class="card"><div class="empty">Aucun horaire pour l’instant.</div></div>`;
   el.innerHTML = html;
@@ -706,18 +740,6 @@ function renderEmp() {
   if (target) setTimeout(() => target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
 }
 
-function renderStats() {
-  const el = document.getElementById('view');
-  if (!weekVisible(weekMon)) { el.innerHTML = weekNavHTML() + `<div class="card"><div class="empty"><div class="et">Pas encore publiée</div></div></div>`; return; }
-  const days = weekDays(weekMon), people = roster(weekMon);
-  const rows = people.map(e => {
-    const ss = days.map(d => shiftOf(e.id, d));
-    return { e, h: ss.reduce((a, s) => a + hours(s), 0), o: ss.filter(s => isWorking(s) && family(s) === 'ouv').length, f: ss.filter(s => isWorking(s) && family(s) === 'ferm').length, n: ss.filter(isWorking).length };
-  });
-  const tot = rows.reduce((a, r) => a + r.h, 0);
-  el.innerHTML = weekNavHTML() + `<div class="card"><div class="list-h"><div><h2>Heures de la semaine</h2><div class="sub">${fmtH(tot)} au total · 1 h de pause retirée dès 9 h d’amplitude</div></div></div>
-    <div class="stats">${rows.map(r => `<div class="stat"><div class="pn">${esc(empName(r.e))}</div><div class="v">${fmtH(r.h)}</div><div class="m">${r.n} jour${r.n > 1 ? 's' : ''} · ${r.o} ouv. · ${r.f} ferm.</div></div>`).join('') || '<div class="m">Aucune donnée.</div>'}</div></div>`;
-}
 
 function prepItems() {
   const today = todayISO(), cur = mondayOf(today);
