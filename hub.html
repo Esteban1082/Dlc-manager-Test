@@ -1,7 +1,38 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<meta charset="UTF-8">
 <script>try{if(!(localStorage.getItem('sl_auth')==='1'&&localStorage.getItem('sl_access_token')))location.replace('login.html');}catch(e){}</script>
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
 <script id="sl-session">
 // StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
 (function () {
@@ -42,7 +73,6 @@
 </script>
 
 <meta http-equiv="Content-Security-Policy" content="default-src * blob: data:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; style-src * 'unsafe-inline'; connect-src *; img-src * blob: data:; worker-src * blob:; media-src * blob:;">
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>StoreLine – Accueil</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&display=swap" rel="stylesheet">
@@ -189,6 +219,7 @@
 
   <div class="section">AUTRES OUTILS</div>
   <div class="group">
+      <a class="tile tool-row locked" href="planning.html"><span class="tool-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4M8 14h3M8 17.5h6"/></svg></span><span class="tool-name">Planning</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
       <a class="tile tool-row locked" href="pertes.html"><span class="tool-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l6 6 4-4 8 8"/><path d="M15 17h6v-6"/></svg></span><span class="tool-name">Pertes</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
       <a class="tile tool-row locked" href="produits.html"><span class="tool-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span><span class="tool-name">Base produits</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
       <a class="tile tool-row locked" href="temperatures.html"><span class="tool-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 14.8V4a2 2 0 1 0-4 0v10.8a4 4 0 1 0 4 0Z"/></svg></span><span class="tool-name">Températures</span><span class="chev"><svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"></path></svg></span></a>
@@ -202,7 +233,7 @@
   </div>
   </div>
 
-  <div class="version-tag">hub v2.4 · 11/10/2026 12:35</div>
+  <div class="version-tag">hub v2.5 · 12/10/2026 12:45</div>
 </div>
 
 <script>
@@ -336,15 +367,48 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('hello').textContent = first ? 'Bonjour ' + first : 'Bonjour';
       document.getElementById('avatar').textContent = (first.charAt(0) || 'S');
     }
-    loadDlcCounts(slToken, slUser).catch(e => console.warn('Compteurs DLC:', e));
+    const access = await applyModuleAccess(slToken, slUser).catch(e => { console.warn('Modules:', e); return null; });
+    if (!access || access.has('dlc')) loadDlcCounts(slToken, slUser).catch(e => console.warn('Compteurs DLC:', e));
   }
 });
 
 
+// ── Modules visibles : seulement ceux auxquels la personne a accès ──
+const HUB_MODULES = { 'dlc.html':'dlc', 'pertes.html':'pertes', 'produits.html':'produits', 'temperatures.html':'temperatures', 'allergenes.html':'allergenes', 'transferts.html':'transferts', 'commandes.html':'commandes', 'documents.html':'documents', 'donnees.html':'donnees', 'planning.html':'planning' };
+async function applyModuleAccess(token, user) {
+  if (!user || !user.id) return null;
+  const [perms, prof] = await Promise.all([
+    ['superadmin','admin'].includes(user.role) ? Promise.resolve(null)
+      : hubGet('/rest/v1/permissions?user_id=eq.' + encodeURIComponent(user.id) + '&actif=eq.true&select=module', token),
+    hubGet('/rest/v1/profiles?id=eq.' + encodeURIComponent(user.id) + '&select=nom', token).catch(() => []),
+  ]);
+  // Prénom depuis le profil (plus juste que l'adresse e-mail)
+  const nom = prof && prof[0] && String(prof[0].nom || '').trim();
+  if (nom) {
+    const first = nom.split(/\s+/)[0];
+    document.getElementById('hello').textContent = 'Bonjour ' + first;
+    document.getElementById('avatar').textContent = first.charAt(0).toUpperCase();
+  }
+  if (!perms) return null; // admin : tout est visible
+  const allowed = new Set((perms || []).map(p => p.module));
+  document.querySelectorAll('a.tile[href]').forEach(a => {
+    const mod = HUB_MODULES[a.getAttribute('href')];
+    if (mod && !allowed.has(mod)) a.style.display = 'none';
+  });
+  const tools = [...document.querySelectorAll('.hub-side a.tile')].filter(a => a.style.display !== 'none');
+  const side = document.querySelector('.hub-side');
+  if (side && !tools.length) side.style.display = 'none';
+  if (!allowed.size) {
+    const main = document.querySelector('.hub-main');
+    if (main) main.innerHTML = '<div class="tile" style="text-align:center;padding:28px 20px"><div style="font-family:Fraunces,Georgia,serif;font-size:20px;font-weight:700;margin-bottom:6px">Aucun module activé</div><div style="color:var(--muted);font-size:14px">Demande l’accès à ton responsable.</div></div>';
+  }
+  return allowed;
+}
+
 // ── Compteurs DLC (filtrés sur les blocs de l'utilisateur) ──
-function hubNorm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
+function hubNorm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim(); }
 async function hubGet(path, token) {
-  const r = await fetch(SUPABASE_URL + path, { headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + token } });
+  const r = await slFetch(SUPABASE_URL + path, { headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + token } });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }

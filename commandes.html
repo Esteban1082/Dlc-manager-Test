@@ -1,6 +1,37 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<meta charset="UTF-8">
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
 <script id="sl-session">
 // StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
 (function () {
@@ -74,7 +105,6 @@ window.__guardPassed = undefined;
   }
 })();
 </script>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Commandes — StoreLine</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
@@ -204,9 +234,9 @@ window.__guardPassed = undefined;
 
   /* Print */
   @media print {
-    body * { visibility:hidden; }
-    #print-zone, #print-zone * { visibility:visible; }
-    #print-zone { position:fixed;inset:0;background:#fff;color:#000;padding:20px;font-family:'Courier New',monospace;font-size:11px; }
+    body > *:not(#print-zone) { display:none !important; }
+    body { background:#fff !important; }
+    #print-zone { display:block !important; position:static; background:#fff; color:#000; padding:0; font-family:'Courier New',monospace; font-size:11px; }
     .no-print { display:none!important; }
   }
 
@@ -430,8 +460,9 @@ window.__guardPassed = undefined;
           <textarea id="note-commande" class="note-input" placeholder="Informations complémentaires..."></textarea>
         </div>
         <div class="actions-bar">
-          <button class="btn btn-green" onclick="genererPDF()">Générer PDF</button>
-          <button class="btn btn-primary" onclick="ouvrirApercu()">Aperçu</button>
+          <button class="btn btn-green" onclick="envoyerEmail()">Envoyer par e-mail</button>
+          <button class="btn btn-primary" onclick="genererPDF()">Imprimer / PDF</button>
+          <button class="btn btn-ghost" onclick="ouvrirApercu()">Aperçu</button>
           <button class="btn btn-ghost" onclick="resetCommande()">Vider</button>
         </div>
       </div>
@@ -528,13 +559,14 @@ window.__guardPassed = undefined;
     <div id="apercu-content" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:11px;line-height:1.8;white-space:pre-wrap;max-height:55vh;overflow-y:auto;margin-bottom:14px;font-family:'Courier New',monospace"></div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost" onclick="closeModal('modal-apercu')" style="flex:1">Fermer</button>
-      <button class="btn btn-green" onclick="genererPDF()" style="flex:1">Imprimer / PDF</button>
+      <button class="btn btn-green" onclick="envoyerEmail()" style="flex:1">E-mail</button>
+      <button class="btn btn-primary" onclick="genererPDF()" style="flex:1">Imprimer / PDF</button>
     </div>
   </div>
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">commandes v3.1 · 11/10/2026 12:35</div>
+<div class="version-tag">commandes v3.2 · 12/10/2026 12:45</div>
 
 <script>
 const LS = 'pm_cmd_';
@@ -621,7 +653,7 @@ async function ensureSupabaseUserReady() {
 
 async function sbFetch(path, options={}) {
   const token = localStorage.getItem('sl_access_token');
-  const r = await fetch(SUPABASE_URL + path, {
+  const r = await slFetch(SUPABASE_URL + path, {
     ...options,
     headers: {
       'apikey': SUPABASE_ANON,
@@ -634,7 +666,7 @@ async function sbFetch(path, options={}) {
   const text = await r.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
-  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  if (!r.ok) throw new Error(slErrMsg(r.status, data));
   return data;
 }
 
@@ -644,7 +676,7 @@ let rtm          = {nom:'Mon commerce',adresse:'',tel:'',email:''};
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function tenantId(){ return (getStoredUser()||{}).tenant_id || null; }
 function rowToFourn(r){ return { id:r.id, nom:r.nom||'', emails:r.emails||[], tel:r.tel||'', jours:(r.jours&&r.jours.length)?r.jours:JOURS, produits:Array.isArray(r.produits)?r.produits:[], ordre:r.ordre||0 }; }
-function rowToCmd(r){ return { id:r.id, fournId:r.fournisseur_id, fourn:r.fourn_nom||'', fourIdx:r.four_idx, date:r.created_at||new Date().toISOString(), note:r.note||'', qtes:r.qtes||{}, produits:Array.isArray(r.produits)?r.produits:[] }; }
+function rowToCmd(r){ return { id:r.id, fournId:r.fournisseur_id, fourn:r.fourn_nom||'', fourIdx:r.four_idx, date:r.created_at||new Date().toISOString(), note:r.note||'', qtes:r.qtes||{}, produits:Array.isArray(r.produits)?r.produits:[], envoi:(r.qtes&&r.qtes.__envoi)||'' }; }
 let fournActuel  = null;
 let jourActuel   = '';
 let qtes         = {}; // {key: {jour: qty}}
@@ -688,7 +720,7 @@ async function loadAll(){
     if(par && par[0]) rtm = { nom:par[0].nom||'Mon commerce', adresse:par[0].adresse||'', tel:par[0].tel||'', email:par[0].email||'' };
     fournisseurs = (fo||[]).map(rowToFourn);
     historique   = (hi||[]).map(rowToCmd);
-  }catch(e){ toast('⚠ Chargement impossible : '+e.message, true); }
+  }catch(e){ toast('Chargement impossible : '+e.message, true); }
   updateImportBanner();
 }
 
@@ -716,9 +748,9 @@ async function importLocal(){
       const idOf = i => (created && created[i] && created[i].id) || null;
       await sbFetch('/rest/v1/cmd_commandes',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify(L.historique.map(c=>({tenant_id:t,fournisseur_id:idOf(c.fourIdx),fourn_nom:c.fourn||'',four_idx:c.fourIdx,note:c.note||'',qtes:c.qtes||{},produits:c.produits||[],created_at:c.date||new Date().toISOString()})))});
     }
-    toast(`✓ Importé : ${L.fournisseurs.length} fournisseur(s), ${L.historique.length} commande(s)`);
+    toast(`Importé : ${L.fournisseurs.length} fournisseur(s), ${L.historique.length} commande(s)`);
     await loadAll(); buildFournSelect(); remplirRTMFields(); renderHistorique();
-  }catch(e){ toast('⚠ Import impossible : '+e.message,true); }
+  }catch(e){ toast('Import impossible : '+e.message,true); }
   finally{ btn.disabled=false; btn.textContent='Importer'; }
 }
 
@@ -741,8 +773,8 @@ async function saveRTM(){
     await sbFetch('/rest/v1/cmd_parametres',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({tenant_id:tenantId(),...next,updated_at:new Date().toISOString()})});
     rtm = next;
     remplirRTMFields();
-    toast('✓ Infos sauvegardées');
-  }catch(e){ toast('⚠ '+e.message,true); }
+    toast('Infos sauvegardées');
+  }catch(e){ toast(''+e.message,true); }
 }
 
 // ── Fournisseurs ──
@@ -769,7 +801,7 @@ function nouvelleCommande(){
   const emails=(fournActuel.emails||[fournActuel.email||'']).filter(Boolean).join(', ');
   const tel=fournActuel.tel||'';
   document.getElementById('fourn-contact').innerHTML=
-    (emails?`📧 ${emails}`:'')+(emails&&tel?'<br>':'')+(tel?`📞 ${tel}`:'');
+    (emails?esc(emails):'')+(emails&&tel?'<br>':'')+(tel?esc(tel):'');
   document.getElementById('rtm-mini').textContent=rtm.nom+(rtm.tel?' · '+rtm.tel:'');
   document.getElementById('commande-wrap').style.display='block';
   buildDateBar();
@@ -779,7 +811,7 @@ function nouvelleCommande(){
 function buildDateBar(){
   const jours=fournActuel.jours||JOURS;
   document.getElementById('date-bar').innerHTML=jours.map(j=>
-    `<button class="day-btn" onclick="selectJour('${j}')">${j}</button>`
+    `<button class="day-btn" onclick="selectJour('${esc(j)}')">${esc(j)}</button>`
   ).join('');
   selectJour(jours[0]);
 }
@@ -801,23 +833,23 @@ function renderProduitsForm(){
   if(!fournActuel||!sec) return;
   const produits=fournActuel.produits||[];
   if(!produits.length){
-    sec.innerHTML='<div class="empty">📦 Aucun produit.<br><small>Ajoute des produits via ⚙ → Fournisseurs → Produits</small></div>';
+    sec.innerHTML='<div class="empty">Aucun produit.<br><small>Ajoute des produits via Réglages → Fournisseurs → Produits</small></div>';
     return;
   }
   const cats={};
   produits.forEach((p,i)=>{const c=p.categorie||'Produits';if(!cats[c])cats[c]=[];cats[c].push({...p,idx:i});});
   sec.innerHTML=Object.entries(cats).map(([cat,prods])=>`
-    <div class="categorie-title">${cat}</div>
+    <div class="categorie-title">${esc(cat)}</div>
     ${prods.map(p=>{
       const key=`${fournActuel.idx}_${p.idx}`;
       const qty=(qtes[key]||{})[jourActuel]||0;
       return `<div class="produit-row">
-        <div class="produit-nom">${p.nom}</div>
+        <div class="produit-nom">${esc(p.nom)}</div>
         <div class="qty-btns">
           <button class="qty-btn" onclick="adj('${key}',-1)">−</button>
           <button class="qty-btn" onclick="adj('${key}',1)">＋</button>
         </div>
-        <input class="qty-input" type="number" min="0" value="${qty||''}" placeholder="0"
+        <input class="qty-input" type="number" inputmode="numeric" min="0" value="${qty||''}" placeholder="0"
           id="qty_${key}" oninput="setQ('${key}',this.value)" onclick="this.select()">
       </div>`;
     }).join('')}`).join('');
@@ -895,9 +927,9 @@ function ouvrirApercu(){
 }
 
 // ── PDF via print ──
-function genererPDF(){
+function genererPDF(reprint){
   const txt=buildCommandeText();
-  if(!txt.includes('COMMANDE')) { toast('⚠ Aucune quantité saisie',true); return; }
+  if(!hasQuantites()) { toast('Aucune quantité saisie',true); return; }
 
   const printZone=document.getElementById('print-zone');
   const today=new Date().toLocaleDateString('fr-BE',{day:'numeric',month:'long',year:'numeric'});
@@ -922,23 +954,23 @@ function genererPDF(){
     </style>
     <div class="print-header">
       <div class="print-fourn-block">
-        <strong>COMMANDE AU FOURNISSEUR : ${fournActuel.nom.toUpperCase()}</strong>
-        ${emails?`📧 ${emails}<br>`:''}${fournActuel.tel?`📞 ${fournActuel.tel}`:''}
+        <strong>COMMANDE AU FOURNISSEUR : ${esc(fournActuel.nom.toUpperCase())}</strong>
+        ${emails?`${esc(emails)}<br>`:''}${fournActuel.tel?esc(fournActuel.tel):''}
       </div>
       <div style="text-align:right;font-size:9pt">
-        <strong>${rtm.nom}</strong><br>
-        ${rtm.adresse||''}<br>
-        ${rtm.tel||''}<br>
+        <strong>${esc(rtm.nom)}</strong><br>
+        ${esc(rtm.adresse||'')}<br>
+        ${esc(rtm.tel||'')}<br>
         Date : <strong>${today}</strong>
       </div>
     </div>
     ${buildHTMLTable()}
-    ${document.getElementById('note-commande').value.trim()?`<div class="print-note">📝 Note : ${document.getElementById('note-commande').value.trim()}</div>`:''}
-    <div class="print-footer">${rtm.nom} · Généré par StoreLine</div>
+    ${document.getElementById('note-commande').value.trim()?`<div class="print-note">Note : ${esc(document.getElementById('note-commande').value.trim())}</div>`:''}
+    <div class="print-footer">${esc(rtm.nom)} · Généré par StoreLine</div>
   `;
 
   // Sauvegarder dans l'historique
-  sauvegarderHistorique();
+  if(!reprint) sauvegarderHistorique('print');
   closeModal('modal-apercu');
 
   setTimeout(()=>{
@@ -958,15 +990,15 @@ function buildHTMLTable(){
   produits.forEach((p,i)=>{const c=p.categorie||'Produits';if(!cats[c])cats[c]=[];cats[c].push({...p,idx:i});});
 
   let html=`<table class="print-table">
-    <thead><tr><th style="width:55%">DÉSIGNATION</th>${joursActifs.map(j=>`<th>${j}</th>`).join('')}</tr></thead>
+    <thead><tr><th style="width:55%">DÉSIGNATION</th>${joursActifs.map(j=>`<th>${esc(j)}</th>`).join('')}</tr></thead>
     <tbody>`;
 
   Object.entries(cats).forEach(([cat,prods])=>{
     const lignes=prods.filter(p=>joursActifs.some(j=>(qtes[`${fournActuel.idx}_${p.idx}`]||{})[j]>0));
     if(!lignes.length) return;
-    html+=`<tr><td colspan="${1+joursActifs.length}" class="print-cat">${cat}</td></tr>`;
+    html+=`<tr><td colspan="${1+joursActifs.length}" class="print-cat">${esc(cat)}</td></tr>`;
     lignes.forEach(p=>{
-      html+=`<tr><td>${p.nom}</td>`;
+      html+=`<tr><td>${esc(p.nom)}</td>`;
       joursActifs.forEach(j=>{
         const q=(qtes[`${fournActuel.idx}_${p.idx}`]||{})[j]||0;
         html+=`<td style="text-align:center;font-weight:${q>0?'bold':'normal'}">${q>0?q:''}</td>`;
@@ -980,15 +1012,17 @@ function buildHTMLTable(){
 }
 
 // ── Historique ──
-async function sauvegarderHistorique(){
+async function sauvegarderHistorique(envoi){
   const produits=fournActuel.produits||[];
+  const q=JSON.parse(JSON.stringify(qtes));
+  if(envoi) q.__envoi=envoi;
   const body={
     tenant_id:tenantId(),
     fournisseur_id:fournActuel.id||null,
     fourn_nom:fournActuel.nom,
     four_idx:fournActuel.idx,
     note:document.getElementById('note-commande').value.trim(),
-    qtes:JSON.parse(JSON.stringify(qtes)),
+    qtes:q,
     produits:JSON.parse(JSON.stringify(produits)),
   };
   try{
@@ -996,22 +1030,42 @@ async function sauvegarderHistorique(){
     historique.unshift(rowToCmd(rows[0]));
     if(historique.length>50) historique=historique.slice(0,50);
     renderHistorique();
-    toast('✓ Commande sauvegardée dans l\'historique');
-  }catch(e){ toast('⚠ Commande non enregistrée : '+e.message,true); }
+    toast('Commande enregistrée dans l\'historique');
+  }catch(e){ toast('Commande non enregistrée : '+e.message,true); }
+}
+
+function hasQuantites(){
+  if(!fournActuel) return false;
+  const produits=fournActuel.produits||[];
+  return produits.some((_,i)=>Object.values(qtes[`${fournActuel.idx}_${i}`]||{}).some(q=>q>0));
+}
+
+// ── Envoi par e-mail : ouvre la messagerie avec la commande prête ──
+function envoyerEmail(){
+  if(!fournActuel) return;
+  if(!hasQuantites()){ toast('Aucune quantité saisie',true); return; }
+  const to=(fournActuel.emails||[fournActuel.email||'']).filter(Boolean).join(',');
+  if(!to){ toast('Ajoute une adresse e-mail à ce fournisseur (Réglages)',true); return; }
+  const today=new Date().toLocaleDateString('fr-BE',{day:'numeric',month:'long',year:'numeric'});
+  const subject=`Commande ${rtm.nom||''} — ${today}`.trim();
+  const url=`mailto:${encodeURIComponent(to).replace(/%2C/g,',').replace(/%40/g,'@')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(buildCommandeText())}`;
+  sauvegarderHistorique('email');
+  closeModal('modal-apercu');
+  window.location.href=url;
 }
 
 function renderHistorique(){
   const el=document.getElementById('historique-list');
   if(!el) return;
   if(!historique.length){
-    el.innerHTML='<div class="empty">📋 Aucune commande pour l\'instant.</div>';
+    el.innerHTML='<div class="empty">Aucune commande pour l\'instant.</div>';
     return;
   }
   el.innerHTML=historique.slice(0,30).map((c,i)=>{
     const date=new Date(c.date).toLocaleDateString('fr-BE',{day:'numeric',month:'short',year:'numeric'});
     const heure=new Date(c.date).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'});
     // Calcul lignes avec quantité
-    const lignes=Object.values(c.qtes||{}).flatMap(j=>Object.values(j)).filter(q=>q>0);
+    const lignes=Object.entries(c.qtes||{}).filter(([k])=>!k.startsWith('__')).flatMap(([,j])=>Object.values(j||{})).filter(q=>q>0);
     const totalQty=lignes.reduce((s,q)=>s+q,0);
     return `
     <div class="histo-card" onclick="toggleHisto(${i})">
@@ -1022,14 +1076,14 @@ function renderHistorique(){
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <span style="font-size:11px;color:var(--muted)">${totalQty} unité${totalQty>1?'s':''}</span>
-          <span class="histo-badge">✓ Envoyée</span>
+          <span class="histo-badge">${c.envoi === 'email' ? 'Envoyée' : 'Enregistrée'}</span>
         </div>
       </div>
       <div class="histo-detail" id="histo-${i}">
         ${buildHistoDetail(c)}
         ${c.note?`<div style="margin-top:8px;padding:8px;background:var(--bg);border-radius:8px;font-size:11px;color:var(--muted)">${esc(c.note)}</div>`:''}
         <div style="margin-top:8px;display:flex;gap:8px">
-          <button class="btn btn-ghost" onclick="reimprimerCommande(${i});event.stopPropagation()" style="padding:6px 14px;font-size:11px">🖨 Ré-imprimer</button>
+          <button class="btn btn-ghost" onclick="reimprimerCommande(${i});event.stopPropagation()" style="padding:6px 14px;font-size:11px">Ré-imprimer</button>
         </div>
       </div>
     </div>`;
@@ -1045,15 +1099,15 @@ function buildHistoDetail(c){
   produits.forEach((p,i)=>{const cat=p.categorie||'Produits';if(!cats[cat])cats[cat]=[];cats[cat].push({...p,idx:i});});
 
   let html=`<table class="histo-table">
-    <thead><tr><th>Désignation</th>${joursActifs.map(j=>`<th>${j}</th>`).join('')}</tr></thead>
+    <thead><tr><th>Désignation</th>${joursActifs.map(j=>`<th>${esc(j)}</th>`).join('')}</tr></thead>
     <tbody>`;
 
   Object.entries(cats).forEach(([cat,prods])=>{
     const lignes=prods.filter(p=>joursActifs.some(j=>(c.qtes?.[`${c.fourIdx}_${p.idx}`]||{})[j]>0));
     if(!lignes.length) return;
-    html+=`<tr><td colspan="${1+joursActifs.length}" style="color:var(--muted);font-weight:700;font-size:10px;letter-spacing:1px;text-transform:uppercase">${cat}</td></tr>`;
+    html+=`<tr><td colspan="${1+joursActifs.length}" style="color:var(--muted);font-weight:700;font-size:10px;letter-spacing:1px;text-transform:uppercase">${esc(cat)}</td></tr>`;
     lignes.forEach(p=>{
-      html+=`<tr><td>${p.nom}</td>`;
+      html+=`<tr><td>${esc(p.nom)}</td>`;
       joursActifs.forEach(j=>{
         const q=(c.qtes?.[`${c.fourIdx}_${p.idx}`]||{})[j]||0;
         html+=`<td style="text-align:center;color:${q>0?'var(--amber)':'var(--border)'}">${q>0?q:'—'}</td>`;
@@ -1076,7 +1130,7 @@ function reimprimerCommande(i){
   fournActuel={...cur,nom:cur.nom||c.fourn,idx:c.fourIdx,produits:c.produits||[]};
   qtes=c.qtes||{};
   document.getElementById('note-commande').value=c.note||'';
-  genererPDF();
+  genererPDF(true);
 }
 
 // ── Gérer fournisseurs ──
@@ -1131,11 +1185,11 @@ function renderFournListManage(){
       <div style="display:flex;align-items:center;gap:8px">
         <div style="flex:1">
           <div style="font-size:13px;font-weight:600">${esc(f.nom)}</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:2px">${(f.emails||[f.email||'']).filter(Boolean).join(', ')} · ${(f.produits||[]).length} produit(s)</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${esc((f.emails||[f.email||'']).filter(Boolean).join(', '))} · ${(f.produits||[]).length} produit(s)</div>
         </div>
-        <button class="btn btn-ghost" onclick="editFourn(${i})" style="padding:5px 10px;font-size:11px">✏</button>
-        <button class="btn btn-ghost" onclick="ouvrirProduits(${i})" style="padding:5px 10px;font-size:11px">📦</button>
-        <button onclick="supprimerFourn(${i})" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:7px;color:var(--red);font-size:11px;cursor:pointer">✕</button>
+        <button class="btn btn-ghost" onclick="editFourn(${i})" style="padding:5px 10px;font-size:11px">Modifier</button>
+        <button class="btn btn-ghost" onclick="ouvrirProduits(${i})" style="padding:5px 10px;font-size:11px">Produits</button>
+        <button onclick="supprimerFourn(${i})" aria-label="Supprimer le fournisseur" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:7px;color:var(--red);font-size:11px;cursor:pointer"><span class=ic-del></span></button>
       </div>
     </div>`).join('');
 }
@@ -1144,20 +1198,21 @@ async function ajouterFournisseur(){
   const nom=document.getElementById('new-fourn-nom').value.trim();
   const emailsRaw=document.getElementById('new-fourn-emails').value.trim();
   const tel=document.getElementById('new-fourn-tel').value.trim();
-  if(!nom||!emailsRaw){toast('⚠ Nom et email obligatoires',true);return;}
-  const emails=emailsRaw.split(',').map(e=>e.trim()).filter(Boolean);
+  if(!nom){toast('Le nom est obligatoire',true);return;}
+  const emails=emailsRaw.split(/[,;\s]+/).map(e=>e.trim()).filter(Boolean);
+  if(emails.some(e=>!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))){toast('Adresse e-mail invalide',true);return;}
   const jours=getSelectedJours('new-fourn-jours');
   try{
     const rows=await sbFetch('/rest/v1/cmd_fournisseurs',{method:'POST',body:JSON.stringify({tenant_id:tenantId(),nom,emails,tel,jours:jours.length?jours:JOURS,produits:[],ordre:fournisseurs.length})});
     fournisseurs.push(rowToFourn(rows[0]));
-  }catch(e){ toast('⚠ '+e.message,true); return; }
+  }catch(e){ toast(''+e.message,true); return; }
   document.getElementById('new-fourn-nom').value='';
   document.getElementById('new-fourn-emails').value='';
   document.getElementById('new-fourn-tel').value='';
   renderJoursBtn('new-fourn-jours',[]);
   buildFournSelect();
   renderFournListManage();
-  toast(`✓ ${nom} ajouté`);
+  toast(`${nom} ajouté`);
 }
 
 function editFourn(i){
@@ -1175,24 +1230,25 @@ async function saveEditFourn(){
   const nom=document.getElementById('edit-fourn-nom').value.trim();
   const emailsRaw=document.getElementById('edit-fourn-emails').value.trim();
   const tel=document.getElementById('edit-fourn-tel').value.trim();
-  if(!nom||!emailsRaw){toast('⚠ Nom et email obligatoires',true);return;}
-  const emails=emailsRaw.split(',').map(e=>e.trim()).filter(Boolean);
+  if(!nom){toast('Le nom est obligatoire',true);return;}
+  const emails=emailsRaw.split(/[,;\s]+/).map(e=>e.trim()).filter(Boolean);
+  if(emails.some(e=>!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))){toast('Adresse e-mail invalide',true);return;}
   const jours=getSelectedJours('edit-fourn-jours');
   const f=fournisseurs[editFournIdx];
   const patch={nom,emails,tel,jours:jours.length?jours:JOURS};
   try{ await sbFetch(`/rest/v1/cmd_fournisseurs?id=eq.${encodeURIComponent(f.id)}`,{method:'PATCH',body:JSON.stringify(patch)}); }
-  catch(e){ toast('⚠ '+e.message,true); return; }
+  catch(e){ toast(''+e.message,true); return; }
   fournisseurs[editFournIdx]={...f,...patch};
   buildFournSelect();
   closeModal('modal-edit-fourn');
   openSettings();
-  toast(`✓ ${nom} modifié`);
+  toast(`${nom} modifié`);
 }
 
 async function supprimerFourn(i){
   if(!confirm(`Supprimer "${fournisseurs[i].nom}" ?`)) return;
   try{ await sbFetch(`/rest/v1/cmd_fournisseurs?id=eq.${encodeURIComponent(fournisseurs[i].id)}`,{method:'DELETE'}); }
-  catch(e){ toast('⚠ '+e.message,true); return; }
+  catch(e){ toast(''+e.message,true); return; }
   fournisseurs.splice(i,1);
   buildFournSelect();
   renderFournListManage();
@@ -1202,7 +1258,7 @@ async function supprimerFourn(i){
 // ── Produits fournisseur ──
 function ouvrirProduits(i){
   editFournIdx=i;
-  document.getElementById('modal-prod-title').textContent=`📦 Produits — ${fournisseurs[i].nom}`;
+  document.getElementById('modal-prod-title').textContent=`Produits — ${fournisseurs[i].nom}`;
   renderProduitsManage();
   closeModal('modal-settings');
   document.getElementById('modal-produits').style.display='flex';
@@ -1219,29 +1275,29 @@ function renderProduitsManage(){
   const cats={};
   prods.forEach((p,i)=>{const c=p.categorie||'Sans catégorie';if(!cats[c])cats[c]=[];cats[c].push({...p,idx:i});});
   el.innerHTML=Object.entries(cats).map(([cat,ps])=>`
-    <div style="font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;padding:6px 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px">${cat}</div>
+    <div style="font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;padding:6px 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px">${esc(cat)}</div>
     ${ps.map(p=>`
       <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
         <div style="flex:1;font-size:12px">${esc(p.nom)}</div>
-        <button onclick="supprimerProduit(${p.idx})" style="padding:3px 7px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;color:var(--red);font-size:11px;cursor:pointer">✕</button>
+        <button onclick="supprimerProduit(${p.idx})" aria-label="Retirer le produit" style="padding:3px 7px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;color:var(--red);font-size:11px;cursor:pointer"><span class=ic-del></span></button>
       </div>`).join('')}`).join('');
 }
 
 async function ajouterProduit(){
   const nom=document.getElementById('new-prod-nom').value.trim();
   const cat=document.getElementById('new-prod-cat').value.trim();
-  if(!nom){toast('⚠ Nom obligatoire',true);return;}
+  if(!nom){toast('Nom obligatoire',true);return;}
   const f=fournisseurs[editFournIdx];
   const produits=[...(f.produits||[]),{nom,categorie:cat}];
   if(!(await saveProduits(f,produits))) return;
   document.getElementById('new-prod-nom').value='';
   renderProduitsManage();
-  toast(`✓ ${nom} ajouté`);
+  toast(`${nom} ajouté`);
 }
 
 async function saveProduits(f,produits){
   try{ await sbFetch(`/rest/v1/cmd_fournisseurs?id=eq.${encodeURIComponent(f.id)}`,{method:'PATCH',body:JSON.stringify({produits})}); f.produits=produits; return true; }
-  catch(e){ toast('⚠ '+e.message,true); return false; }
+  catch(e){ toast(''+e.message,true); return false; }
 }
 
 async function supprimerProduit(i){

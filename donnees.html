@@ -1,6 +1,37 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<meta charset="UTF-8">
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
 <script id="sl-session">
 // StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
 (function () {
@@ -74,7 +105,6 @@ window.__guardPassed = undefined;
   }
 })();
 </script>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Données — StoreLine</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
@@ -254,6 +284,7 @@ window.__guardPassed = undefined;
   }
   tbody tr:hover .del-btn { opacity:1; }
   .del-btn:hover { background:rgba(255,64,64,.1); }
+  @media (hover:none) { .del-btn { opacity:1 !important; } }
 
   /* ── Loading / Empty ── */
   .loading-row td { text-align:center; padding:40px; color:var(--muted); }
@@ -473,7 +504,7 @@ window.__guardPassed = undefined;
   <input class="toolbar-search" id="search-input" type="text" placeholder="Rechercher..." oninput="applyFilter()">
   <button class="btn-sm btn-ghost-sm" id="btn-rapport" onclick="openRapport()" style="display:none">Rapport de pertes</button>
   <button class="btn-sm btn-ghost-sm" onclick="exportCSV()">CSV</button>
-  <button class="btn-sm btn-amber-sm" onclick="syncData()" id="btn-sync">Sync</button>
+  <button class="btn-sm btn-amber-sm" onclick="syncData()" id="btn-sync">Actualiser</button>
   <button class="btn-sm btn-green-sm" id="btn-save" onclick="saveChanges()" style="display:none">Sauvegarder</button>
 </div>
 
@@ -550,7 +581,7 @@ window.__guardPassed = undefined;
   </div>
 </div>
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">données v3.1 · 11/10/2026 12:35</div>
+<div class="version-tag">données v3.2 · 12/10/2026 12:45</div>
 
 <script>
 // ══════════════════════════════════════
@@ -635,7 +666,7 @@ async function ensureSupabaseUserReady() {
 
 async function sbFetch(path, options={}) {
   const token = localStorage.getItem('sl_access_token');
-  const r = await fetch(SUPABASE_URL + path, {
+  const r = await slFetch(SUPABASE_URL + path, {
     ...options,
     headers: {
       'apikey': SUPABASE_ANON,
@@ -648,7 +679,7 @@ async function sbFetch(path, options={}) {
   const text = await r.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
-  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  if (!r.ok) throw new Error(slErrMsg(r.status, data));
   return data;
 }
 
@@ -791,22 +822,29 @@ async function loadTab(tabId) {
   try {
     const user = await ensureSupabaseUserReady();
     if (!user.tenant_id) throw new Error('Magasin introuvable pour ce compte');
-    const data = await sbFetch(`/rest/v1/${cfg.table}?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&${cfg.query}`);
+    // Pagination : l'API renvoie 1000 lignes max par appel, on récupère tout
+    const data = [];
+    for (let offset = 0; ; offset += 1000) {
+      const page = await sbFetch(`/rest/v1/${cfg.table}?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&${cfg.query}&limit=1000&offset=${offset}`);
+      if (!Array.isArray(page) || !page.length) break;
+      data.push(...page);
+      if (page.length < 1000 || offset > 200000) break;
+    }
     const rows = (Array.isArray(data) ? data : []).map(cfg.map);
     allData[tabId] = rows;
     renderTable(rows);
     setStatus(`${rows.length} ligne${rows.length>1?'s':''} chargée${rows.length>1?'s':''}`);
   } catch(e) {
-    setStatus('⚠ Erreur de chargement', false);
+    setStatus('Erreur de chargement', false);
     renderError(escD(e.message));
-    toast('⚠ Impossible de charger les données', true);
+    toast('Impossible de charger les données', true);
   }
 }
 
 async function syncData() {
   allData[currentTab] = null;
   await loadTab(currentTab);
-  toast('✓ Données rechargées');
+  toast('Données à jour');
 }
 
 // ══════════════════════════════════════
@@ -815,22 +853,22 @@ async function syncData() {
 function renderLoading() {
   const cfg = TABS[currentTab];
   document.getElementById('table-head').innerHTML = `<tr>${cfg.cols.map(c=>`<th>${c.label}</th>`).join('')}<th></th></tr>`;
-  document.getElementById('table-body').innerHTML = `<tr class="loading-row"><td colspan="${cfg.cols.length+1}">⏳ Chargement...</td></tr>`;
+  document.getElementById('table-body').innerHTML = `<tr class="loading-row"><td colspan="${cfg.cols.length+1}">Chargement…</td></tr>`;
   document.getElementById('row-count').textContent = '';
 }
 
 function renderError(msg) {
   const cfg = TABS[currentTab];
-  document.getElementById('table-body').innerHTML = `<tr class="loading-row"><td colspan="${cfg.cols.length+1}" style="color:var(--red)">⚠ ${msg}</td></tr>`;
+  document.getElementById('table-body').innerHTML = `<tr class="loading-row"><td colspan="${cfg.cols.length+1}" style="color:var(--red)">${msg}</td></tr>`;
 }
 
 function renderTable(rows) {
   const cfg = TABS[currentTab];
-  const search = document.getElementById('search-input').value.toLowerCase();
+  const search = norm(document.getElementById('search-input').value);
 
   // Filtrer
   filteredData = rows.filter(row =>
-    !search || cfg.cols.some(c => String(row[c.key]||'').toLowerCase().includes(search))
+    !search || cfg.cols.some(c => norm(row[c.key]).includes(search))
   );
 
   // Trier
@@ -855,14 +893,14 @@ function renderTable(rows) {
   if (!filteredData.length) {
     document.getElementById('table-body').innerHTML = `
       <tr><td colspan="${cfg.cols.length+1}">
-        <div class="empty-state"><div class="empty-ico">🔍</div><div>Aucun résultat</div></div>
+        <div class="empty-state"><div>Aucun résultat</div></div>
       </td></tr>`;
   } else {
     document.getElementById('table-body').innerHTML = filteredData.map((row, i) =>
       `<tr id="row-${i}">${cfg.cols.map(c => renderCell(row, i, c)).join('')}
        <td class="col-actions">
-         ${currentTab === 'transferts' ? `<button class="view-btn" onclick="voirTicket(${i})" title="Voir le ticket">👁</button>` : ''}
-         <button class="del-btn" onclick="confirmDelete(${i})" title="Supprimer">✕</button>
+         ${currentTab === 'transferts' ? `<button class="view-btn" onclick="voirTicket(${i})" title="Voir le bon" aria-label="Voir le bon">Voir</button>` : ''}
+         <button class="del-btn" onclick="confirmDelete(${i})" title="Supprimer" aria-label="Supprimer"><span class=ic-del></span></button>
        </td>
       </tr>`
     ).join('');
@@ -878,11 +916,11 @@ function renderCell(row, rowIdx, col) {
 
   if (col.type === 'badge') {
     const isHors = displayVal === true || displayVal === 'true' || displayVal === 'Hors norme';
-    return `<td><span class="cell-view"><span class="cell-badge ${isHors?'badge-red':'badge-green'}">${isHors?'⚠ Hors norme':'✓ Normal'}</span></span></td>`;
+    return `<td><span class="cell-view"><span class="cell-badge ${isHors?'badge-red':'badge-green'}">${isHors?'Hors norme':'Normal'}</span></span></td>`;
   }
   if (col.type === 'allergen') {
     const cls = displayVal==='oui' ? 'badge-red' : displayVal==='non' ? 'badge-green' : 'badge-muted';
-    const txt = displayVal==='oui' ? '✓' : displayVal==='non' ? '✗' : '?';
+    const txt = displayVal==='oui' ? 'Oui' : displayVal==='non' ? 'Non' : '?';
     return `<td><span class="cell-view" style="text-align:center;display:block"><span class="cell-badge ${cls}">${txt}</span></span></td>`;
   }
   if (col.type === 'price') {
@@ -988,7 +1026,7 @@ function commitEdit(rowIdx, key, newVal, span, input) {
   span.parentElement.style.borderLeft = '2px solid var(--amber)';
 
   document.getElementById('btn-save').style.display = 'block';
-  toast(`✏ Modification en attente — clique "Sauvegarder"`, false);
+  toast(`Modification en attente — clique "Sauvegarder"`, false);
 }
 
 // ══════════════════════════════════════
@@ -1025,12 +1063,12 @@ async function confirmDelete(rowIdx) {
   if (!confirm(`Supprimer définitivement "${nom}" ?`)) return;
   try {
     const res = await sbFetch(`/rest/v1/${cfg.table}?id=eq.${encodeURIComponent(row.id)}`, { method:'DELETE' });
-    if (Array.isArray(res) && !res.length) { toast('⚠ Tu n’as pas le droit de supprimer cette ligne', true); return; }
+    if (Array.isArray(res) && !res.length) { toast('Tu n’as pas le droit de supprimer cette ligne', true); return; }
     allData[currentTab] = (allData[currentTab] || []).filter(r => r.id !== row.id);
     renderTable(allData[currentTab]);
     setStatus(`${allData[currentTab].length} lignes`);
-    toast('✓ Ligne supprimée');
-  } catch(e) { toast('⚠ ' + e.message, true); }
+    toast('Ligne supprimée');
+  } catch(e) { toast('' + e.message, true); }
 }
 
 // ══════════════════════════════════════
@@ -1076,7 +1114,7 @@ function exportCSV() {
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = 'storeline_' + currentTab + '_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.download = 'storeline_' + currentTab + '_' + localISO() + '.csv';
   a.click();
   URL.revokeObjectURL(url);
   toast('Export CSV : ' + rows.length + ' lignes');
@@ -1091,8 +1129,8 @@ function openRapport() {
   // Pré-remplir les dates (mois courant)
   const now = new Date();
   const debut = new Date(now.getFullYear(), now.getMonth(), 1);
-  document.getElementById('rapport-debut').value = debut.toISOString().split('T')[0];
-  document.getElementById('rapport-fin').value   = now.toISOString().split('T')[0];
+  document.getElementById('rapport-debut').value = localISO(debut);
+  document.getElementById('rapport-fin').value   = localISO(now);
   document.getElementById('rapport-result').style.display = 'none';
   document.getElementById('modal-rapport').style.display = 'flex';
 }
@@ -1100,10 +1138,10 @@ function openRapport() {
 function genererRapport() {
   const debut = document.getElementById('rapport-debut').value;
   const fin   = document.getElementById('rapport-fin').value;
-  if (!debut || !fin) { toast('⚠ Choisis les deux dates', true); return; }
+  if (!debut || !fin) { toast('Choisis les deux dates', true); return; }
 
   const pertes = allData['pertes'] || [];
-  if (!pertes.length) { toast('⚠ Charge dabord onglet Pertes', true); return; }
+  if (!pertes.length) { toast("Aucune perte chargée", true); return; }
 
   const dDebut = new Date(debut);
   const dFin   = new Date(fin); dFin.setHours(23,59,59);
@@ -1145,7 +1183,7 @@ function genererRapport() {
     <tr style="border-bottom:1px solid var(--border)">
       <td style="padding:9px 14px">${escD(r.name)}</td>
       <td style="padding:9px 14px;color:var(--muted)">${escD(r.brand)}</td>
-      <td style="padding:9px 14px;color:var(--muted);font-size:11px">${r.barcode || '—'}</td>
+      <td style="padding:9px 14px;color:var(--muted);font-size:11px">${escD(r.barcode || '—')}</td>
       <td style="padding:9px 14px;text-align:right;color:var(--amber);font-weight:700">${r.qty}</td>
       <td style="padding:9px 14px;text-align:right;color:var(--muted)">${r.count}×</td>
     </tr>`).join('');
@@ -1162,7 +1200,7 @@ function exportRapportCSV() {
   const fin   = document.getElementById('rapport-fin').value;
   const lines = [
     'Article;Fournisseur;Code-barres;Quantite totale;Occurrences',
-    ...rapportData.map(r => `"${r.name}";"${r.brand}";"${r.barcode || ''}";${r.qty};${r.count}`)
+    ...rapportData.map(r => [r.name, r.brand, r.barcode || ''].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';') + `;${r.qty};${r.count}`)
   ];
   const blob = new Blob(['\ufeff' + lines.join('\n')], {type:'text/csv;charset=utf-8;'});
   const url  = URL.createObjectURL(blob);
@@ -1171,7 +1209,7 @@ function exportRapportCSV() {
   a.download = `rapport_pertes_${debut}_${fin}.csv`;
   a.click();
   URL.revokeObjectURL(url);
-  toast(`✓ ${rapportData.length} articles exportés`);
+  toast(`${rapportData.length} articles exportés`);
 }
 
 // ══════════════════════════════════════
@@ -1201,7 +1239,7 @@ function voirTicket(rowIdx) {
         </div>
         <div style="text-align:right;font-size:11px;color:var(--muted)">
           <div style="color:var(--text);font-weight:600">${date}</div>
-          <div style="margin-top:2px">→ ${row.rayon || '?'}</div>
+          <div style="margin-top:2px">→ ${escD(row.rayon || '?')}</div>
         </div>
       </div>
 
@@ -1217,8 +1255,8 @@ function voirTicket(rowIdx) {
           ${articles.map(a => `
             <tr style="border-bottom:1px solid var(--border)">
               <td style="padding:8px 10px">${escD(a.nom || a.name || '?')}</td>
-              <td style="padding:8px 10px;color:var(--muted)">${a.marque || a.brand || '—'}</td>
-              <td style="padding:8px 10px;text-align:center;font-weight:700;color:var(--amber)">${a.qty || a.quantity || 1}</td>
+              <td style="padding:8px 10px;color:var(--muted)">${escD(a.marque || a.brand || '—')}</td>
+              <td style="padding:8px 10px;text-align:center;font-weight:700;color:var(--amber)">${parseInt(a.qty || a.quantity) || 1}</td>
             </tr>`).join('')}
         </tbody>
       </table>
@@ -1235,7 +1273,7 @@ function voirTicket(rowIdx) {
 
 function imprimerTicket() {
   const w = window.open('', '_blank');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  w.document.write(`<!DOCTYPE html><html><head>
     <style>
       body { font-family: 'Courier New', monospace; font-size:11pt; color:#000; padding:20mm; }
       table { width:100%; border-collapse:collapse; }

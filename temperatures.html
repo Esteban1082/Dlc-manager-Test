@@ -1,6 +1,37 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<meta charset="UTF-8">
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
 <script id="sl-session">
 // StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
 (function () {
@@ -92,7 +123,6 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 
 })();
 </script>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Températures – StoreLine</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
@@ -179,6 +209,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     padding:10px 8px; outline:none; transition:border-color .15s;
   }
   .temp-input:focus { border-color:var(--amber); }
+  .sign-btn { width:44px; height:44px; border-radius:12px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:18px; font-weight:700; flex-shrink:0; }
 
   .histo-row {
     display:flex; align-items:center; justify-content:space-between;
@@ -429,7 +460,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">temperatures v2.3 · 11/10/2026 12:35</div>
+<div class="version-tag">temperatures v2.4 · 12/10/2026 12:45</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -523,7 +554,7 @@ async function ensureSupabaseUserReady() {
 
 async function sbFetch(path, options={}) {
   const token = localStorage.getItem('sl_access_token');
-  const r = await fetch(SUPABASE_URL + path, {
+  const r = await slFetch(SUPABASE_URL + path, {
     ...options,
     headers: {
       'apikey': SUPABASE_ANON,
@@ -536,7 +567,7 @@ async function sbFetch(path, options={}) {
   const text = await r.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
-  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  if (!r.ok) throw new Error(slErrMsg(r.status, data));
   return data;
 }
 
@@ -556,8 +587,21 @@ function normalizeTempRow(row) {
     nom: row.zone_nom || row.nom || '',
     temp: String(row.valeur ?? row.temp ?? ''),
     date: row.date_releve || row.date || '',
-    heure: row.heure || ''
+    heure: row.heure || '',
+    horsNorme: row.hors_norme === true ? true : row.hors_norme === false ? false : null
   };
+}
+// Saisie : accepte « 3,5 » comme « 3.5 »
+function readTemp(id) {
+  const raw = String(document.getElementById('temp-' + id)?.value || '').trim().replace(',', '.').replace(/\s/g, '');
+  if (raw === '' || raw === '-') return NaN;
+  return /^-?\d+(\.\d+)?$/.test(raw) ? parseFloat(raw) : NaN;
+}
+function flipSign(id) {
+  const inp = document.getElementById('temp-' + id);
+  const v = inp.value.trim();
+  inp.value = v.startsWith('-') ? v.slice(1) : '-' + v;
+  checkTemp(id);
 }
 
 async function loadZonesFromSupabase() {
@@ -595,7 +639,7 @@ function toast(msg, isError=false) {
   setTimeout(() => t.remove(), 3500);
 }
 
-const todayStr = new Date().toISOString().split('T')[0];
+const todayStr = localISO();
 
 async function init() {
   document.getElementById('today-label').textContent =
@@ -609,22 +653,24 @@ function renderAppareils() {
   const list = document.getElementById('zones-list');
   if (!zones.length) {
     list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">
-      Aucune zone configurée.<br>Clique sur ⚙ Zones pour en ajouter.
+      Aucune zone configurée.<br>Touche « Zones » pour en ajouter.
     </div>`;
     return;
   }
-  list.innerHTML = zones.map(a => {
-    return `<div class="appliance-card" id="card-${a.id}">
+  list.innerHTML = zones.map((a, i) => {
+    const neg = a.max <= 0;
+    return `<div class="appliance-card" id="card-${esc(a.id)}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div>
-          <div style="font-family:'Fraunces',serif;font-size:17px;font-weight:700">${a.nom}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:3px">Plage normale : ${a.min}°C → ${a.max}°C</div>
+          <div style="font-family:'Fraunces',serif;font-size:17px;font-weight:700">${esc(a.nom)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">Plage normale : ${a.min}°C → ${a.max}°C</div>
         </div>
-        <div id="status-${a.id}" style="font-size:11px;color:var(--muted)"></div>
+        <div id="status-${esc(a.id)}" style="font-size:12px;font-weight:600;color:var(--muted)"></div>
       </div>
-      <div style="display:flex;align-items:center;gap:16px">
-        <input class="temp-input" id="temp-${a.id}" type="number" step="0.1" placeholder="°C"
-          oninput="checkTemp('${a.id}')">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button type="button" class="sign-btn" onclick="flipSign(zones[${i}].id)" aria-label="Changer le signe">±</button>
+        <input class="temp-input" id="temp-${esc(a.id)}" type="text" inputmode="decimal" autocomplete="off" placeholder="${neg ? '-18' : '3,5'}"
+          oninput="checkTemp(zones[${i}].id)">
         <div style="font-size:13px;color:var(--muted)">°C</div>
       </div>
     </div>`;
@@ -634,59 +680,54 @@ function renderAppareils() {
 function checkTemp(id) {
   const a = zones.find(x => x.id === id);
   if (!a) return;
-  const val = parseFloat(document.getElementById('temp-' + id).value);
+  const val = readTemp(id);
   const card   = document.getElementById('card-' + id);
   const status = document.getElementById('status-' + id);
-  if (isNaN(val)) { card.className = 'appliance-card'; status.textContent = ''; return; }
+  const raw = document.getElementById('temp-' + id).value.trim();
+  if (isNaN(val)) {
+    card.className = 'appliance-card';
+    status.style.color = 'var(--red)';
+    status.textContent = raw && raw !== '-' ? 'Valeur invalide' : '';
+    return;
+  }
   const ok = val >= a.min && val <= a.max;
   card.className = 'appliance-card ' + (ok ? 'ok' : 'warn');
   status.style.color = ok ? 'var(--green)' : 'var(--red)';
-  status.textContent = ok ? '✓ Normal' : '⚠ Hors norme!';
+  status.textContent = ok ? 'Normal' : 'Hors norme';
 }
 
 async function saveAllTemps() {
-  const entries = zones.map(a => {
-    const val = document.getElementById('temp-' + a.id)?.value;
-    return { id:a.id, nom:a.nom, temp:val, date:todayStr };
-  }).filter(e => e.temp !== '' && e.temp !== undefined);
+  const bad = zones.filter(a => { const raw = (document.getElementById('temp-' + a.id)?.value || '').trim(); return raw && isNaN(readTemp(a.id)); });
+  if (bad.length) { toast(`Valeur invalide pour ${bad.map(a => a.nom).join(', ')}`, true); return; }
+  const entries = zones.map(a => ({ zone: a, val: readTemp(a.id) })).filter(e => !isNaN(e.val));
+  if (!entries.length) { toast('Entre au moins une température', true); return; }
 
-  if (!entries.length) { toast('⚠ Entre au moins une température', true); return; }
-
-  toast('⏳ Enregistrement…');
-  {
-    const user = await ensureSupabaseUserReady();
-    const rows = entries.map(e => {
-      const zone = zones.find(z => z.id === e.id || z.nom === e.nom);
-      const val = parseFloat(e.temp);
-      const horsNorme = zone && !isNaN(val) ? (val < zone.min || val > zone.max) : false;
-      const zoneId = zone && /^[0-9a-f-]{36}$/i.test(String(zone.id)) ? zone.id : null;
-      return {
-        tenant_id: user.tenant_id,
-        zone_id: zoneId,
-        zone_nom: e.nom,
-        valeur: val,
-        date_releve: e.date,
-        heure: new Date().toTimeString().slice(0, 8),
-        hors_norme: horsNorme,
-        created_by: user.id || null
-      };
+  const user = await ensureSupabaseUserReady();
+  const day = localISO();
+  const heure = new Date().toTimeString().slice(0, 8);
+  const rows = entries.map(({ zone, val }) => ({
+    tenant_id: user.tenant_id,
+    zone_id: /^[0-9a-f-]{36}$/i.test(String(zone.id)) ? zone.id : null,
+    zone_nom: zone.nom,
+    valeur: val,
+    date_releve: day,
+    heure,
+    hors_norme: val < zone.min || val > zone.max,
+    created_by: user.id || null
+  }));
+  try {
+    await sbFetch('/rest/v1/temperatures', { method:'POST', body: JSON.stringify(rows) });
+    const nbHors = rows.filter(r => r.hors_norme).length;
+    toast(`Relevé enregistré : ${entries.length} appareil${entries.length > 1 ? 's' : ''}${nbHors ? ` · ${nbHors} hors norme` : ''}`, nbHors > 0);
+    zones.forEach(a => {
+      const inp = document.getElementById('temp-' + a.id);
+      if (inp) inp.value = '';
+      const card = document.getElementById('card-' + a.id); if (card) card.className = 'appliance-card';
+      const st = document.getElementById('status-' + a.id); if (st) st.textContent = '';
     });
-    try {
-      await sbFetch('/rest/v1/temperatures', { method:'POST', body: JSON.stringify(rows) });
-      dataSource = 'supabase';
-      toast(`✓ Relevé enregistré — ${entries.length} appareil${entries.length > 1 ? 's' : ''}`);
-      zones.forEach(a => {
-        const inp = document.getElementById('temp-' + a.id);
-        if (inp) inp.value = '';
-        document.getElementById('card-' + a.id).className = 'appliance-card';
-        document.getElementById('status-' + a.id).textContent = '';
-      });
-      loadHisto();
-      return;
-    } catch(e) {
-      toast(`⚠ ${e.message}`, true);
-      return;
-    }
+    loadHisto();
+  } catch(e) {
+    toast(e.message, true);
   }
 }
 
@@ -715,7 +756,7 @@ async function loadHisto() {
       dataSource = 'supabase';
       histoData = [];
       renderHisto();
-      toast('Impossible de charger les temperatures Supabase', true);
+      toast('Impossible de charger les relevés', true);
       return;
     }
   }
@@ -723,47 +764,53 @@ async function loadHisto() {
 
 function renderHisto() {
   const now = new Date(); now.setHours(0,0,0,0);
+  const today = localISO();
+  const todays = histoData.filter(h => h.date === today && h.heure).map(h => h.heure.slice(0,5)).sort();
+  const lbl = document.getElementById('today-label');
+  if (lbl) lbl.textContent = new Date().toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
+    + (todays.length ? ` · relevé fait à ${todays[todays.length - 1]}` : ' · pas encore de relevé');
+
   const filtered = histoData.filter(h => {
     if (!h.date) return true;
     const d = new Date(h.date + 'T00:00:00');
     if (histoFilter === 'semaine') { const w = new Date(now); w.setDate(now.getDate()-7); return d >= w; }
     if (histoFilter === 'mois')    { const m = new Date(now); m.setDate(now.getDate()-30); return d >= m; }
     return true;
-  }).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  }).sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.heure||'').localeCompare(a.heure||''));
 
   const list = document.getElementById('histo-list');
   if (!filtered.length) {
-    list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">Aucun relevé dans cette période${dataSource === 'supabase' ? '<br><span style="font-size:11px">Source : Supabase</span>' : ''}</div>`;
+    list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">Aucun relevé dans cette période</div>`;
     return;
   }
-
+  // Hors norme : on se fie à ce qui a été enregistré au moment du relevé (les plages ont pu changer depuis)
+  const isHors = h => {
+    if (h.horsNorme !== null) return h.horsNorme;
+    const a = zones.find(x => x.id === h.id || x.nom === h.nom);
+    const v = parseFloat(h.temp);
+    return !!a && !isNaN(v) && (v < a.min || v > a.max);
+  };
   const byDate = {};
   filtered.forEach(h => { const k = h.date||'?'; if (!byDate[k]) byDate[k]=[]; byDate[k].push(h); });
   let html = '';
   for (const [dateKey, items] of Object.entries(byDate)) {
     const label = dateKey === '?' ? 'Date inconnue' : new Date(dateKey+'T00:00:00').toLocaleDateString('fr-BE', {weekday:'short', day:'numeric', month:'short'});
-    const hasWarn = items.some(h => {
-      const a = zones.find(x => x.id === h.id || x.nom === h.nom);
-      if (!a) return false;
-      const v = parseFloat(h.temp);
-      return !isNaN(v) && (v < a.min || v > a.max);
-    });
-    html += `<div style="font-size:11px;color:${hasWarn?'var(--red)':'var(--muted)'};letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px;display:flex;align-items:center;gap:8px">
-      ${hasWarn ? '⚠' : '✓'} ${label}${dataSource === 'supabase' ? ' · Supabase' : ''}
+    const nbWarn = items.filter(isHors).length;
+    html += `<div style="font-size:11px;color:${nbWarn?'var(--red)':'var(--muted)'};letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px;display:flex;align-items:center;gap:8px">
+      ${esc(label)}${nbWarn ? ` · ${nbWarn} hors norme` : ''}
       <span style="flex:1;height:1px;background:var(--border);display:block"></span>
     </div>`;
     html += items.map(h => {
       const a = zones.find(x => x.id === h.id || x.nom === h.nom);
       const v = parseFloat(h.temp);
-      const ok = !a || isNaN(v) || (v >= a.min && v <= a.max);
+      const ok = !isHors(h);
       return `<div class="histo-row" style="border-color:${ok?'var(--border)':'rgba(255,64,64,.3)'}">
         <div>
-          <span style="font-weight:600">${h.nom || h.id}</span>
-          ${a ? `<span style="font-size:10px;color:var(--muted);margin-left:8px">${a.min}→${a.max}°C</span>` : ''}
+          <span style="font-weight:600">${esc(h.nom || h.id)}</span>
+          <span style="font-size:11px;color:var(--muted);margin-left:8px">${esc((h.heure||'').slice(0,5))}${a ? ` · ${a.min}→${a.max}°C` : ''}</span>
         </div>
         <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:${ok?'var(--text)':'var(--red)'}">
-          ${isNaN(v) ? '—' : v + '°C'}
-          <span style="font-size:11px;margin-left:6px">${ok ? '' : '⚠'}</span>
+          ${isNaN(v) ? '—' : String(v).replace('.', ',') + '°C'}
         </div>
       </div>`;
     }).join('');
@@ -783,13 +830,13 @@ function closeZoneModal() { document.getElementById('modal-zones').style.display
 
 function renderZonesManage() {
   document.getElementById('zones-manage-list').innerHTML = zones.length
-    ? zones.map(a => `
+    ? zones.map((a, i) => `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:6px">
         <div>
-          <span style="font-size:13px;font-weight:600">${a.nom}</span>
+          <span style="font-size:13px;font-weight:600">${esc(a.nom)}</span>
           <span style="font-size:11px;color:var(--muted);margin-left:8px">${a.min}°C → ${a.max}°C</span>
         </div>
-        <button onclick="removeZone('${a.id}')" style="padding:4px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:12px;color:var(--red);"><span class=ic-del></span></button>
+        <button onclick="removeZone(zones[${i}].id)" aria-label="Retirer cette zone" style="padding:4px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:12px;color:var(--red);"><span class=ic-del></span></button>
       </div>`).join('')
     : '<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Aucune zone configurée.</div>';
 }
@@ -798,7 +845,8 @@ function addZone() {
   const nom = document.getElementById('new-zone-name').value.trim();
   const min = parseFloat(document.getElementById('new-zone-min').value);
   const max = parseFloat(document.getElementById('new-zone-max').value);
-  if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
+  if (!nom) { toast('Le nom est obligatoire', true); return; }
+  if (!isNaN(min) && !isNaN(max) && min > max) { toast('Le minimum doit être inférieur au maximum', true); return; }
   const id = 'app_' + Date.now();
   const newZone = { id, nom, min: isNaN(min) ? -99 : min, max: isNaN(max) ? 99 : max };
   if (canUseSupabase() && zonesSource === 'supabase') {
@@ -817,8 +865,8 @@ function addZone() {
       renderAppareils();
       renderZonesManage();
       document.getElementById('new-zone-name').value = '';
-      toast(`✓ "${nom}" ajouté`);
-    }).catch(e => toast(`⚠ ${e.message}`, true));
+      toast(`"${nom}" ajouté`);
+    }).catch(e => toast(`${e.message}`, true));
     return;
   }
   zones.push(newZone);
@@ -826,7 +874,7 @@ function addZone() {
   renderAppareils();
   renderZonesManage();
   document.getElementById('new-zone-name').value = '';
-  toast(`✓ "${nom}" ajouté`);
+  toast(`"${nom}" ajouté`);
 }
 
 function removeZone(id) {
@@ -837,7 +885,7 @@ function removeZone(id) {
     }).then(loadZones).then(() => {
       renderAppareils();
       renderZonesManage();
-    }).catch(e => toast(`⚠ ${e.message}`, true));
+    }).catch(e => toast(`${e.message}`, true));
     return;
   }
   zones = zones.filter(a => a.id !== id);

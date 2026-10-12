@@ -1,5 +1,5 @@
 // StoreLine Service Worker v2.0
-const CACHE_NAME = 'storeline-v29';
+const CACHE_NAME = 'storeline-v30';
 
 // Fichiers à mettre en cache pour le mode offline
 const STATIC_ASSETS = [
@@ -23,6 +23,7 @@ const STATIC_ASSETS = [
   '/transferts.html',
   '/commandes.html',
   '/donnees.html',
+  '/planning.html',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
@@ -95,22 +96,18 @@ self.addEventListener('fetch', (event) => {
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
               <title>StoreLine — Hors ligne</title>
               <style>
-                body { background:#0f0f0d; color:#f0ede4; font-family:'DM Mono',monospace;
-                       display:flex; align-items:center; justify-content:center;
-                       min-height:100vh; text-align:center; padding:20px; }
-                .icon { font-size:48px; margin-bottom:16px; }
-                h1 { font-family:serif; font-size:24px; color:#e8a045; margin-bottom:8px; }
-                p { color:#7a7a6e; font-size:13px; margin-bottom:24px; }
-                button { padding:12px 24px; background:#e8a045; border:none; border-radius:10px;
-                         font-size:15px; font-weight:700; color:#000; cursor:pointer; }
+                body { margin:0; background:#f4efe7; color:#23201c; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+                       display:flex; align-items:center; justify-content:center; min-height:100vh; text-align:center; padding:24px; }
+                h1 { font-family:Georgia,serif; font-size:28px; margin:0 0 8px; }
+                p { color:#6e6256; font-size:15px; line-height:1.45; margin:0 0 28px; }
+                button { padding:14px 28px; background:#e8a045; border:none; border-radius:999px; font-size:16px; font-weight:700; color:#23201c; cursor:pointer; }
               </style>
             </head>
             <body>
               <div>
-                <div class="icon">📡</div>
                 <h1>Pas de connexion</h1>
-                <p>StoreLine nécessite une connexion internet.<br>Vérifie ton réseau et réessaie.</p>
-                <button onclick="location.reload()">↻ Réessayer</button>
+                <p>StoreLine a besoin d’internet.<br>Vérifie le réseau et réessaie.</p>
+                <button onclick="location.reload()">Réessayer</button>
               </div>
             </body>
             </html>

@@ -1,6 +1,37 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<meta charset="UTF-8">
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
 <script id="sl-session">
 // StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
 (function () {
@@ -92,7 +123,6 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 
 })();
 </script>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Suivi DLC – StoreLine</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
@@ -714,7 +744,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
         <div class="as-name" id="as-name"></div>
         <div class="as-date" id="as-date"></div>
       </div>
-      <button class="as-btn ok" onclick="actVerify()">✓ Vérifié — retiré du rayon</button>
+      <button class="as-btn ok" onclick="actVerify()">Vérifié — retiré du rayon</button>
       <button class="as-btn" onclick="actEdit()">Modifier date et infos</button>
       <button class="as-btn" onclick="actDuplicate()">Dupliquer (nouveau lot)</button>
     </div>
@@ -729,13 +759,13 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  dlc v5.1 · 11/10/2026 12:35
+  dlc v5.2 · 12/10/2026 12:45
 </div>
 
 <!-- Modal Ajout en lot -->
 <div class="modal-overlay" id="modal-lot" style="display:none" onclick="if(event.target.id==='modal-lot')closeLot()">
   <div class="modal" style="max-width:400px;text-align:center">
-    <div style="font-size:36px;margin-bottom:10px">✅</div>
+    <div style="width:52px;height:52px;margin:0 auto 10px;border-radius:50%;background:var(--green-bg, #ecf3ec);color:var(--green);display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5 10 17 19 7.5"/></svg></div>
     <div class="modal-title" style="font-size:20px;margin-bottom:6px" id="lot-title">Ajouté !</div>
     <div id="lot-brand" style="font-size:13px;color:var(--muted);margin-bottom:20px"></div>
     <button id="lot-another-btn" onclick="addAnother()" aria-label="Ajouter un autre produit de la même marque"
@@ -756,7 +786,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <!-- Modal édition produit base -->
 <div class="modal-overlay" id="modal-prod-edit" style="display:none" onclick="if(event.target.id==='modal-prod-edit')closeProdEdit()">
   <div class="modal" style="max-width:440px">
-    <div class="modal-title">✏ Modifier le produit</div>
+    <div class="modal-title">Modifier le produit</div>
     <div class="form-group"><label class="form-label">Nom de l'article</label><input class="form-input" id="pe-name" type="text"></div>
     <div class="form-group"><label class="form-label">Marque / fournisseur</label><input class="form-input" id="pe-brand" type="text"></div>
     <div class="form-group"><label class="form-label">Code-barres</label><input class="form-input" id="pe-barcode" type="text" inputmode="numeric"></div>
@@ -764,7 +794,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
       <button class="btn-cancel" onclick="closeProdEdit()">Annuler</button>
       <button class="btn-confirm" onclick="saveProdEdit()">Enregistrer →</button>
     </div>
-    <button onclick="deleteProdEdit()" style="width:100%;margin-top:12px;padding:10px;background:transparent;border:1px solid rgba(255,64,64,.35);border-radius:8px;color:var(--red);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer">🗑 Supprimer définitivement de la base</button>
+    <button onclick="deleteProdEdit()" style="width:100%;margin-top:12px;padding:10px;background:transparent;border:1px solid rgba(255,64,64,.35);border-radius:8px;color:var(--red);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer">Supprimer définitivement de la base</button>
   </div>
 </div>
 
@@ -783,20 +813,20 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <!-- Modal Sans DLC -->
 <div class="modal-overlay" id="modal-nodlc" style="display:none" onclick="if(event.target.id==='modal-nodlc')closeNoDlc()">
   <div class="modal" style="max-width:540px">
-    <div class="modal-title">⚠ Produits sans DLC</div>
+    <div class="modal-title">Produits sans DLC</div>
     <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:14px">
       <button id="nodlc-tab-liste" onclick="switchNodlcTab('liste')"
         style="padding:8px 16px;background:none;border:none;border-bottom:2px solid var(--amber);color:var(--amber);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;font-weight:600">
-        📋 Liste
+        Liste
       </button>
       <button id="nodlc-tab-exclusions" onclick="switchNodlcTab('exclusions')"
         style="padding:8px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer">
-        🚫 Exclusions <span id="nodlc-excl-count"></span>
+        Exclusions <span id="nodlc-excl-count"></span>
       </button>
     </div>
     <div id="nodlc-view-liste">
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Articles sans date DLC. Exclure ceux qui sont jetes quotidiennement.</div>
-      <input id="nodlc-search" type="text" placeholder="🔍 Filtrer..." oninput="renderNoDlcList()"
+      <input id="nodlc-search" type="text" placeholder="Filtrer..." oninput="renderNoDlcList()"
         autocomplete="off"
         style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;margin-bottom:12px">
       <div id="nodlc-list" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
@@ -820,8 +850,8 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
       <label class="form-label">Recherche produit (nom ou code-barres)</label>
       <div class="barcode-row">
         <input class="form-input" id="f-search" type="text" placeholder="Tape un nom ou scanne un code…" oninput="onSearchInput()" autocomplete="off" aria-label="Rechercher un produit">
-        <button class="btn-scan" onclick="triggerSearch()" title="Rechercher dans la base" aria-label="Rechercher dans la base">🔍</button>
-        <button class="btn-scan" onclick="openScanner()" title="Scanner via caméra" aria-label="Scanner via la caméra">📷</button>
+        <button class="btn-scan" onclick="triggerSearch()" title="Rechercher dans la base" aria-label="Rechercher dans la base"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+        <button class="btn-scan" onclick="openScanner()" title="Scanner via caméra" aria-label="Scanner via la caméra"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/></svg></button>
       </div>
       <div class="lookup-result" id="lookup-result"></div>
       <div id="suggestions" style="display:none;margin-top:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden;"></div>
@@ -869,7 +899,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     <div id="quick-result-content"></div>
     <div class="modal-actions" style="margin-top:20px;justify-content:center">
       <button class="btn-cancel" onclick="closeQuick()" aria-label="Fermer">Fermer</button>
-      <button class="btn-confirm" id="quick-edit-btn" style="display:none;background:var(--surface);color:var(--amber);border:1px solid var(--amber)" aria-label="Changer la date du produit">📅 Changer la date →</button>
+      <button class="btn-confirm" id="quick-edit-btn" style="display:none;background:var(--surface);color:var(--amber);border:1px solid var(--amber)" aria-label="Changer la date du produit">Changer la date →</button>
       <button class="btn-confirm" id="quick-add-btn" style="display:none" onclick="closeQuick();openModal()" aria-label="Ajouter une DLC">＋ Ajouter une DLC →</button>
     </div>
   </div>
@@ -878,9 +908,9 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <!-- Scanner Modal -->
 <div class="modal-overlay" id="modal-scanner" style="display:none" onclick="closeScannerOutside(event)">
   <div class="modal" style="max-width:480px">
-    <div class="modal-title">📷 Scanner un code-barres</div>
+    <div class="modal-title">Scanner un code-barres</div>
     <div id="scanner-inner" style="width:100%;border-radius:10px;overflow:hidden;background:#000;min-height:200px"></div>
-    <div id="scan-status" style="text-align:center;font-size:13px;color:var(--muted);margin-top:12px">⏳ Chargement…</div>
+    <div id="scan-status" style="text-align:center;font-size:13px;color:var(--muted);margin-top:12px">Chargement…</div>
     <div class="modal-actions" style="margin-top:12px">
       <button class="btn-cancel" onclick="closeScanner()" aria-label="Annuler le scan">Annuler</button>
     </div>
@@ -933,7 +963,7 @@ let _searchLibre    = true; // si false : recherche restreinte au bloc
 let _blocFilter     = null; // null = tous, 'BLOC_ID' = filtré
 
 // ── Helpers ──
-const daysUntil  = dateStr => { const d = new Date(dateStr); d.setHours(0,0,0,0); return Math.round((d - today) / 86400000); };
+const daysUntil  = dateStr => { const d = /^\d{4}-\d{2}-\d{2}$/.test(String(dateStr)) ? new Date(dateStr + 'T00:00:00') : new Date(dateStr); d.setHours(0,0,0,0); return Math.round((d - today) / 86400000); };
 const statusClass = days => days <= 0 ? 'red' : days <= 3 ? 'yellow' : days <= 10 ? 'green' : 'grey';
 const statusLabel = days => days < 0 ? `Périmé il y a ${Math.abs(days)}j` : days === 0 ? 'Périmé aujourd\'hui !' : days === 1 ? 'Demain !' : `Dans ${days} jours`;
 const fmtDate    = dateStr => new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-BE', { day:'2-digit', month:'short', year:'numeric' });
@@ -957,7 +987,7 @@ function startAutoSync() {
     try {
       products = await loadDlcFromSupabase();
       nextId = products.length + 1;
-      setSyncStatus('connected', `Supabase · ${products.length}`, true);
+      setSyncStatus('connected', 'À jour', true);
       render();
       updateNoDlcBadge();
     } catch(e) {
@@ -1069,7 +1099,7 @@ async function ensureSupabaseUserReady() {
 
 async function sbFetch(path, options={}) {
   const token = localStorage.getItem('sl_access_token');
-  const r = await fetch(SUPABASE_URL + path, {
+  const r = await slFetch(SUPABASE_URL + path, {
     ...options,
     headers: {
       'apikey': SUPABASE_ANON,
@@ -1082,7 +1112,7 @@ async function sbFetch(path, options={}) {
   const text = await r.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
-  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  if (!r.ok) throw new Error(slErrMsg(r.status, data));
   return data;
 }
 
@@ -1130,7 +1160,7 @@ async function loadExclusionsFromSupabase() {
 // ── Chargement initial ──
 let syncRetries = 0;
 async function fullSync() {
-  setSyncStatus('loading', 'Synchronisation…');
+  setSyncStatus('loading', 'Mise à jour…');
   try {
     const [supaProducts, supaDlc] = await Promise.all([
       loadProductsFromSupabase(),
@@ -1140,8 +1170,8 @@ async function fullSync() {
     products = Array.isArray(supaDlc) ? supaDlc : [];
     nextId = products.length + 1;
     syncRetries = 0;
-    setSyncStatus('connected', `Supabase · ${products.length}`, true);
-    toast(`✓ ${products.length} DLC chargée${products.length > 1 ? 's' : ''}`);
+    setSyncStatus('connected', 'À jour', true);
+    toast(`${products.length} DLC chargée${products.length > 1 ? 's' : ''}`);
     startAutoSync();
     await loadUserBlocs();
     updateNoDlcBadge();
@@ -1156,7 +1186,7 @@ async function fullSync() {
     }
     syncRetries = 0;
     setSyncStatus('error', 'Hors ligne', true);
-    toast('⚠ Connexion impossible — touche la pastille pour réessayer', true);
+    toast('Connexion impossible — touche la pastille pour réessayer', true);
     render();
   }
 }
@@ -1228,7 +1258,7 @@ function renderBlocSelector() {
   container.innerHTML =
     `<button class="bloc-pill ${_blocFilter === null ? 'active' : ''}" onclick="setBlocFilter(null)">Mes blocs</button>` +
     _userBlocs.map(b =>
-      `<button class="bloc-pill ${_blocFilter === b.id ? 'active' : ''}" onclick="setBlocFilter('${b.id}')" style="--bloc-color:${b.couleur || '#e8a045'}">${b.nom}</button>`
+      `<button class="bloc-pill ${_blocFilter === b.id ? 'active' : ''}" onclick="setBlocFilter('${escHtml(b.id)}')" style="--bloc-color:${/^#[0-9a-f]{3,8}$/i.test(b.couleur || '') ? b.couleur : '#e8a045'}">${escHtml(b.nom)}</button>`
     ).join('');
 }
 
@@ -1241,16 +1271,17 @@ function setBlocFilter(blocId) {
 
 // ── Recherche produit (base) ──
 function lookupLocal(query) {
+  const q = norm(query);
   return (_searchLibre ? sheetProducts : applyBlocFilterSheet(sheetProducts, true)).filter(p =>
-    (p.nom_article && p.nom_article.toLowerCase().includes(query)) ||
-    (p.patissier   && p.patissier.toLowerCase().includes(query))   ||
-    (p.code_barres && String(p.code_barres).includes(query))
+    norm(p.nom_article).includes(q) ||
+    norm(p.patissier).includes(q)   ||
+    (p.code_barres && String(p.code_barres).includes(String(query).trim()))
   ).slice(0, 6);
 }
 
 // ── Modal ──
 function openModal() {
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = localISO(today);
   document.getElementById('f-date').min   = todayStr;
   document.getElementById('f-date').value = todayStr;
   document.getElementById('modal').style.display = 'flex';
@@ -1279,7 +1310,7 @@ function fillFromProduct(p) {
   const lr = document.getElementById('lookup-result');
   lr.style.display = 'block';
   lr.className = 'lookup-result found';
-  lr.textContent = `✓ ${p.patissier} – ${p.nom_article}`;
+  lr.textContent = `${p.patissier} – ${p.nom_article}`;
   hideSuggestions();
 }
 
@@ -1310,7 +1341,7 @@ function triggerSearch() {
     hideSuggestions();
     lr.style.display = 'block';
     lr.className = 'lookup-result notfound';
-    lr.textContent = '✕ Produit non trouvé — entre les infos manuellement';
+    lr.textContent = 'Produit non trouvé : entre les infos manuellement';
   }
 }
 
@@ -1320,42 +1351,54 @@ async function addProduct() {
   const name    = document.getElementById('f-name').value.trim();
   const barcode = document.getElementById('f-barcode').value.trim();
   const dlc     = document.getElementById('f-date').value;
-  if (!brand || !name || !dlc) { toast('⚠ Marque, nom et DLC sont obligatoires', true); return; }
-
-  // Ferme le modal et affiche un feedback immédiat
+  if (!brand || !name || !dlc) { toast('Marque, nom et DLC sont obligatoires', true); return; }
+  if (_adding) return;
+  _adding = true;
+  const btn = document.querySelector('button[onclick="addProduct()"]');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
   hideSuggestions();
-  closeModal();
-  toast(`⏳ Ajout de "${name}"…`);
-
-  {
-    const user = getStoredUser();
-    try {
-      const inserted = await sbFetch('/rest/v1/dlc', {
-        method:'POST',
-        body: JSON.stringify({
-          tenant_id: user.tenant_id,
-          nom: name,
-          marque: brand,
-          code_barres: barcode || null,
-          dlc_date: dlc,
-          actif: true,
-          created_by: user.id || null
-        })
-      });
-      const row = Array.isArray(inserted) ? inserted[0] : null;
-      logHisto('ajout', { dbId: row && row.id, brand, name, barcode }, null, dlc);
-      products.push(normalizeDlcRow(row || { nom:name, marque:brand, code_barres:barcode, dlc_date:dlc }, nextId++));
-      nextId = products.length + 1;
-      render();
-      updateNoDlcBadge();
-      openLot(brand, name);
-      return;
-    } catch(e) {
-      toast(`⚠ Supabase : ${e.message}`, true);
+  const user = getStoredUser();
+  try {
+    const inserted = await sbFetch('/rest/v1/dlc', {
+      method:'POST',
+      body: JSON.stringify({
+        tenant_id: user.tenant_id,
+        nom: name,
+        marque: brand,
+        code_barres: barcode || null,
+        dlc_date: dlc,
+        actif: true,
+        created_by: user.id || null
+      })
+    });
+    // Le formulaire ne se ferme qu'une fois l'ajout confirmé : rien n'est perdu en cas d'erreur
+    closeModal();
+    const row = Array.isArray(inserted) ? inserted[0] : null;
+    logHisto('ajout', { dbId: row && row.id, brand, name, barcode }, null, dlc);
+    products.push(normalizeDlcRow(row || { nom:name, marque:brand, code_barres:barcode, dlc_date:dlc }, nextId++));
+    nextId = products.length + 1;
+    render();
+    updateNoDlcBadge();
+    openLot(brand, name);
+  } catch(e) {
+    if (/existe déjà/.test(e.message)) {
+      const dup = products.find(p => norm(p.name) === norm(name) && norm(p.brand) === norm(brand));
+      if (dup) {
+        closeModal();
+        toast(`« ${name} » est déjà suivi (DLC ${fmtDate(dup.dlc)}) : modifie sa date ici`, true);
+        openActions(dup.id);
+      } else {
+        toast(`« ${name} » est déjà suivi avec une DLC en cours`, true);
+      }
+    } else {
+      toast(e.message, true);
     }
+  } finally {
+    _adding = false;
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
   }
-
 }
+let _adding = false;
 
 // ── Vérifié = retire l'article du suivi ──
 async function verifyProduct(id) {
@@ -1365,7 +1408,7 @@ async function verifyProduct(id) {
   logHisto('retrait', p, p.dlc, null);
   render();
   updateNoDlcBadge();
-  if (!p.dbId) { toast(`✓ "${p.name}" vérifié`); return; }
+  if (!p.dbId) { toast(`"${p.name}" vérifié`); return; }
   showUndo(`« ${p.name} » retiré`);
   try {
     await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, { method:'PATCH', body: JSON.stringify({ actif:false }) });
@@ -1373,7 +1416,7 @@ async function verifyProduct(id) {
     // Échec : on remet l'article dans la liste
     products.push(p);
     render(); updateNoDlcBadge();
-    toast(`⚠ Retrait non enregistré : ${e.message}`, true);
+    toast(`Retrait non enregistré : ${e.message}`, true);
   }
 }
 
@@ -1402,7 +1445,7 @@ function openEditDate(id) {
   document.getElementById('edit-name').value = p.name || '';
   document.getElementById('edit-brand').value = p.brand || '';
   document.getElementById('edit-barcode').value = p.barcode || '';
-  document.getElementById('edit-date').min   = today.toISOString().split('T')[0];
+  document.getElementById('edit-date').min   = localISO(today);
   document.getElementById('modal-edit').style.display = 'flex';
 }
 
@@ -1418,8 +1461,8 @@ async function confirmEditDate() {
   const name    = document.getElementById('edit-name').value.trim();
   const brand   = document.getElementById('edit-brand').value.trim();
   const barcode = document.getElementById('edit-barcode').value.trim();
-  if (!newDlc) { toast('⚠ Sélectionne une date', true); return; }
-  if (!name || !brand) { toast('⚠ Nom et marque obligatoires', true); return; }
+  if (!newDlc) { toast('Sélectionne une date', true); return; }
+  if (!name || !brand) { toast('Nom et marque obligatoires', true); return; }
   const p = products.find(x => x.id === editingId);
   if (!p) return;
   const old = { name: p.name, brand: p.brand, barcode: p.barcode };
@@ -1435,9 +1478,9 @@ async function confirmEditDate() {
     if (dateChanged) logHisto('date', { ...p, name, brand, barcode }, p.dlc, newDlc);
     Object.assign(p, { name, brand, barcode, dlc:newDlc });
     if (infoChanged) await syncProduitBase(old, { name, brand, barcode });
-    toast('✓ Article mis à jour');
+    toast('Article mis à jour');
     render(); updateNoDlcBadge();
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
 }
 
 // ── v3.3 : base produits (édition / suppression) ──
@@ -1467,7 +1510,7 @@ async function syncProduitBase(oldInfo, newInfo) {
   const sp = findBaseProduct(oldInfo);
   if (!sp) return;
   try { await updateBaseProduct(sp, newInfo); }
-  catch(e) { toast('⚠ Base produits non mise à jour : ' + e.message, true); }
+  catch(e) { toast('Base produits non mise à jour : ' + e.message, true); }
 }
 
 async function deleteFromEdit() {
@@ -1480,9 +1523,9 @@ async function deleteFromEdit() {
     products = products.filter(x => x !== p);
     const sp = findBaseProduct(p);
     if (sp) await deleteBaseProduct(sp);
-    toast(`🗑 "${p.name}" supprimé définitivement`);
+    toast(`"${p.name}" supprimé définitivement`);
     render(); updateNoDlcBadge();
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
 }
 
 let _prodEditRef = null;
@@ -1503,10 +1546,10 @@ async function saveProdEdit() {
                  brand: document.getElementById('pe-brand').value.trim(),
                  barcode: document.getElementById('pe-barcode').value.trim() };
   if (!sp) return;
-  if (!info.name || !info.brand) { toast('⚠ Nom et marque obligatoires', true); return; }
+  if (!info.name || !info.brand) { toast('Nom et marque obligatoires', true); return; }
   closeProdEdit();
-  try { await updateBaseProduct(sp, info); toast('✓ Produit mis à jour'); renderNoDlcList(); updateNoDlcBadge(); }
-  catch(e) { toast('⚠ ' + e.message, true); }
+  try { await updateBaseProduct(sp, info); toast('Produit mis à jour'); renderNoDlcList(); updateNoDlcBadge(); }
+  catch(e) { toast('' + e.message, true); }
 }
 
 async function deleteProdEdit() {
@@ -1514,11 +1557,12 @@ async function deleteProdEdit() {
   if (!sp) return;
   if (!confirm(`Supprimer définitivement "${sp.nom_article || sp.nom}" de la base produits ?`)) return;
   closeProdEdit();
-  try { await deleteBaseProduct(sp); toast('🗑 Produit supprimé'); renderNoDlcList(); updateNoDlcBadge(); }
-  catch(e) { toast('⚠ ' + e.message, true); }
+  try { await deleteBaseProduct(sp); toast('Produit supprimé'); renderNoDlcList(); updateNoDlcBadge(); }
+  catch(e) { toast('' + e.message, true); }
 }
 // ── Recherche rapide page d'accueil ──
 let quickTimer = null;
+let _quickMatches = [];
 function onQuickInput() {
   clearTimeout(quickTimer);
   quickTimer = setTimeout(() => {
@@ -1530,13 +1574,13 @@ function onQuickInput() {
     if (!matches.length) { hideQuickSugg(); return; }
 
     sugg.style.display = 'block';
-    sugg.innerHTML = matches.map(p => `
-      <div onclick="selectQuickSugg('${p.nom_article.replace(/'/g,"\\'")}','${(p.patissier||'').replace(/'/g,"\\'")}')"
-        style="padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);background:var(--surface);transition:background .15s"
-        onmouseover="this.style.background='#252520'" onmouseout="this.style.background='var(--surface)'">
-        <span style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">${p.patissier || ''}</span><br>
-        <span>${p.nom_article}</span>
-        ${p.code_barres ? `<span style="color:var(--muted);font-size:10px;margin-left:8px">${p.code_barres}</span>` : ''}
+    _quickMatches = matches;
+    sugg.innerHTML = matches.map((p, i) => `
+      <div onmousedown="event.preventDefault()" onclick="selectQuickSugg(_quickMatches[${i}].nom_article)" class="quick-sugg-item"
+        style="padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);background:var(--surface);transition:background .15s">
+        <span style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">${escHtml(p.patissier || '')}</span><br>
+        <span>${escHtml(p.nom_article)}</span>
+        ${p.code_barres ? `<span style="color:var(--muted);font-size:10px;margin-left:8px">${escHtml(p.code_barres)}</span>` : ''}
       </div>`).join('');
   }, 200);
 }
@@ -1555,13 +1599,14 @@ function hideQuickSugg() {
 function quickLookup() {
   hideQuickSugg();
   const q = document.getElementById('quick-search').value.trim().toLowerCase();
-  if (!q) { toast('⚠ Tape un nom ou un code-barres', true); return; }
+  if (!q) { toast('Tape un nom ou un code-barres', true); return; }
 
   let crPool = products;
   if (!_searchLibre) crPool = applyBlocFilter(products, true);
+  const nq = norm(q);
   const matches = crPool.filter(p =>
-    p.name.toLowerCase().includes(q) ||
-    p.brand.toLowerCase().includes(q) ||
+    norm(p.name).includes(nq) ||
+    norm(p.brand).includes(nq) ||
     (p.barcode && p.barcode.includes(q))
   ).sort((a, b) => daysUntil(a.dlc) - daysUntil(b.dlc));
 
@@ -1575,8 +1620,8 @@ function quickLookup() {
 
     // En-tête avec nom du produit
     let html = `
-      <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;margin-bottom:4px">${first.name}</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${first.brand}</div>`;
+      <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;margin-bottom:4px">${escHtml(first.name)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${escHtml(first.brand)}</div>`;
 
     if (matches.length === 1) {
       // Un seul — affichage large
@@ -1632,8 +1677,8 @@ function quickLookup() {
   } else {
     // Pré-remplit le formulaire si trouvé dans la base
     const sheetMatch = sheetProducts.find(p =>
-      (p.nom_article && p.nom_article.toLowerCase().includes(q)) ||
-      (p.patissier   && p.patissier.toLowerCase().includes(q))   ||
+      norm(p.nom_article).includes(nq) ||
+      norm(p.patissier).includes(nq)   ||
       (p.code_barres && String(p.code_barres).includes(q))
     );
     if (sheetMatch) {
@@ -1645,7 +1690,7 @@ function quickLookup() {
       document.getElementById('f-search').value = document.getElementById('quick-search').value.trim();
     }
     content.innerHTML = `
-      <div style="font-size:40px;margin-bottom:12px">🔍</div>
+      
       <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:8px">Aucune DLC trouvée</div>
       <div style="font-size:13px;color:var(--muted)">Ce produit n'a pas encore de date enregistrée.</div>
       <div style="font-size:13px;color:var(--muted);margin-top:6px">Tu veux en ajouter une ?</div>`;
@@ -1737,7 +1782,7 @@ function switchNodlcTab(tab) {
 }
 
 function renderNoDlcList() {
-  const q    = (document.getElementById('nodlc-search').value || '').toLowerCase().trim();
+  const q    = norm(document.getElementById('nodlc-search').value);
   const list = document.getElementById('nodlc-list');
   const excl = document.getElementById('nodlc-excl-count');
   const exclusions = _exclusionsCache || [];
@@ -1745,40 +1790,39 @@ function renderNoDlcList() {
   if (excl) excl.textContent = exclCount ? `(${exclCount})` : '';
 
   const items = q ? _missingProducts.filter(p =>
-    (p.nom_article || '').toLowerCase().includes(q) ||
-    (p.patissier   || '').toLowerCase().includes(q) ||
+    norm(p.nom_article || p.nom).includes(q) ||
+    norm(p.patissier || p.marque).includes(q) ||
     String(p.code_barres || '').includes(q)
   ) : _missingProducts;
+  _nodlcItems = items;
 
   if (!items.length) {
     list.innerHTML = `<div style="text-align:center;padding:30px;color:var(--green)">
-      ${q ? '🔍 Aucun résultat' : '✅ Tous les produits ont une DLC enregistrée !'}
+      ${q ? 'Aucun résultat' : 'Tous les produits ont une DLC enregistrée'}
     </div>`;
     return;
   }
 
-  list.innerHTML = items.map(p => {
+  list.innerHTML = items.map((p, i) => {
     const nom     = p.nom_article || p.nom || '';
     const marque  = p.patissier   || p.marque || '';
-    const barcode = p.code_barres || '';
-    const safeName   = nom.replace(/'/g, "\'");
-    const safeMarque = marque.replace(/'/g, "\'");
+    const barcode = String(p.code_barres || '');
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;
               background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nom}</div>
-        <div style="font-size:11px;color:var(--muted)">${marque}${barcode ? ' · ' + barcode : ''}</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(nom)}</div>
+        <div style="font-size:11px;color:var(--muted)">${escHtml(marque)}${barcode ? ' · ' + escHtml(barcode) : ''}</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
         <button onclick="openProdEdit(${sheetProducts.indexOf(p)})" title="Modifier ou supprimer"
           style="padding:6px 10px;min-height:36px;background:transparent;border:1px solid var(--border);border-radius:6px;
-                 font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer">✏</button>
-        <button onclick="exclureArticle('${safeName}')" title="Jeter quotidiennement — ne plus afficher"
+                 font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer"><span class=ic-edit></span></button>
+        <button onclick="exclureArticle(nodlcName(${i}))" title="Jeter quotidiennement — ne plus afficher"
           style="padding:6px 10px;min-height:36px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;
                  font-family:'DM Mono',monospace;font-size:11px;color:var(--red);cursor:pointer;white-space:nowrap">
-          🚫 Exclure
+          Exclure
         </button>
-        <button onclick="addDlcFromNodlc('${safeName}','${safeMarque}','${barcode}')" aria-label="Ajouter une DLC pour ${nom}"
+        <button onclick="addDlcFromNodlcIdx(${i})" aria-label="Ajouter une DLC pour ${escHtml(nom)}"
           style="padding:6px 10px;min-height:36px;background:var(--amber);border:none;border-radius:6px;
                  font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:#000;cursor:pointer;white-space:nowrap">
           ＋ DLC
@@ -1788,6 +1832,12 @@ function renderNoDlcList() {
   }).join('');
 }
 
+let _nodlcItems = [];
+function nodlcName(i) { const p = _nodlcItems[i] || {}; return p.nom_article || p.nom || ''; }
+function addDlcFromNodlcIdx(i) {
+  const p = _nodlcItems[i]; if (!p) return;
+  addDlcFromNodlc(p.nom_article || p.nom || '', p.patissier || p.marque || '', String(p.code_barres || ''));
+}
 async function exclureArticle(nom) {
   const nomLower = nom.toLowerCase().trim();
   // Retirer immédiatement de la liste affichée
@@ -1807,7 +1857,7 @@ async function exclureArticle(nom) {
       body: JSON.stringify({ tenant_id:user.tenant_id, nom, actif:true, created_by:user.id || null })
     });
   } catch(e) {
-    toast(`⚠ Exclusion non enregistrée : ${e.message}`, true);
+    toast(`Exclusion non enregistrée : ${e.message}`, true);
   }
 }
 
@@ -1872,7 +1922,7 @@ async function reintegrerArticle(idx) {
       body: JSON.stringify({ actif:false })
     });
   } catch(e) {
-    toast(`⚠ Synchronisation échouée : ${e.message}`, true);
+    toast(`Synchronisation échouée : ${e.message}`, true);
   }
 }
 
@@ -1891,8 +1941,8 @@ async function saveToSheets() {
   const brand   = document.getElementById('f-brand').value.trim();
   const name    = document.getElementById('f-name').value.trim();
   const barcode = document.getElementById('f-barcode').value.trim();
-  if (!name) { toast('⚠ Remplis au moins le nom du produit', true); return; }
-  toast(`⏳ Enregistrement de "${name}" dans la base produits…`);
+  if (!name) { toast('Remplis au moins le nom du produit', true); return; }
+  toast(`Enregistrement de "${name}" dans la base produits…`);
   const user = getStoredUser();
   try {
     await sbFetch('/rest/v1/produits', {
@@ -1900,9 +1950,9 @@ async function saveToSheets() {
       body: JSON.stringify({ tenant_id:user.tenant_id, nom:name, marque:brand, code_barres:barcode || null, categorie:'Rayon', created_by:user.id || null })
     });
     sheetProducts = await loadProductsFromSupabase();
-    toast(`✓ "${name}" ajouté dans la base produits`);
+    toast(`"${name}" ajouté dans la base produits`);
   } catch(e) {
-    toast(`⚠ ${e.message}`, true);
+    toast(`${e.message}`, true);
   }
 }
 let html5Scanner = null;
@@ -1918,7 +1968,7 @@ function preloadZXing() {
 async function openScanner() {
   // Affiche le modal EN PREMIER — Html5Qrcode a besoin d'un div visible avec dimensions
   document.getElementById('modal-scanner').style.display = 'flex';
-  document.getElementById('scan-status').textContent = '⏳ Chargement du scanner…';
+  document.getElementById('scan-status').textContent = 'Chargement du scanner…';
   document.getElementById('scanner-inner').innerHTML = '';
 
   // Attend que le modal soit rendu dans le DOM (2 frames)
@@ -1930,7 +1980,7 @@ async function openScanner() {
     await new Promise(r => setTimeout(r, 300));
   }
   if (!window.Html5Qrcode) {
-    document.getElementById('scan-status').textContent = '⚠ Scanner non disponible — vérifie ta connexion internet';
+    document.getElementById('scan-status').textContent = 'Scanner non disponible — vérifie ta connexion internet';
     return;
   }
 
@@ -1954,9 +2004,9 @@ async function openScanner() {
       (code) => { onBarcodeScanned(code); },
       () => {}
     );
-    document.getElementById('scan-status').textContent = '🔍 Centrez le code dans le cadre…';
+    document.getElementById('scan-status').textContent = 'Centrez le code dans le cadre…';
   } catch(e) {
-    document.getElementById('scan-status').textContent = '⚠ ' + e;
+    document.getElementById('scan-status').textContent = '' + e;
   }
 }
 
@@ -1985,7 +2035,7 @@ function onBarcodeScanned(code) {
   }
   document.getElementById('f-search').value  = code;
   document.getElementById('f-barcode').value = code;
-  toast(`📷 Code détecté : ${code}`);
+  toast(`Code détecté : ${code}`);
   triggerSearch();
 }
 
@@ -2110,7 +2160,7 @@ function renderHisto() {
   const h = getHisto();
   if (!h.length) { el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">Aucun changement enregistré.</div>'; return; }
   const labels = { retrait: ['Retiré', 'var(--red)', 'var(--red-bg)'], date: ['Date modifiée', 'var(--yellow)', 'var(--yellow-bg)'], ajout: ['Ajouté', 'var(--green)', 'var(--green-bg)'] };
-  const minDate = today.toISOString().split('T')[0];
+  const minDate = localISO(today);
   el.innerHTML = h.map((e, i) => {
     const [lab, col, bg] = labels[e.type] || ['?', 'var(--muted)', 'var(--surface2)'];
     const when = new Date(e.t).toLocaleString('fr-BE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
@@ -2154,37 +2204,37 @@ async function undoHisto(i) {
   try {
     if (e.type === 'retrait') {
       await restoreRetrait(e, e.oldDlc);
-      toast(`✓ "${e.name}" remis en suivi`);
+      toast(`"${e.name}" remis en suivi`);
     } else if (e.type === 'date') {
       const p = findProductForHisto(e);
       if (!p) throw new Error('article plus en suivi');
       await setProductDate(p, e.oldDlc);
-      toast(`✓ Date remise au ${fmtDate(e.oldDlc)}`);
+      toast(`Date remise au ${fmtDate(e.oldDlc)}`);
     } else if (e.type === 'ajout') {
       const p = findProductForHisto(e);
       if (!p) throw new Error('article introuvable');
       if (p.dbId) await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, { method:'PATCH', body: JSON.stringify({ actif:false }) });
       products = products.filter(x => x !== p);
-      toast(`✓ Ajout de "${e.name}" annulé`);
+      toast(`Ajout de "${e.name}" annulé`);
     }
     await markHistoUndone(e);
     render(); updateNoDlcBadge(); renderHisto();
-  } catch(err) { toast('⚠ ' + err.message, true); }
+  } catch(err) { toast('' + err.message, true); }
 }
 
 async function setDateFromHisto(i) {
   const h = getHisto(); const e = h[i];
   const dlc = (document.getElementById('histo-date-' + i) || {}).value;
-  if (!e || !dlc) { toast('⚠ Choisis une date', true); return; }
+  if (!e || !dlc) { toast('Choisis une date', true); return; }
   try {
     const p = findProductForHisto(e);
     if (p) await setProductDate(p, dlc);
     else await restoreRetrait(e, dlc);
     await markHistoUndone(e);
     logHisto(p ? 'date' : 'ajout', p || { dbId: e.dbId, brand: e.brand, name: e.name, barcode: e.barcode }, p ? e.newDlc || e.oldDlc : null, dlc);
-    toast(`✓ "${e.name}" → ${fmtDate(dlc)}`);
+    toast(`"${e.name}" → ${fmtDate(dlc)}`);
     render(); updateNoDlcBadge(); renderHisto();
-  } catch(err) { toast('⚠ ' + err.message, true); }
+  } catch(err) { toast('' + err.message, true); }
 }
 
 // ── Dupliquer un article ──
@@ -2197,9 +2247,9 @@ function duplicateProduct(id) {
   document.getElementById('f-search').value  = p.name;
   document.getElementById('f-date').value    = '';
   // Mettre la date d'aujourd'hui par défaut
-  document.getElementById('f-date').value = today.toISOString().split('T')[0];
+  document.getElementById('f-date').value = localISO(today);
   openModal();
-  toast(`⧉ Copie de "${p.name}" — modifie la date puis valide`);
+  toast(`Copie de "${p.name}" — modifie la date puis valide`);
 }
 
 // ── Ajout en lot ──
@@ -2215,7 +2265,7 @@ function addAnother() {
   closeLot();
   document.getElementById('f-brand').value = _lastBrand;
   document.getElementById('f-name').value  = '';
-  document.getElementById('f-date').value  = today.toISOString().split('T')[0];
+  document.getElementById('f-date').value  = localISO(today);
   document.getElementById('f-search').value = '';
   openModal();
   setTimeout(() => document.getElementById('f-name').focus(), 200);
@@ -2341,7 +2391,7 @@ function undoLast() {
 // ── Raccourcis de date ──
 function setDatePreset(inputId, n) {
   const x = new Date(); x.setHours(12, 0, 0, 0); x.setDate(x.getDate() + n);
-  document.getElementById(inputId).value = x.toISOString().slice(0, 10);
+  document.getElementById(inputId).value = localISO(x);
 }
 
 // ── Toast v2.8 ──
@@ -2350,7 +2400,7 @@ function toast(msg, warn=false) {
   el.className = 'toast' + (warn ? ' warn' : '');
   el.style.borderColor = warn ? 'var(--yellow)' : 'var(--border)';
   // v2.8: detect type for colored icon
-  const isSuccess = msg.startsWith('✓') || msg.startsWith('✅');
+  const isSuccess = !warn && !/…$/.test(msg);
   if (isSuccess && !warn) {
     el.classList.add('success');
     el.style.borderColor = 'var(--green)';

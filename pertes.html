@@ -1,6 +1,37 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<meta charset="UTF-8">
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
 <script id="sl-session">
 // StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
 (function () {
@@ -92,7 +123,6 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 
 })();
 </script>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StoreLine</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
@@ -442,7 +472,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">pertes v2.3 · 11/10/2026 12:35</div>
+<div class="version-tag">pertes v2.4 · 12/10/2026 12:45</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -454,6 +484,7 @@ let pertesFilter = 'semaine';
 let selectedPerte = null;
 let html5Scanner = null;
 let dataSource = 'supabase';
+let pertesHits = [];
 
 
 function getStoredUser() {
@@ -531,7 +562,7 @@ async function ensureSupabaseUserReady() {
 
 async function sbFetch(path, options={}) {
   const token = localStorage.getItem('sl_access_token');
-  const r = await fetch(SUPABASE_URL + path, {
+  const r = await slFetch(SUPABASE_URL + path, {
     ...options,
     headers: {
       'apikey': SUPABASE_ANON,
@@ -544,7 +575,7 @@ async function sbFetch(path, options={}) {
   const text = await r.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
-  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  if (!r.ok) throw new Error(slErrMsg(r.status, data));
   return data;
 }
 
@@ -555,7 +586,8 @@ function normalizePerteRow(r) {
     brand: r.brand || r.marque || '',
     barcode: String(r.barcode || r.code_barres || '').trim(),
     quantity: String(r.quantity || r.quantite || 1),
-    date: r.date || r.date_perte || ''
+    date: r.date || r.date_perte || '',
+    createdBy: r.created_by || null
   };
 }
 
@@ -574,7 +606,7 @@ async function loadProducts() {
 async function loadPertesFromSupabase() {
   const user = await ensureSupabaseUserReady();
   if (!user.tenant_id) throw new Error('Tenant Supabase manquant');
-  const rows = await sbFetch(`/rest/v1/pertes?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,nom,marque,code_barres,quantite,date_perte,created_at&order=date_perte.desc,created_at.desc`);
+  const rows = await sbFetch(`/rest/v1/pertes?tenant_id=eq.${encodeURIComponent(user.tenant_id)}&select=id,nom,marque,code_barres,quantite,date_perte,created_at,created_by&order=date_perte.desc,created_at.desc`);
   return (rows || []).map(normalizePerteRow);
 }
 
@@ -614,40 +646,44 @@ function onPertesInput() {
 }
 
 function showPertesDropdown() {
-  const q = document.getElementById('pertes-search').value.toLowerCase().trim();
+  const raw = document.getElementById('pertes-search').value.trim();
+  const q = norm(raw);
   const dd = document.getElementById('pertes-suggestions');
   if (!q || q.length < 2) { dd.style.display = 'none'; return; }
-  const hits = sheetProducts.filter(p => {
+  pertesHits = sheetProducts.filter(p => {
     const f = getProduitFields(p);
-    return f.nom.toLowerCase().includes(q) || f.marque.toLowerCase().includes(q) || f.barcode.includes(q);
-  }).slice(0, 6);
-  if (!hits.length) { dd.style.display = 'none'; return; }
-  dd.innerHTML = hits.map(p => {
-    const { nom, marque, barcode } = getProduitFields(p);
-    return `<div onclick="selectPertesProduct('${nom.replace(/'/g,"\\'")}','${marque.replace(/'/g,"\\'")}','${barcode}')"
-      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;"
-      onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background=''">
-      <span style="font-weight:600">${nom}</span>
-      <span style="color:var(--muted);font-size:11px;margin-left:8px">${marque}${barcode ? ' · ' + barcode : ''}</span>
-    </div>`;
-  }).join('');
+    return norm(f.nom).includes(q) || norm(f.marque).includes(q) || f.barcode.includes(q);
+  }).slice(0, 6).map(getProduitFields);
+  const rows = pertesHits.map((f, i) => `<div onmousedown="event.preventDefault()" onclick="pickPertesHit(${i})"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;">
+      <span style="font-weight:600">${esc(f.nom)}</span>
+      <span style="color:var(--muted);font-size:11px;margin-left:8px">${esc([f.marque, f.barcode].filter(Boolean).join(' · '))}</span>
+    </div>`);
+  // Produit absent de la base : on peut quand même enregistrer la perte
+  rows.push(`<div onmousedown="event.preventDefault()" onclick="pickPertesFree()" style="padding:10px 14px;cursor:pointer;font-size:13px;color:var(--amber-ink, var(--amber))">
+      Enregistrer « ${esc(raw)} » (hors base)</div>`);
+  dd.innerHTML = rows.join('');
   dd.style.display = 'block';
+}
+function pickPertesHit(i) { const f = pertesHits[i]; if (f) selectPertesProduct(f.nom, f.marque, f.barcode); }
+function pickPertesFree() {
+  const raw = document.getElementById('pertes-search').value.trim();
+  if (raw) selectPertesProduct(raw, '', /^\d{8,14}$/.test(raw) ? raw : '');
 }
 
 function hidePertesDropdown() { document.getElementById('pertes-suggestions').style.display = 'none'; }
 
 function searchPertesProduct() {
-  const q = document.getElementById('pertes-search').value.toLowerCase().trim();
+  const raw = document.getElementById('pertes-search').value.trim();
+  const q = norm(raw);
   if (!q) return;
-  const hit = sheetProducts.find(p => {
-    const f = getProduitFields(p);
-    return f.nom.toLowerCase().includes(q) || f.barcode === q;
-  });
+  const hit = sheetProducts.find(p => { const f = getProduitFields(p); return f.barcode === raw || norm(f.nom) === q; })
+    || sheetProducts.find(p => norm(getProduitFields(p).nom).includes(q));
   if (hit) {
     const f = getProduitFields(hit);
     selectPertesProduct(f.nom, f.marque, f.barcode);
   } else {
-    toast('⚠ Produit non trouvé dans la base', true);
+    pickPertesFree();
   }
 }
 
@@ -675,9 +711,8 @@ function adjustQty(delta) {
 
 async function enregistrerPerte() {
   if (!selectedPerte) return;
-  const qty = parseInt(document.getElementById('pertes-qty').value) || 1;
+  const qty = Math.max(1, Math.min(999, parseInt(document.getElementById('pertes-qty').value) || 1));
   const { nom, marque, barcode } = selectedPerte;
-  toast(`⏳ Enregistrement de ${qty} × ${nom}…`);
   const user = getStoredUser();
   try {
     await sbFetch('/rest/v1/pertes', {
@@ -685,20 +720,31 @@ async function enregistrerPerte() {
       body: JSON.stringify({
         tenant_id: user.tenant_id,
         nom,
-        marque,
+        marque: marque || null,
         code_barres: barcode || null,
         quantite: qty,
-        date_perte: new Date().toISOString().slice(0, 10),
+        date_perte: localISO(),
         created_by: user.id || null
       })
     });
-    toast(`✓ Perte enregistrée — ${qty} × ${nom}`);
+    toast(`Perte enregistrée : ${qty} × ${nom}`);
     clearPertesSelection();
-    pertesData = [];
     loadPertes();
   } catch(e) {
-    toast(`⚠ ${e.message}`, true);
+    toast(e.message, true);
   }
+}
+
+async function annulerPerte(id) {
+  const h = pertesData.find(x => x.id === id);
+  if (!h) return;
+  if (!confirm(`Supprimer la perte « ${h.quantity} × ${h.name} » ?`)) return;
+  try {
+    const rows = await sbFetch(`/rest/v1/pertes?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (Array.isArray(rows) && rows.length === 0) throw new Error("Tu ne peux supprimer que tes propres saisies");
+    toast('Perte supprimée');
+    loadPertes();
+  } catch (e) { toast(e.message, true); }
 }
 
 // ── Historique ──
@@ -724,6 +770,8 @@ async function loadPertes() {
 
 function renderPertes() {
   const now = new Date(); now.setHours(0,0,0,0);
+  const me = getStoredUser();
+  const canManage = ['superadmin', 'admin', 'manager'].includes(me.role);
   const filtered = pertesData.filter(h => {
     if (!h.date) return true;
     const d = new Date(h.date + 'T00:00:00');
@@ -734,7 +782,7 @@ function renderPertes() {
   }).sort((a,b) => (b.date||'').localeCompare(a.date||''));
 
   const totalQty = filtered.reduce((acc,h) => acc + (parseInt(h.quantity)||1), 0);
-  const noms     = new Set(filtered.map(h => h.name));
+  const noms     = new Set(filtered.map(h => norm(h.name)));
   document.getElementById('pertes-stats').innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
       <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--red)">${totalQty}</div>
@@ -742,13 +790,12 @@ function renderPertes() {
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
       <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--text)">${noms.size}</div>
-      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Produits distincts · ${dataSource === 'supabase' ? 'Supabase' : 'Sheets'}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Produits distincts</div>
     </div>`;
 
   const list = document.getElementById('pertes-list');
   if (!filtered.length) {
     list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
-      <div style="font-size:36px;margin-bottom:12px">📉</div>
       <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">Aucune perte enregistrée</div>
       <div style="font-size:12px">Recherche ou scanne un produit pour commencer.</div></div>`;
     return;
@@ -759,20 +806,22 @@ function renderPertes() {
   for (const [dateKey, items] of Object.entries(byDate)) {
     const label  = dateKey === 'Inconnu' ? 'Date inconnue' : fmtDate(dateKey);
     const dayQty = items.reduce((a,h) => a+(parseInt(h.quantity)||1), 0);
-    html += `<div class="histo-section-title">${label}
+    html += `<div class="histo-section-title">${esc(label)}
       <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1px 8px;font-size:10px">${dayQty} unité${dayQty>1?'s':''}</span>
     </div>`;
     html += items.map(h => {
       const qty = parseInt(h.quantity)||1;
+      const canDel = h.id && (canManage || (h.createdBy && h.createdBy === me.id));
       return `<div style="background:var(--red-bg);border:1px solid rgba(255,64,64,.25);border-radius:10px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
         <div style="flex:1;min-width:0">
-          <div style="font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.name||''}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${h.brand||''}${h.barcode?' · '+h.barcode:''}</div>
+          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h.name)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${esc([h.brand, h.barcode].filter(Boolean).join(' · '))}</div>
         </div>
         <div style="flex-shrink:0;text-align:center;min-width:42px">
           <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:var(--red);line-height:1">${qty}</div>
           <div style="font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">unité${qty>1?'s':''}</div>
         </div>
+        ${canDel ? `<button onclick="annulerPerte('${esc(h.id)}')" aria-label="Supprimer cette perte" title="Supprimer" style="flex-shrink:0;width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>` : ''}
       </div>`;
     }).join('');
   }
@@ -825,9 +874,9 @@ function onPertesScan(code) {
   if (hit) {
     const f = getProduitFields(hit);
     selectPertesProduct(f.nom, f.marque, f.barcode);
-    toast(`📷 Produit trouvé : ${f.nom}`);
+    toast(`Produit trouvé : ${f.nom}`);
   } else {
-    toast(`⚠ Code ${code} non trouvé dans la base`, true);
+    toast(`Code ${code} non trouvé dans la base`, true);
   }
 }
 

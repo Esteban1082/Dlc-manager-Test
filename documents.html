@@ -1,6 +1,37 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<meta charset="UTF-8">
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
 <script id="sl-session">
 // StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
 (function () {
@@ -92,7 +123,6 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 
 })();
 </script>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Documents – StoreLine</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
@@ -426,14 +456,14 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 <!-- Modal checklist -->
 <div class="modal-overlay" id="modal-checklist" onclick="if(event.target.id==='modal-checklist')closeChecklistModal()">
   <div class="modal">
-    <div class="modal-title">＋ Nouvelle checklist</div>
+    <div class="modal-title" id="cl-modal-title">Nouvelle checklist</div>
     <label class="form-label">Nom de la liste</label>
     <input id="cl-nom" class="form-input" placeholder="Ex : Ouverture matin">
     <label class="form-label">Tâches (une par ligne)</label>
     <textarea id="cl-tasks" style="width:100%;padding:11px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;resize:vertical;min-height:120px;margin-bottom:14px;" placeholder="Nettoyer le plan de travail&#10;Vérifier les températures&#10;Contrôler les DLC"></textarea>
     <div style="display:flex;gap:10px">
       <button onclick="closeChecklistModal()" style="flex:1;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'DM Mono',monospace;font-size:13px;">Annuler</button>
-      <button onclick="saveChecklist()" style="flex:1;padding:11px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:#000;">Créer</button>
+      <button onclick="saveChecklist()" id="cl-save-btn" style="flex:1;padding:11px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#000;">Créer</button>
     </div>
   </div>
 </div>
@@ -480,7 +510,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">documents v4.1 · 11/10/2026 12:35</div>
+<div class="version-tag">documents v4.2 · 12/10/2026 12:45</div>
 
 <script>
 // ── Supabase (fetch natif) ──
@@ -562,7 +592,7 @@ async function ensureSupabaseUserReady() {
 
 async function sbFetch(path, options={}) {
   const token = localStorage.getItem('sl_access_token');
-  const r = await fetch(SUPABASE_URL + path, {
+  const r = await slFetch(SUPABASE_URL + path, {
     ...options,
     headers: {
       'apikey': SUPABASE_ANON,
@@ -575,7 +605,7 @@ async function sbFetch(path, options={}) {
   const text = await r.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch(e) { data = text; }
-  if (!r.ok) throw new Error((data && (data.message || data.error)) || `Supabase ${r.status}`);
+  if (!r.ok) throw new Error(slErrMsg(r.status, data));
   return data;
 }
 
@@ -603,9 +633,11 @@ function toast(msg, isError=false) {
 
 function setSyncBadge(state) {
   const b = document.getElementById('sync-badge');
-  if (state === 'ok') { b.className = 'sync-badge ok'; b.textContent = 'Sync'; }
-  else if (state === 'loading') { b.className = 'sync-badge loading'; b.textContent = '⟳ Sync…'; }
-  else { b.className = 'sync-badge'; b.textContent = '⟳ Sync'; }
+  if (!b) return;
+  // Discret : rien quand tout va bien, un mot clair sinon
+  if (state === 'ok') { b.className = 'sync-badge ok'; b.textContent = ''; }
+  else if (state === 'loading') { b.className = 'sync-badge loading'; b.textContent = 'Chargement…'; }
+  else { b.className = 'sync-badge'; b.textContent = 'Hors ligne'; }
 }
 
 // ── Navigation ──
@@ -630,7 +662,7 @@ async function loadCheckStates() {
 function renderChecklists() {
   const el = document.getElementById('checklists-container');
   if (!checklists.length) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucune checklist.<br>Clique sur ＋ Liste pour en créer une.</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucune checklist.<br>Touche « Liste » pour en créer une.</div>';
     return;
   }
   el.innerHTML = checklists.map(cl => {
@@ -642,7 +674,7 @@ function renderChecklists() {
       <div class="checklist-header">
         <div>
           <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700">${esc(cl.nom)}</div>
-          <div style="font-size:11px;color:${color};margin-top:3px">${done}/${tasks.length} · ${pct === 100 ? '✓ Terminé !' : pct > 0 ? 'En cours' : 'À faire'}</div>
+          <div style="font-size:12px;color:${color};margin-top:3px">${done}/${tasks.length} · ${pct === 100 ? 'Terminé' : pct > 0 ? 'En cours' : 'À faire'}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <svg class="progress-ring" viewBox="0 0 36 36">
@@ -651,18 +683,19 @@ function renderChecklists() {
               stroke-dasharray="${pct * 0.942} 94.2" stroke-dashoffset="23.55" stroke-linecap="round" transform="rotate(-90 18 18)"/>
             <text x="18" y="22" text-anchor="middle" fill="${color}" font-size="9" font-family="DM Mono,monospace">${pct}%</text>
           </svg>
-          <button onclick="deleteChecklist('${cl.id}',event)" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);"><span class=ic-del></span></button>
+          <button onclick="openEditChecklist('${esc(cl.id)}')" aria-label="Modifier la checklist" style="padding:5px 8px;background:transparent;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted);"><span class=ic-edit></span></button>
+          <button onclick="deleteChecklist('${esc(cl.id)}',event)" aria-label="Supprimer la checklist" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);"><span class=ic-del></span></button>
         </div>
       </div>
       ${tasks.map(t => {
         const isDone = !!checkStates[cl.id+':'+t.id];
-        return `<div class="check-item ${isDone?'done':''}" onclick="toggleTask('${cl.id}','${t.id}')">
+        return `<div class="check-item ${isDone?'done':''}" onclick="toggleTask('${esc(cl.id)}','${esc(t.id)}')">
           <div class="checkbox">${isDone?'<span style="color:#000;font-size:14px;font-weight:900">✓</span>':''}</div>
           <span class="check-label" style="font-size:14px">${esc(t.label)}</span>
         </div>`;
       }).join('')}
       <div style="padding:8px 16px;border-top:1px solid var(--border)">
-        <button onclick="openAddTask('${cl.id}')"
+        <button onclick="openAddTask('${esc(cl.id)}')"
           style="width:100%;padding:7px;background:transparent;border:1px dashed var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);">
           ＋ Ajouter une tâche
         </button>
@@ -682,7 +715,7 @@ async function toggleTask(clId, taskId) {
   } catch(e) {
     if (wasDone) checkStates[key] = true; else delete checkStates[key];
     renderChecklists();
-    toast('⚠ ' + e.message, true);
+    toast('' + e.message, true);
   }
 }
 
@@ -693,7 +726,7 @@ async function deleteChecklist(id, e) {
     await sbFetch(`/rest/v1/checklists?id=eq.${encodeURIComponent(id)}`, { method:'DELETE' });
     checklists = checklists.filter(c => c.id !== id);
     renderChecklists();
-  } catch(err) { toast('⚠ ' + err.message, true); }
+  } catch(err) { toast('' + err.message, true); }
 }
 
 async function resetAllChecklists() {
@@ -702,8 +735,8 @@ async function resetAllChecklists() {
     await sbFetch(`/rest/v1/checklist_etats?jour=eq.${todayKey}`, { method:'DELETE' });
     checkStates = {};
     renderChecklists();
-    toast('✓ Checklists remises à zéro');
-  } catch(e) { toast('⚠ ' + e.message, true); }
+    toast('Checklists remises à zéro');
+  } catch(e) { toast('' + e.message, true); }
 }
 
 async function openAddTask(clId) {
@@ -716,10 +749,24 @@ async function openAddTask(clId) {
     await sbFetch(`/rest/v1/checklists?id=eq.${encodeURIComponent(clId)}`, { method:'PATCH', body: JSON.stringify({ taches: tasks, updated_at: new Date().toISOString() }) });
     cl.tasks = tasks;
     renderChecklists();
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
 }
 
+let editingChecklistId = null;
+function openEditChecklist(id) {
+  const cl = checklists.find(c => c.id === id);
+  if (!cl) return;
+  editingChecklistId = id;
+  document.getElementById('cl-nom').value = cl.nom;
+  document.getElementById('cl-tasks').value = (cl.tasks || []).map(t => t.label).join('\n');
+  document.getElementById('cl-modal-title').textContent = 'Modifier la checklist';
+  document.getElementById('cl-save-btn').textContent = 'Enregistrer';
+  document.getElementById('modal-checklist').style.display = 'flex';
+}
 function openAddChecklist() {
+  editingChecklistId = null;
+  document.getElementById('cl-modal-title').textContent = 'Nouvelle checklist';
+  document.getElementById('cl-save-btn').textContent = 'Créer';
   document.getElementById('cl-nom').value = '';
   document.getElementById('cl-tasks').value = '';
   document.getElementById('modal-checklist').style.display = 'flex';
@@ -729,26 +776,39 @@ function closeChecklistModal() { document.getElementById('modal-checklist').styl
 
 async function saveChecklist() {
   const nom = document.getElementById('cl-nom').value.trim();
-  if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
+  if (!nom) { toast('Le nom est obligatoire', true); return; }
   const lines = document.getElementById('cl-tasks').value.split('\n').map(l=>l.trim()).filter(Boolean);
-  const tasks = lines.map((l,i) => ({ id:'t_'+Date.now()+i, label:l }));
   try {
-    const rows = await sbFetch('/rest/v1/checklists', { method:'POST', body: JSON.stringify({ tenant_id: tenantId(), nom, taches: tasks, ordre: checklists.length, actif: true }) });
-    checklists.push(rowToChecklist(rows[0]));
+    if (editingChecklistId) {
+      const cl = checklists.find(c => c.id === editingChecklistId);
+      // On garde l'identifiant des tâches inchangées pour ne pas perdre les cases déjà cochées
+      const pool = [...(cl.tasks || [])];
+      const tasks = lines.map((l, i) => {
+        const k = pool.findIndex(t => t.label === l);
+        return k >= 0 ? pool.splice(k, 1)[0] : { id: 't_' + Date.now() + i, label: l };
+      });
+      await sbFetch(`/rest/v1/checklists?id=eq.${encodeURIComponent(cl.id)}`, { method:'PATCH', body: JSON.stringify({ nom, taches: tasks, updated_at: new Date().toISOString() }) });
+      cl.nom = nom; cl.tasks = tasks;
+      toast('Checklist modifiée');
+    } else {
+      const tasks = lines.map((l,i) => ({ id:'t_'+Date.now()+i, label:l }));
+      const rows = await sbFetch('/rest/v1/checklists', { method:'POST', body: JSON.stringify({ tenant_id: tenantId(), nom, taches: tasks, ordre: checklists.length, actif: true }) });
+      checklists.push(rowToChecklist(rows[0]));
+      toast(`Checklist « ${nom} » créée`);
+    }
     renderChecklists();
     closeChecklistModal();
-    toast(`✓ Checklist "${nom}" créée`);
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast(e.message, true); }
 }
 
 // ═══════════════════ DOCUMENTS ═══════════════════
-const DOC_ICONS  = { hygiene:'🧼', procedure:'📋', fiche:'📄', autre:'📁' };
+const DOC_ICON_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>';
 const DOC_LABELS = { hygiene:'Hygiène HACCP', procedure:'Procédure', fiche:'Fiche produit', autre:'Autre' };
 
 function renderDocs() {
   const el = document.getElementById('docs-container');
   if (!docs.length) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucun document. Clique sur ＋ Ajouter.</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucun document. Touche « Ajouter ».</div>';
     return;
   }
   const byCategorie = {};
@@ -756,17 +816,17 @@ function renderDocs() {
   let html = '';
   for (const [cat, items] of Object.entries(byCategorie)) {
     html += `<div style="font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin:16px 0 8px;display:flex;align-items:center;gap:8px">
-      ${DOC_ICONS[cat]||'📁'} ${DOC_LABELS[cat]||cat}
+      ${esc(DOC_LABELS[cat]||cat)}
       <span style="flex:1;height:1px;background:var(--border)"></span>
     </div>`;
     html += items.map(d => `
       <div class="doc-row" ${safeUrl(d.url)?`onclick="window.open(this.dataset.url,'_blank','noopener')" data-url="${esc(safeUrl(d.url))}" style="cursor:pointer"`:''}>
-        <div style="font-size:22px;flex-shrink:0">${DOC_ICONS[d.categorie]||'📄'}</div>
+        <div style="flex-shrink:0;color:var(--amber-ink, var(--amber));display:flex">${DOC_ICON_SVG}</div>
         <div style="flex:1">
           <div style="font-size:14px;font-weight:600">${esc(d.titre)}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:2px">${safeUrl(d.url)?'Lien disponible':'Pas de lien'}</div>
         </div>
-        <button onclick="event.stopPropagation();deleteDoc('${d.id}')" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);flex-shrink:0"><span class=ic-del></span></button>
+        <button onclick="event.stopPropagation();deleteDoc('${esc(d.id)}')" aria-label="Supprimer le document" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);flex-shrink:0"><span class=ic-del></span></button>
       </div>`).join('');
   }
   el.innerHTML = html;
@@ -781,16 +841,16 @@ function closeDocModal() { document.getElementById('modal-doc').style.display='n
 
 async function saveDoc() {
   const titre = document.getElementById('doc-titre').value.trim();
-  if (!titre) { toast('⚠ Le titre est obligatoire', true); return; }
+  if (!titre) { toast('Le titre est obligatoire', true); return; }
   const url = document.getElementById('doc-url').value.trim();
-  if (url && !safeUrl(url)) { toast('⚠ Le lien doit commencer par https://', true); return; }
+  if (url && !safeUrl(url)) { toast('Le lien doit commencer par https://', true); return; }
   try {
     const rows = await sbFetch('/rest/v1/documents', { method:'POST', body: JSON.stringify({ tenant_id: tenantId(), titre, url, categorie: document.getElementById('doc-categorie').value }) });
     docs.push(rows[0]);
     renderDocs();
     closeDocModal();
-    toast(`✓ "${titre}" ajouté`);
-  } catch(e) { toast('⚠ ' + e.message, true); }
+    toast(`"${titre}" ajouté`);
+  } catch(e) { toast('' + e.message, true); }
 }
 
 async function deleteDoc(id) {
@@ -799,14 +859,14 @@ async function deleteDoc(id) {
     await sbFetch(`/rest/v1/documents?id=eq.${encodeURIComponent(id)}`, { method:'DELETE' });
     docs = docs.filter(d => d.id !== id);
     renderDocs();
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
 }
 
 // ═══════════════════ CONTACTS ═══════════════════
 function renderContacts() {
   const el = document.getElementById('contacts-container');
   if (!contacts.length) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucun contact. Clique sur ＋ Ajouter.</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Aucun contact. Touche « Ajouter ».</div>';
     return;
   }
   el.innerHTML = contacts.map(c => `
@@ -818,7 +878,7 @@ function renderContacts() {
           ${c.email ? `<a href="mailto:${esc(c.email)}" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--amber);text-decoration:none;margin-bottom:4px">${esc(c.email)}</a>` : ''}
           ${c.note  ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">${esc(c.note)}</div>` : ''}
         </div>
-        <button onclick="deleteContact('${c.id}')" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);flex-shrink:0;margin-left:10px"><span class=ic-del></span></button>
+        <button onclick="deleteContact('${esc(c.id)}')" aria-label="Supprimer le contact" style="padding:5px 8px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:6px;font-size:11px;color:var(--red);flex-shrink:0;margin-left:10px"><span class=ic-del></span></button>
       </div>
     </div>`).join('');
 }
@@ -832,15 +892,15 @@ function closeContactModal() { document.getElementById('modal-contact').style.di
 
 async function saveContact() {
   const nom = document.getElementById('contact-nom').value.trim();
-  if (!nom) { toast('⚠ Le nom est obligatoire', true); return; }
+  if (!nom) { toast('Le nom est obligatoire', true); return; }
   const body = { tenant_id: tenantId(), nom, telephone: document.getElementById('contact-tel').value.trim(), email: document.getElementById('contact-email').value.trim(), note: document.getElementById('contact-note').value.trim() };
   try {
     const rows = await sbFetch('/rest/v1/contacts', { method:'POST', body: JSON.stringify(body) });
     contacts.push(rowToContact(rows[0]));
     renderContacts();
     closeContactModal();
-    toast(`✓ "${nom}" ajouté`);
-  } catch(e) { toast('⚠ ' + e.message, true); }
+    toast(`"${nom}" ajouté`);
+  } catch(e) { toast('' + e.message, true); }
 }
 
 async function deleteContact(id) {
@@ -849,7 +909,7 @@ async function deleteContact(id) {
     await sbFetch(`/rest/v1/contacts?id=eq.${encodeURIComponent(id)}`, { method:'DELETE' });
     contacts = contacts.filter(c => c.id !== id);
     renderContacts();
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
 }
 
 // ═══════════════════ INIT & SYNC ═══════════════════
@@ -874,7 +934,7 @@ async function loadAll() {
     setSyncBadge('ok');
   } catch(e) {
     setSyncBadge('error');
-    toast('⚠ Chargement impossible : ' + e.message, true);
+    toast('Chargement impossible : ' + e.message, true);
   }
   renderChecklists();
   renderDocs();
@@ -896,11 +956,13 @@ function legacyGet(action) {
     document.head.appendChild(sc);
   });
 }
+const LEGACY_TENANT = 'b1a616f5-010d-42c8-919b-ce39961269a5'; // Rob The Market — seul magasin qui utilisait l'ancien Google Sheets
 function updateImportBanner() {
   const b = document.getElementById('import-banner');
-  if (b) b.style.display = (!checklists.length && !docs.length && !contacts.length) ? 'flex' : 'none';
+  if (b) b.style.display = (tenantId() === LEGACY_TENANT && !checklists.length && !docs.length && !contacts.length) ? 'flex' : 'none';
 }
 async function importFromSheets() {
+  if (tenantId() !== LEGACY_TENANT) return;
   const btn = document.getElementById('import-btn');
   btn.disabled = true; btn.textContent = 'Import…';
   try {
@@ -913,10 +975,10 @@ async function importFromSheets() {
     if (cl.length) await sbFetch('/rest/v1/checklists', { method:'POST', body: JSON.stringify(cl) });
     if (dc.length) await sbFetch('/rest/v1/documents', { method:'POST', body: JSON.stringify(dc) });
     if (ct.length) await sbFetch('/rest/v1/contacts',  { method:'POST', body: JSON.stringify(ct) });
-    toast(`✓ Importé : ${cl.length} checklist(s), ${dc.length} document(s), ${ct.length} contact(s)`);
+    toast(`Importé : ${cl.length} checklist(s), ${dc.length} document(s), ${ct.length} contact(s)`);
     await loadAll();
   } catch(e) {
-    toast('⚠ Import impossible : ' + e.message, true);
+    toast('Import impossible : ' + e.message, true);
   } finally { btn.disabled = false; btn.textContent = 'Importer'; }
 }
 

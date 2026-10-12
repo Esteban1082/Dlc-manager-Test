@@ -1,6 +1,37 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<meta charset="UTF-8">
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
 <script id="sl-session">
 // StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
 (function () {
@@ -40,7 +71,6 @@
 })();
 </script>
 
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StoreLine — Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
@@ -415,6 +445,7 @@
   .picker-item.via-brand { opacity:.55; }
   .user-pill { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:20px; font-size:11px; color:var(--muted); }
   .theme-toggle-global, #theme-toggle { display:none !important; }
+  body:not(.is-super) .super-only { display:none !important; }
 </style>
 
 <style id="sl-ui">
@@ -527,6 +558,7 @@
   #recent-users > * { border-color:transparent !important; border-radius:14px !important; box-shadow:var(--ui-shadow) !important; background:var(--surface) !important; }
   .user-card, .tenant-card { width:auto !important; max-width:none !important; }
   [style^="font-size:36px;margin-bottom"], [style^="font-size:48px;margin-bottom"] { filter:grayscale(1); opacity:.35; }
+  nav.bottom-nav .bottom-nav-inner { display:flex !important; } nav.bottom-nav .bottom-nav-inner .bnav-item { flex:1 1 0; min-width:0; }
 </style>
 </head>
 <body>
@@ -609,7 +641,7 @@
       <div class="nav-item" onclick="showView('modules',this)">
         <span class="nav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3.5 7.5 12 12l8.5-4.5L12 3Z"/><path d="m3.5 12 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5"/></svg></span> Modules
       </div>
-      <div class="nav-item" onclick="showView('tenants',this)">
+      <div class="nav-item super-only" onclick="showView('tenants',this)">
         <span class="nav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M3 10 5 4h14l2 6c0 1.4-1.1 2.5-2.5 2.5S16 11.4 16 10c0 1.4-1.8 2.5-4 2.5S8 11.4 8 10c0 1.4-1.1 2.5-2.5 2.5S3 11.4 3 10Z"/><path d="M10 20v-5h4v5"/></svg></span> Clients
       </div>
       <div class="nav-item" onclick="showView('blocs',this)">
@@ -647,8 +679,8 @@
         <div class="stats-grid" id="stats-grid">
           <div class="stat-card"><div class="stat-val" id="stat-users">—</div><div class="stat-lbl">Utilisateurs</div></div>
           <div class="stat-card"><div class="stat-val" id="stat-actifs">—</div><div class="stat-lbl">Actifs</div></div>
-          <div class="stat-card"><div class="stat-val" id="stat-tenants">—</div><div class="stat-lbl">Clients</div></div>
-          <div class="stat-card"><div class="stat-val" id="stat-modules">9</div><div class="stat-lbl">Modules</div></div>
+          <div class="stat-card super-only"><div class="stat-val" id="stat-tenants">—</div><div class="stat-lbl">Clients</div></div>
+          <div class="stat-card"><div class="stat-val" id="stat-modules">10</div><div class="stat-lbl">Modules</div></div>
         </div>
 
         <div class="section-title" style="margin-bottom:12px">Activité récente</div>
@@ -752,12 +784,12 @@
       <span class="bnav-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg></span>Dashboard
     </button>
     <button class="bnav-item" id="bnav-users" onclick="showView('users',this); syncBottomNav('users')">
-      <span class="bnav-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.8c1.7.8 2.8 2.6 3 5.2"/></svg></span>Users
+      <span class="bnav-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.8c1.7.8 2.8 2.6 3 5.2"/></svg></span>Équipe
     </button>
     <button class="bnav-item" id="bnav-modules" onclick="showView('modules',this); syncBottomNav('modules')">
       <span class="bnav-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3.5 7.5 12 12l8.5-4.5L12 3Z"/><path d="m3.5 12 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5"/></svg></span>Modules
     </button>
-    <button class="bnav-item" id="bnav-tenants" onclick="showView('tenants',this); syncBottomNav('tenants')">
+    <button class="bnav-item super-only" id="bnav-tenants" onclick="showView('tenants',this); syncBottomNav('tenants')">
       <span class="bnav-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v10h16V10"/><path d="M3 10 5 4h14l2 6c0 1.4-1.1 2.5-2.5 2.5S16 11.4 16 10c0 1.4-1.8 2.5-4 2.5S8 11.4 8 10c0 1.4-1.1 2.5-2.5 2.5S3 11.4 3 10Z"/><path d="M10 20v-5h4v5"/></svg></span>Clients
     </button>
     <button class="bnav-item" id="bnav-blocs" onclick="showView('blocs',this); syncBottomNav('blocs')">
@@ -878,7 +910,7 @@
 
 <div class="toast-container" id="toast-container"></div>
 <div class="version-tag" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:80;letter-spacing:1px;opacity:.4">
-  admin v2.3 · 11/10/2026 12:35
+  admin v2.4 · 12/10/2026 12:45
 </div>
 
 <script>
@@ -905,12 +937,15 @@ applyTheme(localStorage.getItem('sl_ui_theme') || 'light');
 // API helper
 async function sbFetch(path, options={}) {
   const token = localStorage.getItem('sl_access_token');
-  const r = await fetch(SUPABASE_URL + path, {
+  const r = await slFetch(SUPABASE_URL + path, {
     ...options,
     headers: { 'apikey':SUPABASE_ANON, 'Authorization':`Bearer ${token}`, 'Content-Type':'application/json', 'Prefer':'return=representation', ...(options.headers||{}) },
   });
   const text = await r.text();
-  try { return JSON.parse(text); } catch { return null; }
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+  if (!r.ok) throw new Error(slErrMsg(r.status, data));
+  return data;
 }
 async function sbSelect(table, query='') { return sbFetch(`/rest/v1/${table}${query}`); }
 async function sbInsert(table, body) { return sbFetch(`/rest/v1/${table}`, { method:'POST', body:JSON.stringify(body) }); }
@@ -933,7 +968,7 @@ async function sbUpsertPermission(userId, module, actif) {
     }
   );
   const patchData = await patchResp.json().catch(() => null);
-  console.log('PATCH permission:', patchResp.status, patchData);
+  if (!patchResp.ok) throw new Error(slErrMsg(patchResp.status, patchData));
 
   // Si la ligne existe et a été mise à jour (200) → OK
   if (patchResp.ok && Array.isArray(patchData) && patchData.length > 0) return patchData;
@@ -950,27 +985,30 @@ async function sbUpsertPermission(userId, module, actif) {
     body: JSON.stringify({ user_id: userId, module, actif })
   });
   const insertData = await insertResp.json().catch(() => null);
-  console.log('INSERT permission:', insertResp.status, insertData);
+  if (!insertResp.ok) throw new Error(slErrMsg(insertResp.status, insertData));
   return insertData;
 }
 
 const MODULES = [
-  { id:'dlc',          label:'Suivi DLC',     ico:'📦' },
-  { id:'pertes',       label:'Pertes',        ico:'📉' },
-  { id:'produits',     label:'Produits',      ico:'📋' },
-  { id:'allergenes',   label:'Allergènes',    ico:'⚠️' },
-  { id:'temperatures', label:'Températures',  ico:'🌡️' },
-  { id:'documents',    label:'Documents',     ico:'📁' },
-  { id:'transferts',   label:'Transferts',    ico:'🔄' },
-  { id:'commandes',    label:'Commandes',     ico:'📋' },
-  { id:'donnees',      label:'Données',       ico:'🗂' },
+  { id:'dlc', label:'Suivi DLC', ico:'' },
+  { id:'pertes', label:'Pertes', ico:'' },
+  { id:'produits', label:'Produits', ico:'' },
+  { id:'allergenes', label:'Allergènes', ico:'' },
+  { id:'temperatures', label:'Températures', ico:'' },
+  { id:'documents', label:'Documents', ico:'' },
+  { id:'transferts', label:'Transferts', ico:'' },
+  { id:'commandes', label:'Commandes', ico:'' },
+  { id:'donnees', label:'Données', ico:'' },
+  { id:'planning', label:'Planning', ico:'' },
 ];
 
 // Modules actifs par défaut selon le rôle
+const ROLE_LABELS = { superadmin:'Superadmin', admin:'Admin', manager:'Manager', employe:'Employé' };
+const roleLabel = r => ROLE_LABELS[r] || r;
 const DEFAULT_MODULES = {
-  employe: ['dlc','pertes','temperatures'],
-  manager: ['dlc','pertes','produits','allergenes','temperatures','documents','transferts','commandes','donnees'],
-  admin:   ['dlc','pertes','produits','allergenes','temperatures','documents','transferts','commandes','donnees'],
+  employe: ['dlc','pertes','temperatures','planning'],
+  manager: ['dlc','pertes','produits','allergenes','temperatures','documents','transferts','commandes','donnees','planning'],
+  admin:   ['dlc','pertes','produits','allergenes','temperatures','documents','transferts','commandes','donnees','planning'],
 };
 
 const DEFAULT_RAYONS = [
@@ -1071,7 +1109,7 @@ async function loadAdminHisto() {
     renderAdminHisto();
   } catch(e) {
     const missing = /dlc_historique/.test(e.message || '') && /(not find|does not exist|schema cache)/i.test(e.message || '');
-    list.innerHTML = `<div class="loading" style="color:var(--red)">${missing ? 'Table dlc_historique absente : exécute dlc_historique.sql dans Supabase.' : '⚠ ' + histoEsc(e.message)}</div>`;
+    list.innerHTML = `<div class="loading" style="color:var(--red)">${missing ? 'Table dlc_historique absente : exécute dlc_historique.sql dans Supabase.' : '' + histoEsc(e.message)}</div>`;
   }
 }
 function histoEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -1135,6 +1173,7 @@ async function logout() {
 
 // ── Dashboard ──
 async function loadDashboard() {
+  document.body.classList.toggle('is-super', isSuperadmin());
   try {
     const profiles = await sbSelect('profiles', '?select=id,email,role,actif,created_at');
     const tenants = await sbSelect('tenants', '?select=id,nom,actif');
@@ -1152,10 +1191,9 @@ async function loadDashboard() {
         <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
           <div style="width:34px;height:34px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:var(--amber)">${(p.email||'?')[0].toUpperCase()}</div>
           <div style="flex:1">
-            <div style="font-size:13px;font-weight:600">${p.email}</div>
-            <div style="font-size:11px;color:var(--muted)">${p.role}</div>
+            <div style="font-size:13px;font-weight:600">${escapeHtml(p.email)}</div>
           </div>
-          <span class="role-badge role-${p.role}">${p.role}</span>
+          <span class="role-badge role-${p.role}">${roleLabel(p.role)}</span>
         </div>`).join('')
       : '<div style="color:var(--muted);padding:20px;text-align:center">Aucun utilisateur</div>';
   } catch(e) {
@@ -1168,7 +1206,7 @@ let allUsers = [];
 let expandedUser = null;
 
 async function loadUsers() {
-  document.getElementById('users-list').innerHTML = '<div class="loading">⏳ Chargement...</div>';
+  document.getElementById('users-list').innerHTML = '<div class="loading">Chargement…</div>';
   try {
     await ensureTenantsLoaded();
     const profiles = await sbSelect('profiles', '?select=id,email,nom,role,actif,tenant_id,created_at,dlc_search_libre,permissions(*)&order=created_at.desc');
@@ -1179,7 +1217,7 @@ async function loadUsers() {
     renderUserTenantFilter();
     renderUsers();
   } catch(e) {
-    document.getElementById('users-list').innerHTML = `<div class="loading" style="color:var(--red)">⚠ ${e.message}</div>`;
+    document.getElementById('users-list').innerHTML = `<div class="loading" style="color:var(--red)">${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -1229,8 +1267,10 @@ function renderUsersStats(users) {
 }
 
 function roleOptions(current) {
-  const roles = isSuperadmin() ? ['employe','manager','admin','superadmin'] : ['employe','manager','admin'];
-  return roles.map(r => `<option value="${r}" ${current===r?'selected':''}>${r}</option>`).join('');
+  // Un admin de magasin gère managers et employés ; seul le superadmin nomme des admins
+  const roles = isSuperadmin() ? ['employe','manager','admin','superadmin'] : ['employe','manager'];
+  if (current && !roles.includes(current)) roles.push(current);
+  return roles.map(r => `<option value="${r}" ${current===r?'selected':''} ${!isSuperadmin() && r!==current && !['employe','manager'].includes(r)?'disabled':''}>${roleLabel(r)}</option>`).join('');
 }
 
 function tenantOptions(current) {
@@ -1264,11 +1304,11 @@ function renderUsers() {
         <div class="user-avatar" style="color:var(--amber)">${(u.email||'?')[0].toUpperCase()}</div>
         <div style="flex:1;min-width:0">
           <div class="user-email">${escapeHtml(u.email)}</div>
-          <div class="user-meta">${escapeHtml(u.nom || '—')} · ${activeCount} module${activeCount>1?'s':''} actif${activeCount>1?'s':''}</div>
-          <div class="tenant-pill ${needsTenant?'missing':''}">${needsTenant?'⚠ ':''}${escapeHtml(tenantName(u.tenant_id))}</div>
+          <div class="user-meta">${escapeHtml(u.nom || '—')} · ${['admin','superadmin'].includes(u.role) ? 'tous les modules' : `${activeCount} module${activeCount>1?'s':''} actif${activeCount>1?'s':''}`}</div>
+          <div class="tenant-pill ${needsTenant?'missing':''}">${escapeHtml(tenantName(u.tenant_id))}</div>
         </div>
         <div class="status-dot ${u.actif?'active':'inactive'}"></div>
-        <span class="role-badge role-${u.role}">${u.role}</span>
+        <span class="role-badge role-${u.role}">${roleLabel(u.role)}</span>
         <div class="user-quick" onclick="event.stopPropagation()">
           <select class="form-input quick-select" onchange="changeRole('${u.id}',this.value)">
             ${roleOptions(u.role)}
@@ -1293,43 +1333,42 @@ function renderUsers() {
           </select>
           <button class="btn btn-ghost" onclick="showView('tenants')">Voir les clients</button>
         </div>` : `
-        <div style="font-size:12px;color:var(--muted);margin-bottom:14px">${tenantName(u.tenant_id)}</div>`}
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px">${escapeHtml(tenantName(u.tenant_id))}</div>`}
         <div class="modules-title">Modules activés</div>
         <div class="modules-grid">
           ${MODULES.map(m => {
             const on = modSet.has(m.id) || ['superadmin','admin'].includes(u.role);
             return `<div class="module-toggle ${on?'on':''}" onclick="toggleModule('${u.id}','${m.id}',${on})">
-              <span class="module-ico">${m.ico}</span>
               <span class="module-name">${m.label}</span>
-              <span class="module-check">${on?'✓ Actif':'○ Inactif'}</span>
+              <span class="module-check">${on?'Actif':'Inactif'}</span>
             </div>`;
           }).join('')}
         </div>
         <div class="modules-title">Rôle</div>
         <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-          ${(isSuperadmin() ? ['employe','manager','admin','superadmin'] : ['employe','manager','admin']).map(r => `
-            <button class="btn ${u.role===r?'btn-primary':'btn-ghost'}" onclick="changeRole('${u.id}','${r}')">${r}</button>
+          ${(isSuperadmin() ? ['employe','manager','admin','superadmin'] : ['employe','manager']).map(r => `
+            <button class="btn ${u.role===r?'btn-primary':'btn-ghost'}" onclick="changeRole('${u.id}','${r}')">${roleLabel(r)}</button>
           `).join('')}
         </div>
         <div style="margin-bottom:12px">
           <div class="modules-title">Blocs DLC assignés</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Les blocs définissent quelles marques apparaissent dans le suivi DLC de cet utilisateur.</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-            ${(allBlocs.filter(b=>b.actif&&(b.dlc_blocs_users||[]).some(a=>a.user_id===u.id))).map(b=>`<span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid ${b.couleur}30;color:${b.couleur};background:${b.couleur}15">${escapeHtml(b.nom)}</span>`).join('')||'<span style="font-size:11px;color:var(--muted)">Aucun bloc assigné — voit tout le rayon</span>'}
+            ${(allBlocs.filter(b=>b.actif&&(b.dlc_blocs_users||[]).some(a=>a.user_id===u.id))).map(b=>{ const c=/^#[0-9a-f]{6}$/i.test(b.couleur||'')?b.couleur:'#e8a045'; return `<span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid ${c}30;color:${c};background:${c}15">${escapeHtml(b.nom)}</span>`; }).join('')||'<span style="font-size:11px;color:var(--muted)">Aucun bloc assigné — voit tout le rayon</span>'}
           </div>
-          <button class="btn btn-ghost" onclick="showView('blocs')" style="font-size:11px;padding:6px 12px">🗂 Gérer les blocs →</button>
+          <button class="btn btn-ghost" onclick="showView('blocs')" style="font-size:11px;padding:6px 12px">Gérer les blocs →</button>
         </div>
         <div style="margin-bottom:14px">
           <div class="modules-title">Recherche hors-bloc</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Si désactivée, l'utilisateur ne peut consulter que les produits de ses blocs assignés.</div>
           <button class="btn ${u.dlc_search_libre!==false?'btn-primary':'btn-ghost'}" onclick="toggleDlcSearchLibre('${u.id}',${u.dlc_search_libre!==false})" style="font-size:11px;padding:6px 14px">
-            ${u.dlc_search_libre!==false?'✓ Recherche libre':'⊘ Restreint au bloc'}
+            ${u.dlc_search_libre!==false?'Recherche libre':'Restreint au bloc'}
           </button>
         </div>
         <div class="detail-actions">
-          <button class="btn btn-ghost" onclick="activateUser('${u.id}',${!u.actif})">${u.actif?'⏸ Désactiver':'▶ Activer'}</button>
-          <button class="btn btn-green" onclick="setAllModules('${u.id}',true)">✓ Tout activer</button>
-          <button class="btn btn-ghost" onclick="setAllModules('${u.id}',false)">○ Tout désactiver</button>
+          <button class="btn btn-ghost" onclick="activateUser('${u.id}',${!u.actif})">${u.actif?'Désactiver':'Activer'}</button>
+          <button class="btn btn-green" onclick="setAllModules('${u.id}',true)">Tout activer</button>
+          <button class="btn btn-ghost" onclick="setAllModules('${u.id}',false)">Tout désactiver</button>
           <button class="btn btn-ghost" onclick="openUserHisto('${u.id}')">Historique DLC</button>
           <button class="btn btn-ghost" onclick="sendAccess('${u.id}')">Renvoyer un lien d’accès</button>
         </div>
@@ -1351,10 +1390,8 @@ async function toggleModule(userId, module, currentlyOn) {
   }
 
   const newState = !currentlyOn;
-  console.log('toggleModule', userId, module, currentlyOn, '->', newState);
   try {
     const result = await sbUpsertPermission(userId, module, newState);
-    console.log('result:', result);
     const error = null;
     if (error) throw error;
 
@@ -1366,23 +1403,22 @@ async function toggleModule(userId, module, currentlyOn) {
       else u.permissions.push({ user_id:userId, module, actif:newState });
     }
     renderUsers();
-    toast(`${newState ? '✓ Activé' : '○ Désactivé'} : ${module}`);
+    toast(`${MODULES.find(m => m.id === module)?.label || module} : ${newState ? 'activé' : 'désactivé'}`);
   } catch(e) {
-    toast('⚠ Erreur : ' + e.message, true);
+    toast('Erreur : ' + e.message, true);
   }
 }
 
 async function changeRole(userId, role) {
   try {
-    const result = await sbUpdate('profiles', `?id=eq.${userId}`, { role });
-    const error = result?.error || null;
-    if (error) throw error;
+    await adminFn('set_role', { user_id: userId, role });
     const u = allUsers.find(u => u.id === userId);
     if (u) u.role = role;
     renderUsers();
-    toast(`✓ Rôle changé en "${role}"`);
+    toast(`Rôle changé : ${roleLabel(role)}`);
   } catch(e) {
-    toast('⚠ ' + e.message, true);
+    renderUsers();
+    toast(e.message, true);
   }
 }
 
@@ -1395,9 +1431,9 @@ async function changeTenant(userId, tenantId) {
     const u = allUsers.find(u => u.id === userId);
     if (u) u.tenant_id = tenantId || null;
     renderUsers();
-    toast(tenantId ? `✓ Client assigné : ${tenantName(tenantId)}` : 'Client retiré');
+    toast(tenantId ? `Client assigné : ${tenantName(tenantId)}` : 'Client retiré');
   } catch(e) {
-    toast('⚠ ' + e.message, true);
+    toast('' + e.message, true);
   }
 }
 
@@ -1407,9 +1443,9 @@ async function activateUser(userId, active) {
     const u = allUsers.find(u => u.id === userId);
     if (u) u.actif = active;
     renderUsers();
-    toast(active ? '✓ Utilisateur réactivé' : '⏸ Utilisateur désactivé — il ne peut plus se connecter');
+    toast(active ? 'Compte réactivé' : 'Compte désactivé : il ne peut plus se connecter');
   } catch(e) {
-    toast('⚠ ' + e.message, true);
+    toast('' + e.message, true);
   }
 }
 
@@ -1422,9 +1458,9 @@ async function setAllModules(userId, active) {
     const u = allUsers.find(u => u.id === userId);
     if (u) u.permissions = MODULES.map(m => ({ user_id:userId, module:m.id, actif:active }));
     renderUsers();
-    toast(active ? '✓ Tous les modules activés' : '○ Tous les modules désactivés');
+    toast(active ? 'Tous les modules activés' : 'Tous les modules désactivés');
   } catch(e) {
-    toast('⚠ ' + e.message, true);
+    toast('' + e.message, true);
   }
 }
 
@@ -1476,7 +1512,7 @@ function renderInviteModules() {
 
 async function sendInvite() {
   const email = document.getElementById('inv-email').value.trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('⚠ Adresse e-mail invalide', true); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Adresse e-mail invalide', true); return; }
   const btn = document.getElementById('inv-btn');
   btn.disabled = true; btn.textContent = 'Envoi…';
   try {
@@ -1488,9 +1524,9 @@ async function sendInvite() {
       modules: [...document.querySelectorAll('#inv-modules input:checked')].map(i => i.value),
     });
     closeModal('modal-invite');
-    toast(`✓ Invitation envoyée à ${email}`);
+    toast(`Invitation envoyée à ${email}`);
     loadUsers();
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
   finally { btn.disabled = false; btn.textContent = 'Envoyer l’invitation'; }
 }
 
@@ -1499,8 +1535,8 @@ async function sendAccess(userId) {
   if (!confirm(`Envoyer un lien d’accès à ${u ? u.email : 'cet utilisateur'} ?`)) return;
   try {
     const d = await adminFn('send_access', { user_id: userId });
-    toast(d.sent === 'invite' ? '✓ Invitation renvoyée' : '✓ Lien de nouveau mot de passe envoyé');
-  } catch(e) { toast('⚠ ' + e.message, true); }
+    toast(d.sent === 'invite' ? 'Invitation renvoyée' : 'Lien de nouveau mot de passe envoyé');
+  } catch(e) { toast('' + e.message, true); }
 }
 
 // ── Modules overview ──
@@ -1528,6 +1564,7 @@ function moduleDesc(id) {
     transferts:   'Bons de transfert inter-rayons avec impression',
     commandes:    'Bons de commande fournisseurs, envoi email direct',
     donnees:      'Vue tableur de toutes les données, export CSV',
+    planning:     'Horaires de l’équipe, import photo de l’horaire papier, heures',
   }[id] || '';
 }
 
@@ -1557,24 +1594,24 @@ async function createTenant() {
   const slug   = document.getElementById('ten-slug').value.trim();
   const accent = document.getElementById('ten-accent').value.trim() || '#e8a045';
   const adminEmail = document.getElementById('ten-admin-email').value.trim();
-  if (!nom || !slug) { toast('⚠ Nom et identifiant obligatoires', true); return; }
-  if (adminEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) { toast('⚠ E-mail de l’administrateur invalide', true); return; }
+  if (!nom || !slug) { toast('Nom et identifiant obligatoires', true); return; }
+  if (adminEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) { toast('E-mail de l’administrateur invalide', true); return; }
   const btn = document.getElementById('ten-btn');
   btn.disabled = true; btn.textContent = 'Création…';
   try {
     await adminFn('create_tenant', { nom, slug, accent, admin_email: adminEmail || undefined, admin_nom: document.getElementById('ten-admin-nom').value.trim() });
-    toast(adminEmail ? `✓ Magasin "${nom}" créé — invitation envoyée à ${adminEmail}` : `✓ Magasin "${nom}" créé`);
+    toast(adminEmail ? `Magasin "${nom}" créé — invitation envoyée à ${adminEmail}` : `Magasin "${nom}" créé`);
     closeModal('modal-tenant');
     allTenants = [];
     loadTenants();
   } catch(e) {
-    toast('⚠ ' + e.message, true);
+    toast('' + e.message, true);
   } finally { btn.disabled = false; btn.textContent = 'Créer le magasin'; }
 }
 
 async function loadTenants() {
   const el = document.getElementById('tenants-list');
-  el.innerHTML = '<div class="loading">⏳ Chargement...</div>';
+  el.innerHTML = '<div class="loading">Chargement…</div>';
   try {
     const tenants = await sbSelect('tenants', '?select=*&order=created_at.asc');
     if (tenants === null) throw new Error('Erreur réseau');
@@ -1588,7 +1625,7 @@ async function loadTenants() {
       return `
       <div class="tenant-card" style="border-left:4px solid ${accent}">
         <div class="tenant-head">
-          <div class="tenant-icon" style="background:${accent}22;border:2px solid ${accent}44">🏪</div>
+          <div class="tenant-icon" style="background:${accent}22;border:2px solid ${accent}44"></div>
           <div style="flex:1;min-width:0">
             <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700">${escapeHtml(t.nom)}</div>
             <div style="font-size:11px;color:var(--muted);margin-top:3px">slug: ${escapeHtml(t.slug)} · ${users.length} utilisateur${users.length>1?'s':''} · accent: <span style="color:${accent}">${accent}</span></div>
@@ -1599,8 +1636,8 @@ async function loadTenants() {
           </div>
         </div>
         <div class="tenant-checklist">
-          <div class="check-pill ${t.actif?'ok':''}">${t.actif?'✓':'○'} Client actif</div>
-          <div class="check-pill ${hasAdmin?'ok':''}">${hasAdmin?'✓':'○'} Admin client assigné</div>
+          <div class="check-pill ${t.actif?'ok':''}">Client actif</div>
+          <div class="check-pill ${hasAdmin?'ok':''}">Admin client assigné</div>
           <div class="check-pill">○ Données de base à préparer</div>
         </div>
         <div class="detail-actions" style="margin-top:14px">
@@ -1610,7 +1647,7 @@ async function loadTenants() {
       </div>`;
     }).join('') || '<div class="loading">Aucun client.</div>';
   } catch(e) {
-    el.innerHTML = `<div class="loading" style="color:var(--red)">⚠ ${e.message}</div>`;
+    el.innerHTML = `<div class="loading" style="color:var(--red)">${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -1631,9 +1668,9 @@ async function seedTenantDefaults(tenantId) {
 
     if (rayonsToCreate.length) await sbInsert('rayons', rayonsToCreate);
     if (zonesToCreate.length) await sbInsert('zones', zonesToCreate);
-    toast(`✓ Base préparée : ${rayonsToCreate.length} rayon(s), ${zonesToCreate.length} zone(s)`);
+    toast(`Base préparée : ${rayonsToCreate.length} rayon(s), ${zonesToCreate.length} zone(s)`);
   } catch(e) {
-    toast('⚠ ' + e.message, true);
+    toast('' + e.message, true);
   }
 }
 
@@ -1661,7 +1698,7 @@ let currentBlocId = null; // pour modal marques / attribution
 async function loadBlocs() {
   const el = document.getElementById('blocs-list');
   if (!el) return;
-  el.innerHTML = '<div class="loading">⏳ Chargement...</div>';
+  el.innerHTML = '<div class="loading">Chargement…</div>';
   try {
     await ensureTenantsLoaded();
     const tenantId = ME.tenant_id;
@@ -1671,14 +1708,14 @@ async function loadBlocs() {
     allBlocs = await sbFetch('/rest/v1/dlc_blocs' + query) || [];
     renderBlocs();
   } catch(e) {
-    el.innerHTML = `<div class="loading" style="color:var(--red)">⚠ ${e.message}</div>`;
+    el.innerHTML = `<div class="loading" style="color:var(--red)">${escapeHtml(e.message)}</div>`;
   }
 }
 
 function renderBlocs() {
   const el = document.getElementById('blocs-list');
   if (!allBlocs.length) {
-    el.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)"><div style="font-size:36px;margin-bottom:12px">🗂</div><div style="font-family:Fraunces,serif;font-size:18px;margin-bottom:6px">Aucun bloc créé</div><div style="font-size:12px">Crée un bloc pour grouper les marques par responsable.</div></div>';
+    el.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)"><div style="font-family:Fraunces,serif;font-size:18px;margin-bottom:6px">Aucun bloc créé</div><div style="font-size:12px">Crée un bloc pour grouper les marques par responsable.</div></div>';
     return;
   }
   el.innerHTML = allBlocs.map(b => {
@@ -1703,21 +1740,21 @@ function renderBlocs() {
       </div>
       ${(marques.length || articles.length) ? `
       <div class="bloc-marques">
-        ${marques.map(m => `<span class="marque-pill" style="color:${color};border-color:${color}30;background:${color}15">🏷 ${escapeHtml(m.marque)}</span>`).join('')}
+        ${marques.map(m => `<span class="marque-pill" style="color:${color};border-color:${color}30;background:${color}15">${escapeHtml(m.marque)}</span>`).join('')}
         ${articles.slice(0,8).map(a => `<span class="marque-pill" style="color:var(--muted);border-color:var(--border);background:var(--surface2)">${escapeHtml(a.nom)}</span>`).join('')}
         ${articles.length > 8 ? `<span class="marque-pill" style="color:var(--muted);border-color:var(--border)">+${articles.length-8} articles</span>` : ''}
-      </div>` : `<div style="padding:0 16px 10px;font-size:11px;color:var(--muted)">Bloc vide — clique sur « 📦 Contenu » pour choisir les marques ou articles.</div>`}
+      </div>` : `<div style="padding:0 16px 10px;font-size:11px;color:var(--muted)">Bloc vide — touche « Contenu » pour choisir les marques ou articles.</div>`}
       ${usersAssigned.length ? `
       <div class="bloc-assigned-users">
         <span style="font-size:10px;color:var(--muted);margin-right:4px">Assigné à :</span>
-        ${usersAssigned.map(u => `<span class="user-pill">👤 ${u}</span>`).join('')}
+        ${usersAssigned.map(u => `<span class="user-pill">${escapeHtml(u)}</span>`).join('')}
       </div>` : ''}
       <div class="bloc-actions">
-        <button class="btn btn-ghost" onclick="openEditBlocModal('${b.id}')" style="font-size:11px;padding:6px 12px">✏ Modifier</button>
-        <button class="btn btn-ghost" onclick="openMarquesModal('${b.id}')" style="font-size:11px;padding:6px 12px">📦 Contenu</button>
-        <button class="btn btn-ghost" onclick="openBlocUsersModal('${b.id}')" style="font-size:11px;padding:6px 12px">👥 Assigner</button>
+        <button class="btn btn-ghost" onclick="openEditBlocModal('${b.id}')" style="font-size:11px;padding:6px 12px">Modifier</button>
+        <button class="btn btn-ghost" onclick="openMarquesModal('${b.id}')" style="font-size:11px;padding:6px 12px">Contenu</button>
+        <button class="btn btn-ghost" onclick="openBlocUsersModal('${b.id}')" style="font-size:11px;padding:6px 12px">Assigner</button>
         <button class="btn btn-ghost" onclick="toggleBlocActif('${b.id}',${b.actif})" style="font-size:11px;padding:6px 12px">${b.actif?'⏸ Désactiver':'▶ Activer'}</button>
-        <button class="btn btn-ghost" onclick="deleteBloc('${b.id}')" style="font-size:11px;padding:6px 12px;color:var(--red);border-color:rgba(255,64,64,.3)">🗑 Supprimer</button>
+        <button class="btn btn-ghost" onclick="deleteBloc('${b.id}')" style="font-size:11px;padding:6px 12px;color:var(--red);border-color:rgba(255,64,64,.3)">Supprimer</button>
       </div>
     </div>`;
   }).join('');
@@ -1752,7 +1789,7 @@ async function saveBloc() {
   const desc    = document.getElementById('bloc-desc').value.trim();
   const couleur = document.getElementById('bloc-couleur').value.trim() || '#e8a045';
   const editId  = document.getElementById('bloc-edit-id').value;
-  if (!nom) { toast('⚠ Le nom du bloc est obligatoire', true); return; }
+  if (!nom) { toast('Le nom du bloc est obligatoire', true); return; }
 
   const tenantId = ME.tenant_id || (allTenants[0] && allTenants[0].id) || null;
 
@@ -1762,26 +1799,26 @@ async function saveBloc() {
         method: 'PATCH',
         body: JSON.stringify({ nom, description: desc, couleur })
       });
-      toast(`✓ Bloc "${nom}" modifié`);
+      toast(`Bloc "${nom}" modifié`);
     } else {
       const maxOrdre = allBlocs.length ? Math.max(...allBlocs.map(b => b.ordre || 0)) + 1 : 1;
       await sbFetch('/rest/v1/dlc_blocs', {
         method: 'POST',
         body: JSON.stringify({ tenant_id: tenantId, nom, description: desc, couleur, ordre: maxOrdre, actif: true })
       });
-      toast(`✓ Bloc "${nom}" créé`);
+      toast(`Bloc "${nom}" créé`);
     }
     closeModal('modal-bloc');
     loadBlocs();
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
 }
 
 async function toggleBlocActif(id, currentActif) {
   try {
     await sbFetch(`/rest/v1/dlc_blocs?id=eq.${id}`, { method:'PATCH', body: JSON.stringify({ actif: !currentActif }) });
-    toast(currentActif ? 'Bloc désactivé' : '✓ Bloc activé');
+    toast(currentActif ? 'Bloc désactivé' : 'Bloc activé');
     loadBlocs();
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
 }
 
 async function deleteBloc(id) {
@@ -1792,7 +1829,7 @@ async function deleteBloc(id) {
     await sbFetch(`/rest/v1/dlc_blocs?id=eq.${id}`, { method:'DELETE' });
     toast('Bloc supprimé');
     loadBlocs();
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
 }
 
 // ── Contenu du bloc : marques entières + articles individuels ──
@@ -1816,9 +1853,9 @@ async function openMarquesModal(blocId) {
   if (!b.dlc_blocs_marques)  b.dlc_blocs_marques  = [];
   if (!b.dlc_blocs_produits) b.dlc_blocs_produits = [];
   pickerExpanded = new Set();
-  document.getElementById('modal-marques-title').textContent = `📦 Contenu — ${b.nom}`;
+  document.getElementById('modal-marques-title').textContent = `Contenu — ${b.nom}`;
   document.getElementById('picker-search').value = '';
-  document.getElementById('marques-list').innerHTML = '<div class="loading">⏳ Chargement de la base produits...</div>';
+  document.getElementById('marques-list').innerHTML = '<div class="loading">Chargement de la base produits…</div>';
   document.getElementById('modal-bloc-marques').style.display = 'flex';
   try {
     const tenantId = b.tenant_id || ME.tenant_id;
@@ -1826,7 +1863,7 @@ async function openMarquesModal(blocId) {
     pickerProducts = Array.isArray(rows) ? rows : [];
   } catch(e) {
     pickerProducts = [];
-    toast('⚠ Base produits indisponible : ' + e.message, true);
+    toast('Base produits indisponible : ' + e.message, true);
   }
   renderPicker();
 }
@@ -1863,7 +1900,7 @@ function renderPicker() {
   let html = '';
   if (orphans.length) {
     html += `<div style="padding:10px 12px;border:1px solid rgba(255,64,64,.35);border-radius:10px;background:rgba(255,64,64,.06)">
-      <div style="font-size:11px;color:var(--red);margin-bottom:6px">⚠ Marques introuvables dans la base produits (ne filtrent rien) :</div>
+      <div style="font-size:11px;color:var(--red);margin-bottom:6px">Marques introuvables dans la base produits (ne filtrent rien) :</div>
       ${orphans.map(m => `<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
         <span style="flex:1;font-size:12px">${escapeHtml(m.marque)}</span>
         <button class="btn btn-ghost" onclick="removeBlocMarqueById('${m.id}')" style="font-size:11px;padding:4px 10px;color:var(--red)">✕ Retirer</button>
@@ -1922,7 +1959,7 @@ async function toggleBrandInBloc(gi, checked) {
       }));
       const row = Array.isArray(res) ? res[0] : res;
       b.dlc_blocs_marques.push({ id: row && row.id, marque: g.marque });
-      toast(`✓ Marque « ${g.marque} » ajoutée au bloc`);
+      toast(`Marque « ${g.marque} » ajoutée au bloc`);
     } else {
       const toDel = b.dlc_blocs_marques.filter(m => blocNorm(m.marque) === g.key);
       for (const m of toDel) {
@@ -1931,7 +1968,7 @@ async function toggleBrandInBloc(gi, checked) {
       b.dlc_blocs_marques = b.dlc_blocs_marques.filter(m => blocNorm(m.marque) !== g.key);
       toast(`Marque « ${g.marque} » retirée du bloc`);
     }
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
   renderPicker();
 }
 
@@ -1952,7 +1989,7 @@ async function toggleProductInBloc(produitId, checked) {
       if (assoc && assoc.id) sbCheck(await sbFetch(`/rest/v1/dlc_blocs_produits?id=eq.${assoc.id}`, { method: 'DELETE' }));
       b.dlc_blocs_produits = b.dlc_blocs_produits.filter(x => x.produit_id !== produitId);
     }
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
   renderPicker();
 }
 
@@ -1962,7 +1999,7 @@ async function removeBlocMarqueById(id) {
   try {
     sbCheck(await sbFetch(`/rest/v1/dlc_blocs_marques?id=eq.${id}`, { method: 'DELETE' }));
     b.dlc_blocs_marques = b.dlc_blocs_marques.filter(m => m.id !== id);
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
   renderPicker();
 }
 
@@ -1971,7 +2008,7 @@ async function openBlocUsersModal(blocId) {
   currentBlocId = blocId;
   const b = allBlocs.find(x => x.id === blocId);
   if (!b) return;
-  document.getElementById('modal-users-title').textContent = `👥 Attribution — ${b.nom}`;
+  document.getElementById('modal-users-title').textContent = `Attribution — ${b.nom}`;
   // Charger les users du même tenant si pas encore chargés
   if (!allUsers.length) await loadUsers();
   renderBlocUsersList(blocId);
@@ -2006,7 +2043,7 @@ function renderBlocUsersList(blocId) {
       <button onclick="toggleBlocUser('${u.id}','${blocId}','${assocId || ''}',${assigned})"
         class="btn ${assigned?'btn-primary':'btn-ghost'}"
         style="flex-shrink:0;padding:6px 12px;font-size:11px">
-        ${assigned ? '✓ Assigné' : '＋ Assigner'}
+        ${assigned ? 'Assigné' : '＋ Assigner'}
       </button>
     </div>`;
   }).join('');
@@ -2030,11 +2067,11 @@ async function toggleBlocUser(userId, blocId, assocId, currentlyAssigned) {
         const newId = Array.isArray(res) ? res[0]?.id : res?.id;
         b.dlc_blocs_users.push({ id: newId || Date.now().toString(), user_id: userId });
       }
-      toast('✓ Utilisateur assigné au bloc');
+      toast('Utilisateur assigné au bloc');
     }
     renderBlocUsersList(blocId);
     renderBlocs();
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
 }
 
 // ── Option recherche libre dans DLC ──
@@ -2046,9 +2083,9 @@ async function toggleDlcSearchLibre(userId, currentVal) {
     });
     const u = allUsers.find(x => x.id === userId);
     if (u) u.dlc_search_libre = !currentVal;
-    toast(currentVal ? 'Recherche restreinte au bloc' : '✓ Recherche libre activée');
+    toast(currentVal ? 'Recherche restreinte au bloc' : 'Recherche libre activée');
     renderUsers();
-  } catch(e) { toast('⚠ ' + e.message, true); }
+  } catch(e) { toast('' + e.message, true); }
 }
 
 // ── Vue "Blocs" dans la section users ──

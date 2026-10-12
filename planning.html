@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
+<script id="sl-session">
+// StoreLine — maintien de session : renouvelle le jeton avant expiration (1 h) pour éviter les déconnexions
+(function () {
+  var U = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+  var K = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+  var busy = null;
+  function exp(t) { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; } catch (e) { return 0; } }
+  function logoutExpired() {
+    ['sl_access_token', 'sl_refresh_token', 'sl_auth', 'sl_user'].forEach(function (k) { localStorage.removeItem(k); });
+    location.replace('login.html?expired=1');
+  }
+  function refresh() {
+    if (busy) return busy;
+    var rt = localStorage.getItem('sl_refresh_token');
+    if (!rt) return Promise.resolve(false);
+    busy = fetch(U + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': K }, body: JSON.stringify({ refresh_token: rt })
+    }).then(function (r) {
+      if (r.status === 400 || r.status === 401 || r.status === 403) { logoutExpired(); return false; }
+      if (!r.ok) return false;
+      return r.json().then(function (d) {
+        localStorage.setItem('sl_access_token', d.access_token);
+        if (d.refresh_token) localStorage.setItem('sl_refresh_token', d.refresh_token);
+        return true;
+      });
+    }).catch(function () { return false; }).then(function (v) { busy = null; return v; });
+    return busy;
+  }
+  window.slEnsureSession = function () {
+    var t = localStorage.getItem('sl_access_token');
+    if (!t) return Promise.resolve(false);
+    return exp(t) - Date.now() < 5 * 60 * 1000 ? refresh() : Promise.resolve(true);
+  };
+  window.slSessionReady = window.slEnsureSession();
+  setInterval(window.slEnsureSession, 4 * 60 * 1000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') window.slEnsureSession(); });
+})();
+</script>
+<script>
+// Accès : admin / manager du magasin, ou permission « planning »
+document.documentElement.style.visibility = 'hidden';
+window.__guardPassed = undefined;
+(async () => {
+  if (window.slSessionReady) await window.slSessionReady;
+  const tok = localStorage.getItem('sl_access_token');
+  const sl  = localStorage.getItem('sl_auth') === '1';
+  function block(title, sub) {
+    window.__guardPassed = false;
+    document.documentElement.style.visibility = 'visible';
+    const render = () => {
+      if (!document.body) { requestAnimationFrame(render); return; }
+      document.body.innerHTML = `<div style="position:fixed;inset:0;background:#f4efe7;color:#23201c;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;padding:24px"><div style="max-width:320px"><div style="font-family:'Fraunces',Georgia,serif;font-size:28px;font-weight:700;margin-bottom:8px">${title}</div><div style="font-size:15px;color:#6e6256;margin-bottom:28px;line-height:1.4">${sub}</div><a href="hub.html" style="display:inline-block;padding:14px 28px;background:#e8a045;border-radius:999px;font-size:16px;font-weight:700;color:#23201c;text-decoration:none">Retour à l’accueil</a></div></div>`;
+    };
+    render();
+  }
+  function allow() { window.__guardPassed = true; document.documentElement.style.visibility = 'visible'; }
+  if (!tok || !sl) { window.location.replace('login.html'); return; }
+  const user = JSON.parse(localStorage.getItem('sl_user') || '{}');
+  if (['superadmin', 'admin', 'manager'].includes(user.role) || !user.id) { allow(); return; }
+  try {
+    const r = await fetch('https://jeqptodorjzeyhapbmrz.supabase.co/rest/v1/permissions?user_id=eq.' + user.id + '&module=eq.planning&actif=eq.true&select=id',
+      { headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk', 'Authorization': 'Bearer ' + tok } });
+    const perms = await r.json();
+    if (!Array.isArray(perms) || !perms.length) { block('Module non activé', 'Demande l’accès à ton responsable'); return; }
+    allow();
+  } catch (e) { allow(); }
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f4efe7">
+<title>Planning · StoreLine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<script>
+(function(){ try { var t = localStorage.getItem('sl_ui_theme') || 'light'; if (t === 'light') document.documentElement.dataset.theme = 'light'; } catch(e) {} })();
+</script>
+<style>
+  /* StoreLine — Planning, design D */
+  html[data-theme="light"] {
+    --bg:#f4efe7; --surface:#fffcf7; --surface2:#f1e6d6; --border:#e2d7c9; --text:#23201c; --muted:#6e6256;
+    --fill:#e8a045; --accent:#ad5a10; --red:#b3261e; --red-bg:#fbece9; --green:#2f6b45; --green-bg:#e7f1e9;
+    --blue:#1f5f96; --blue-bg:#e6eef7; --purple:#6b4fc0; --purple-bg:#efeafb; --off-bg:#efe9e1;
+    --shadow:0 1px 2px rgba(60,40,20,.05), 0 10px 28px rgba(60,40,20,.08);
+  }
+  html:not([data-theme="light"]) {
+    --bg:#161412; --surface:#211e1b; --surface2:#2b2723; --border:#3a342e; --text:#f4efe7; --muted:#a3978a;
+    --fill:#e8a045; --accent:#f0b264; --red:#ff7a6e; --red-bg:rgba(255,122,110,.13); --green:#6fcf97; --green-bg:rgba(111,207,151,.13);
+    --blue:#7fb8ff; --blue-bg:rgba(127,184,255,.13); --purple:#b9a2ff; --purple-bg:rgba(185,162,255,.14); --off-bg:#2b2723;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.25);
+  }
+  :root { --sans:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', sans-serif; --serif:'Fraunces', Georgia, serif; --w:760px; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { background:var(--bg); color:var(--text); font-family:var(--sans); font-size:15px; -webkit-font-smoothing:antialiased; -webkit-tap-highlight-color:transparent; }
+  button, input, select, textarea { font:inherit; color:inherit; }
+  button { cursor:pointer; }
+  :focus-visible { outline:2px solid var(--fill); outline-offset:2px; }
+
+  header.sl-head { position:sticky; top:0; z-index:50; padding:calc(env(safe-area-inset-top) + 10px) 0 12px; background:color-mix(in srgb, var(--bg) 86%, transparent); -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); border-bottom:.5px solid var(--border); }
+  .sl-head-in, .main { max-width:var(--w); margin:0 auto; padding:0 20px; }
+  .sl-head-top { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:34px; }
+  .sl-back { display:inline-flex; align-items:center; gap:6px; color:var(--accent); font-size:16px; font-weight:500; text-decoration:none; }
+  .sl-title { font-family:var(--serif); font-size:32px; font-weight:700; letter-spacing:-.6px; line-height:1.1; margin-top:6px; }
+  .actions { display:flex; gap:8px; }
+  .pill { height:34px; padding:0 14px; border-radius:17px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px; }
+  .pill.primary { background:var(--fill); border-color:var(--fill); color:#23201c; }
+  .mgr-only { display:none !important; }
+  body.is-mgr .mgr-only { display:revert !important; }
+  body.is-mgr .pill.mgr-only, body.is-mgr .seg-btn.mgr-only { display:inline-flex !important; }
+  .day { scroll-margin-top:170px; }
+  .li { scroll-margin-top:170px; }
+
+  .main { padding-top:16px; padding-bottom:calc(env(safe-area-inset-bottom) + 60px); }
+  .seg { display:flex; gap:0; background:var(--surface2); border-radius:10px; padding:2px; overflow-x:auto; scrollbar-width:none; margin-bottom:16px; }
+  .seg::-webkit-scrollbar { display:none; }
+  .seg-btn { display:inline-flex; align-items:center; justify-content:center; flex:1 1 0; min-width:max-content; height:32px; padding:0 12px; border:none; border-radius:8px; background:transparent; font-size:13px; font-weight:500; white-space:nowrap; }
+  .seg-btn.active { background:var(--surface); font-weight:600; box-shadow:0 1px 3px rgba(60,40,20,.15); }
+  html:not([data-theme="light"]) .seg-btn.active { background:#48413a; }
+
+  .status { min-height:18px; font-size:12px; color:var(--muted); text-align:center; margin:-6px 0 10px; }
+  .status.err { color:var(--red); }
+
+  /* Navigation semaine */
+  .weeknav { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .weeknav .nav-btn { width:40px; height:40px; border-radius:20px; border:1px solid var(--border); background:var(--surface); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .weeknav .nav-btn:disabled { opacity:.3; cursor:default; }
+  .weeknav .wk { flex:1; text-align:center; min-width:0; }
+  .wk-title { font-family:var(--serif); font-size:20px; font-weight:700; letter-spacing:-.3px; }
+  .wk-sub { font-size:12px; color:var(--muted); margin-top:2px; display:flex; gap:6px; justify-content:center; align-items:center; flex-wrap:wrap; }
+  .badge { display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:10px; font-size:11px; font-weight:600; background:var(--surface2); color:var(--muted); }
+  .badge.cur { background:var(--fill); color:#23201c; }
+  .badge.draft { background:var(--red-bg); color:var(--red); }
+  .badge.pub { background:var(--green-bg); color:var(--green); }
+
+  .card { background:var(--surface); border-radius:18px; box-shadow:var(--shadow); overflow:hidden; }
+  .card + .card { margin-top:12px; }
+
+  /* Pastilles d'horaire */
+  .chip { border-radius:9px; padding:6px 8px; min-height:34px; display:flex; flex-direction:column; justify-content:center; gap:1px; font-size:11px; line-height:1.25; border-left:3px solid transparent; width:100%; }
+  .chip b { font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-.1px; }
+  .chip span { color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chip.ouv { background:var(--green-bg); border-left-color:var(--green); }
+  .chip.ouv span { color:var(--green); }
+  .chip.ferm { background:var(--blue-bg); border-left-color:var(--blue); }
+  .chip.ferm span { color:var(--blue); }
+  .chip.special { background:var(--purple-bg); border-left-color:var(--purple); }
+  .chip.special span { color:var(--purple); text-transform:none; letter-spacing:0; white-space:normal; font-size:11px; }
+  .chip.off { background:var(--off-bg); color:var(--muted); font-style:italic; font-size:12px; }
+  .chip.undef { background:transparent; border:1.5px dashed var(--border); border-left-width:1.5px; color:var(--muted); font-size:12px; }
+
+  /* Grille semaine (tablette, ordinateur, mobile paysage) */
+  .grid { display:none; }
+  .grid table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  .grid th, .grid td { border-bottom:1px solid var(--border); padding:6px; vertical-align:middle; }
+  .grid tr:last-child td { border-bottom:none; }
+  .grid th { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; padding:10px 6px; background:var(--surface2); }
+  .grid th .num { display:block; font-family:var(--serif); font-size:18px; color:var(--text); text-transform:none; letter-spacing:-.2px; margin-top:1px; }
+  .grid th.today { background:color-mix(in srgb, var(--fill) 22%, var(--surface2)); }
+  .grid td.name { width:150px; background:var(--surface2); cursor:pointer; }
+  .grid th.name-h { width:150px; text-align:left; padding-left:12px; }
+  .grid td.today { background:color-mix(in srgb, var(--fill) 7%, transparent); }
+  .pn { font-weight:700; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .nn { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  body.is-mgr .cell { cursor:pointer; }
+  body.is-mgr .cell:hover .chip { filter:brightness(.97); outline:1.5px solid var(--fill); outline-offset:-1px; }
+  .count-row td { font-size:11px; color:var(--muted); text-align:center; padding:6px; background:var(--surface2); }
+
+  /* Cartes par jour (téléphone en portrait) */
+  .days .day { border-bottom:1px solid var(--border); }
+  .days .day:last-child { border-bottom:none; }
+  .day-h { display:flex; align-items:baseline; justify-content:space-between; padding:12px 14px 8px; position:sticky; top:0; }
+  .day-h .dn { font-family:var(--serif); font-size:19px; font-weight:700; letter-spacing:-.2px; }
+  .day-h .dc { font-size:12px; color:var(--muted); }
+  .day.today .day-h .dn { color:var(--accent); }
+  .day.today { background:color-mix(in srgb, var(--fill) 6%, transparent); }
+  .row { display:grid; grid-template-columns:118px minmax(0,1fr); align-items:center; gap:10px; padding:5px 14px; }
+  .row:last-child { padding-bottom:12px; }
+  .row .who { cursor:pointer; min-width:0; }
+
+  @media (min-width:760px), (orientation:landscape) and (min-width:560px) {
+    .grid { display:block; overflow-x:auto; }
+    .days { display:none; }
+    :root { --w:1100px; }
+  }
+
+  .wk-foot { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; padding:12px; border-top:1px solid var(--border); background:var(--surface2); }
+
+  /* Listes (aujourd'hui, employé, préparation) */
+  .list-h { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 16px 10px; }
+  .list-h h2 { font-family:var(--serif); font-size:20px; font-weight:700; letter-spacing:-.3px; }
+  .list-h .sub { font-size:12px; color:var(--muted); }
+  .li { display:grid; grid-template-columns:minmax(0,1fr) minmax(120px, 46%); align-items:center; gap:12px; padding:9px 16px; border-top:1px solid var(--border); }
+  .li.click { cursor:pointer; }
+  .li.today-hl { background:color-mix(in srgb, var(--fill) 10%, transparent); }
+  .li.past { opacity:.6; }
+  .li .t1 { font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .li .t2 { font-size:12px; color:var(--muted); margin-top:1px; }
+  .big-date { font-family:var(--serif); font-size:26px; font-weight:700; letter-spacing:-.4px; }
+  .me-card { padding:16px; display:flex; gap:12px; overflow-x:auto; scrollbar-width:none; }
+  .me-day { min-width:96px; flex:0 0 auto; }
+  .me-day .d { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; margin-bottom:4px; }
+  .empty { text-align:center; padding:44px 20px; color:var(--muted); }
+  .empty .et { font-family:var(--serif); font-size:20px; font-weight:700; color:var(--text); margin-bottom:6px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:10px; padding:0 16px 16px; }
+  .stat { background:var(--surface2); border-radius:14px; padding:12px 14px; }
+  .stat .v { font-family:var(--serif); font-size:24px; font-weight:700; margin-top:4px; }
+  .stat .m { font-size:12px; color:var(--muted); }
+  .select { height:40px; border-radius:12px; border:1.5px solid transparent; background:var(--surface2); padding:0 12px; font-size:15px; max-width:100%; }
+
+  /* Feuilles (modales) */
+  .ov { display:none; position:fixed; inset:0; z-index:200; background:rgba(35,32,28,.38); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); align-items:center; justify-content:center; padding:20px; }
+  .ov.open { display:flex; }
+  .sheet { background:var(--surface); border-radius:22px; width:100%; max-width:520px; max-height:92vh; overflow-y:auto; padding:22px; box-shadow:0 20px 60px rgba(0,0,0,.18); }
+  .sheet.wide { max-width:760px; }
+  .sheet h3 { font-family:var(--serif); font-size:22px; font-weight:700; letter-spacing:-.3px; }
+  .sheet .sub { font-size:13px; color:var(--muted); margin:3px 0 16px; }
+  .lbl { display:block; font-size:12px; font-weight:600; color:var(--muted); margin:12px 0 6px; letter-spacing:.03em; }
+  .inp { width:100%; height:46px; border-radius:12px; border:1.5px solid transparent; background:var(--surface2); padding:0 14px; font-size:16px; }
+  .inp:focus, .select:focus, textarea.inp:focus { outline:none; border-color:var(--fill); background:var(--surface); }
+  textarea.inp { height:170px; padding:12px 14px; font-family:ui-monospace, Menlo, monospace; font-size:12px; resize:vertical; }
+  .types { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+  .tbtn { height:44px; border-radius:12px; border:1.5px solid var(--border); background:var(--surface); font-weight:600; font-size:14px; }
+  .tbtn.on.ouv { background:var(--green-bg); border-color:var(--green); color:var(--green); }
+  .tbtn.on.ferm { background:var(--blue-bg); border-color:var(--blue); color:var(--blue); }
+  .tbtn.on.repos { background:var(--off-bg); border-color:var(--muted); }
+  .tbtn.on.special { background:var(--purple-bg); border-color:var(--purple); color:var(--purple); }
+  .quick { display:flex; flex-wrap:wrap; gap:6px; }
+  .qbtn { height:32px; padding:0 12px; border-radius:16px; border:1px solid var(--border); background:var(--surface); font-size:13px; font-weight:600; }
+  .times { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .check { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:14px; }
+  .check input { width:20px; height:20px; accent-color:var(--fill); }
+  .btns { display:flex; gap:8px; margin-top:20px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:110px; height:48px; border-radius:999px; border:1px solid var(--border); background:var(--surface); font-weight:600; font-size:15px; }
+  .btn.primary { background:var(--fill); border-color:var(--fill); color:#23201c; font-weight:700; box-shadow:0 4px 14px rgba(232,160,69,.28); }
+  .btn.danger { color:var(--red); background:var(--red-bg); border-color:transparent; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .drop { border:2px dashed var(--border); border-radius:16px; padding:22px; text-align:center; cursor:pointer; }
+  .drop:hover { border-color:var(--fill); }
+  .drop .dt { font-weight:700; margin-top:8px; }
+  .drop .ds { font-size:12px; color:var(--muted); margin-top:3px; }
+  .preview { margin-top:14px; border-radius:14px; background:var(--surface2); padding:12px; font-size:13px; }
+  .preview .grid { display:block; overflow-x:auto; }
+  .preview .grid table { min-width:640px; }
+  .preview .grid td, .preview .grid th { padding:4px; }
+  .note { font-size:12px; color:var(--muted); margin-top:10px; line-height:1.45; }
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:sp .8s linear infinite; vertical-align:-2px; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+  .toast-c { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 20px); z-index:400; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; }
+  .toast { background:var(--text); color:var(--bg); padding:11px 16px; border-radius:14px; font-size:14px; font-weight:500; box-shadow:var(--shadow); max-width:min(92vw, 420px); text-align:center; }
+  .toast.err { background:var(--red); color:#fff; }
+  .version-tag { position:fixed; bottom:8px; left:12px; font-size:10px; color:var(--muted); opacity:.45; }
+
+  @media (max-width:640px) {
+    .ov { align-items:flex-end; padding:0; }
+    .sheet { border-radius:22px 22px 0 0; max-height:94vh; padding-bottom:calc(env(safe-area-inset-bottom) + 22px); }
+    .sl-head-in, .main { padding:0 16px; }
+    .sl-title { font-size:30px; }
+    .main { padding-top:14px; }
+    .types { grid-template-columns:repeat(2, 1fr); }
+  }
+  @media print {
+    header, .seg, .weeknav .nav-btn, .wk-foot, .toast-c, .status, .version-tag, .ov { display:none !important; }
+    body, html { background:#fff; color:#000; }
+    .card { box-shadow:none; border:1px solid #bbb; }
+    .grid { display:block !important; }
+    .days { display:none !important; }
+    .main { max-width:none; padding:0; }
+  }
+</style>
+</head>
+<body>
+<header class="sl-head">
+  <div class="sl-head-in">
+    <div class="sl-head-top">
+      <a class="sl-back" href="hub.html"><svg width="11" height="18" viewBox="0 0 11 18" aria-hidden="true"><path d="M9 1.5 1.8 9 9 16.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Accueil</span></a>
+      <div class="actions">
+        <button class="pill mgr-only" type="button" onclick="openImport()">Importer</button>
+        <button class="pill" type="button" onclick="window.print()" aria-label="Imprimer la semaine">Imprimer</button>
+      </div>
+    </div>
+    <h1 class="sl-title">Planning</h1>
+  </div>
+</header>
+
+<div class="main">
+  <div class="seg" role="tablist" aria-label="Vues du planning">
+    <button class="seg-btn" id="tab-today" type="button" onclick="setView('today')">Aujourd’hui</button>
+    <button class="seg-btn" id="tab-week" type="button" onclick="setView('week')">Semaine</button>
+    <button class="seg-btn" id="tab-emp" type="button" onclick="setView('emp')">Par personne</button>
+    <button class="seg-btn" id="tab-stats" type="button" onclick="setView('stats')">Heures</button>
+    <button class="seg-btn mgr-only" id="tab-prep" type="button" onclick="setView('prep')">À préparer</button>
+  </div>
+  <div class="status" id="status" role="status"></div>
+  <div id="view"></div>
+</div>
+
+<!-- Modifier une case -->
+<div class="ov" id="ov-edit" onclick="if(event.target===this)closeOv('ov-edit')">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+    <h3 id="edit-title">Horaire</h3>
+    <div class="sub" id="edit-sub"></div>
+    <div class="types">
+      <button type="button" class="tbtn ouv" data-t="Ouverture" onclick="pickType('Ouverture')">Ouverture</button>
+      <button type="button" class="tbtn ferm" data-t="Fermeture" onclick="pickType('Fermeture')">Fermeture</button>
+      <button type="button" class="tbtn repos" data-t="repos" onclick="pickType('repos')">Repos</button>
+      <button type="button" class="tbtn special" data-t="special" onclick="pickType('special')">Autre</button>
+    </div>
+    <div id="edit-special" style="display:none">
+      <label class="lbl" for="edit-label">Libellé</label>
+      <div class="quick" id="edit-quick"></div>
+      <input class="inp" id="edit-label" style="margin-top:8px" placeholder="CRDT, VA, Formation…" autocomplete="off">
+    </div>
+    <div id="edit-times-wrap">
+      <label class="check"><input type="checkbox" id="edit-has-time" onchange="syncTimes()"> Avec horaire</label>
+      <div class="times" id="edit-times">
+        <div><label class="lbl" for="edit-start">Début</label><input class="inp" type="time" id="edit-start"></div>
+        <div><label class="lbl" for="edit-end">Fin</label><input class="inp" type="time" id="edit-end"></div>
+      </div>
+    </div>
+    <div class="btns">
+      <button type="button" class="btn primary" id="edit-save" onclick="saveEdit()">Enregistrer</button>
+      <button type="button" class="btn" onclick="clearEdit()">Effacer</button>
+      <button type="button" class="btn" onclick="closeOv('ov-edit')">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- Personne -->
+<div class="ov" id="ov-emp" onclick="if(event.target===this)closeOv('ov-emp')">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="emp-title">
+    <h3 id="emp-title">Ajouter une personne</h3>
+    <div class="sub" id="emp-sub">Elle apparaîtra dans toutes les semaines à venir.</div>
+    <label class="lbl" for="emp-prenom">Prénom</label><input class="inp" id="emp-prenom" autocomplete="off">
+    <label class="lbl" for="emp-nom">Nom</label><input class="inp" id="emp-nom" autocomplete="off">
+    <div id="emp-link-wrap" style="display:none">
+      <label class="lbl" for="emp-user">Compte StoreLine (pour voir son horaire)</label>
+      <select class="select" id="emp-user" style="width:100%"></select>
+    </div>
+    <div class="btns">
+      <button type="button" class="btn primary" onclick="saveEmp()">Enregistrer</button>
+      <button type="button" class="btn" onclick="closeOv('ov-emp')">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- Copier une semaine -->
+<div class="ov" id="ov-copy" onclick="if(event.target===this)closeOv('ov-copy')">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="copy-title">
+    <h3 id="copy-title">Copier une semaine</h3>
+    <div class="sub">Reprend les horaires jour par jour (lundi → lundi…). Les cases de la semaine cible sont remplacées pour les personnes présentes dans la source.</div>
+    <label class="lbl" for="copy-src">Semaine à copier</label><select class="select" id="copy-src" style="width:100%" onchange="copyRecap()"></select>
+    <label class="lbl" for="copy-dst">Vers</label><select class="select" id="copy-dst" style="width:100%" onchange="copyRecap()"></select>
+    <div class="note" id="copy-recap"></div>
+    <div class="btns">
+      <button type="button" class="btn primary" onclick="confirmCopy()">Copier</button>
+      <button type="button" class="btn" onclick="closeOv('ov-copy')">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- Importer -->
+<div class="ov" id="ov-import" onclick="if(event.target===this)closeOv('ov-import')">
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="imp-title">
+    <h3 id="imp-title">Importer un horaire</h3>
+    <div class="sub">Photo de l’horaire papier, ou JSON.</div>
+    <div class="seg" style="margin-bottom:12px">
+      <button class="seg-btn active" id="imp-tab-photo" type="button" onclick="impTab('photo')">Photo</button>
+      <button class="seg-btn" id="imp-tab-json" type="button" onclick="impTab('json')">JSON</button>
+    </div>
+    <div id="imp-photo">
+      <label class="drop" for="imp-file">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        <div class="dt">Prendre ou choisir une photo</div>
+        <div class="ds">L’horaire bien à plat, toute la feuille visible</div>
+      </label>
+      <input type="file" id="imp-file" accept="image/*" style="display:none" onchange="readPhoto(event)">
+      <label class="lbl" for="imp-week">Semaine de l’horaire (aide la lecture)</label>
+      <select class="select" id="imp-week" style="width:100%"></select>
+      <div class="note">La photo est lue par une IA selon tes règles (cadre jaune = heures, vert = ouverture, bleu = fermeture, gris = repos). Tu vérifies toujours le résultat avant d’importer.</div>
+    </div>
+    <div id="imp-json" style="display:none">
+      <textarea class="inp" id="imp-text" placeholder='{"weeks":[{"label":"…","days":["2026-10-12",…],"employees":[…]}]}' spellcheck="false"></textarea>
+      <div class="btns" style="margin-top:8px">
+        <button type="button" class="btn" onclick="document.getElementById('imp-jsonfile').click()">Fichier .json</button>
+        <button type="button" class="btn" onclick="analyseJSON()">Vérifier</button>
+        <button type="button" class="btn" id="imp-legacy" style="display:none" onclick="loadLegacy()">Ancien Rob.Planning</button>
+      </div>
+      <input type="file" id="imp-jsonfile" accept=".json,application/json" style="display:none" onchange="readJSONFile(event)">
+    </div>
+    <div id="imp-preview"></div>
+    <div class="btns">
+      <button type="button" class="btn primary" id="imp-go" disabled onclick="applyImport()">Importer</button>
+      <button type="button" class="btn" onclick="closeOv('ov-import')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-c" id="toasts" aria-live="polite"></div>
+<div class="version-tag">planning v1.0 · 12/10/2026 12:45</div>
+<script>
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+const LEGACY_TENANT = 'b1a616f5-010d-42c8-919b-ce39961269a5'; // Rob The Market : ancien Rob.Planning (Google Sheet)
+const LEGACY_API = 'https://script.google.com/macros/s/AKfycbxkRwejUPDsjpUG6z7oRIQlGxj3lmJbYMgefCrNB8HCzWWI8Q5zHxPYL8tKn_hvg_ar/exec';
+const DAY_SHORT = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'];
+const DAY_LONG = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+const SPECIALS = ['CRDT', 'VA', 'VAE', 'Récup JF', 'Férié', 'MAL 1/2T', 'Formation', 'Congé sans solde'];
+const HORIZON_WEEKS = 12;
+
+let me = {};
+let isMgr = false, isAdmin = false;
+let employes = [];            // { id, prenom, nom, ordre, actif, user_id }
+let semaines = new Map();     // lundi -> { lundi, label, publiee, officielle }
+let shifts = new Map();       // `${employe_id}|${jour}` -> { id, employe_id, jour, debut, fin, type }
+let view = 'today';
+let weekMon = '';
+let selEmp = '';
+let editCtx = null, editType = 'repos';
+let empEditId = null;
+let pendingImport = null;
+let tenantUsers = [];
+
+// ── Utilitaires ──
+function sbHeaders(extra) {
+  return Object.assign({ 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + localStorage.getItem('sl_access_token'), 'Content-Type': 'application/json', 'Prefer': 'return=representation' }, extra || {});
+}
+async function sbFetch(path, options = {}) {
+  const r = await slFetch(SUPABASE_URL + path, Object.assign({}, options, { headers: sbHeaders(options.headers) }));
+  const text = await r.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+  if (!r.ok) throw new Error(slErrMsg(r.status, data));
+  return data;
+}
+async function sbAll(path) {
+  const out = [];
+  for (let off = 0; ; off += 1000) {
+    const page = await sbFetch(path + (path.includes('?') ? '&' : '?') + 'limit=1000&offset=' + off);
+    if (!Array.isArray(page) || !page.length) break;
+    out.push(...page);
+    if (page.length < 1000) break;
+  }
+  return out;
+}
+function toast(msg, err) {
+  const c = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast' + (err ? ' err' : '');
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), err ? 5000 : 3000);
+}
+function setStatus(msg, err) {
+  const el = document.getElementById('status');
+  el.className = 'status' + (err ? ' err' : '');
+  el.textContent = msg || '';
+}
+function openOv(id) { document.getElementById(id).classList.add('open'); }
+function closeOv(id) { document.getElementById(id).classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.ov.open').forEach(o => o.classList.remove('open')); });
+
+// Dates (toujours en heure locale)
+function parseISO(s) { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d, 12); }
+function addDays(s, n) { const d = parseISO(s); d.setDate(d.getDate() + n); return localISO(d); }
+function mondayOf(s) { const d = parseISO(s); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return localISO(d); }
+function todayISO() { return localISO(); }
+function isoWeekNum(s) { const d = parseISO(s); const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day); const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return Math.ceil(((t - y0) / 86400000 + 1) / 7); }
+function fmtDay(s, opts) { return parseISO(s).toLocaleDateString('fr-BE', opts || { weekday: 'long', day: 'numeric', month: 'long' }); }
+function weekTitle(mon) { return `Semaine ${isoWeekNum(mon)}`; }
+function weekRange(mon) {
+  const end = addDays(mon, 5), a = parseISO(mon), b = parseISO(end);
+  const m1 = a.toLocaleDateString('fr-BE', { month: 'long' }), m2 = b.toLocaleDateString('fr-BE', { month: 'long' });
+  return m1 === m2 ? `${a.getDate()} au ${b.getDate()} ${m2} ${b.getFullYear()}` : `${a.getDate()} ${m1} au ${b.getDate()} ${m2} ${b.getFullYear()}`;
+}
+function autoLabel(mon) { return `Sem ${isoWeekNum(mon)} — ${weekRange(mon)}`; }
+
+// Horaires
+function hm(t) { return t ? String(t).slice(0, 5) : ''; }
+function mins(t) { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+function isAbsence(type) { return /^(repos|va\b|vae|crdt|mal\b|vacances|f[ée]ri[ée]|r[ée]cup|rec|cong[ée]|absnp|css|absent|maladie)/i.test(String(type || '').trim()); }
+function isWorking(s) { return !!s && mins(s.debut) !== null && mins(s.fin) !== null && !isAbsence(s.type); }
+function family(s) {
+  if (!s) return '';
+  const t = norm(s.type);
+  if (t.startsWith('ferm')) return 'ferm';
+  if (t.startsWith('ouv') || t === 'atelier') return 'ouv';
+  if (t === 'repos' || isAbsence(s.type)) return '';
+  const st = mins(s.debut);
+  return st === null ? '' : (st < 12 * 60 ? 'ouv' : 'ferm');
+}
+// Amplitude ≥ 9 h : 1 h de pause repas non payée
+function hours(s) { if (!isWorking(s)) return 0; let h = (mins(s.fin) - mins(s.debut)) / 60; if (h < 0) h += 24; return h >= 9 ? h - 1 : h; }
+function fmtH(h) { const H = Math.floor(h), M = Math.round((h - H) * 60); return M ? `${H} h ${String(M).padStart(2, '0')}` : `${H} h`; }
+
+function chip(s) {
+  if (!s) return '<div class="chip undef">À définir</div>';
+  const t = String(s.type || '').trim();
+  const time = s.debut ? `<b>${esc(hm(s.debut))} – ${esc(hm(s.fin))}</b>` : '';
+  if (norm(t) === 'repos' && !s.debut) return '<div class="chip off">Jour off</div>';
+  const f = family(s);
+  if (f === 'ouv') return `<div class="chip ouv">${time}<span>${esc(norm(t) === 'ouverture' || !t ? 'Ouverture' : t)}</span></div>`;
+  if (f === 'ferm') return `<div class="chip ferm">${time}<span>Fermeture</span></div>`;
+  return `<div class="chip special">${time}<span>${esc(t || 'À définir')}</span></div>`;
+}
+
+// ── Données ──
+function shiftOf(empId, day) { return shifts.get(empId + '|' + day) || null; }
+function empName(e) { return `${e.prenom || ''} ${e.nom || ''}`.trim() || 'Sans nom'; }
+function empKey(first, last) { return norm(first).replace(/\s+/g, ' ') + '|' + norm(last).replace(/\s+/g, ' '); }
+function prettyFirst(s) { s = String(s || '').trim(); return s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase()) : s; }
+function weekDays(mon) {
+  const days = [0, 1, 2, 3, 4, 5].map(i => addDays(mon, i));
+  const sun = addDays(mon, 6);
+  if (employes.some(e => shiftOf(e.id, sun))) days.push(sun);
+  return days;
+}
+function hasShiftInWeek(empId, mon) { for (let i = 0; i < 7; i++) if (shiftOf(empId, addDays(mon, i))) return true; return false; }
+// Personnes affichées : celles qui ont un horaire cette semaine, plus toute l'équipe active pour les semaines en cours et à venir
+function roster(mon) {
+  const cur = mondayOf(todayISO());
+  return employes.filter(e => hasShiftInWeek(e.id, mon) || (e.actif && mon >= cur));
+}
+function weekVisible(mon) {
+  if (isMgr) return true;
+  if (mon <= mondayOf(todayISO())) return true;
+  const s = semaines.get(mon);
+  return !!(s && s.publiee);
+}
+function weekHasData(mon) { return !!semaines.get(mon) || employes.some(e => hasShiftInWeek(e.id, mon)); }
+function knownMondays() {
+  const set = new Set([mondayOf(todayISO())]);
+  semaines.forEach((_, k) => set.add(k));
+  shifts.forEach(s => set.add(mondayOf(s.jour)));
+  return [...set].sort();
+}
+
+async function loadAll() {
+  setStatus('Chargement…');
+  const t = encodeURIComponent(me.tenant_id);
+  const [emps, sems, sh] = await Promise.all([
+    sbAll(`/rest/v1/plan_employes?tenant_id=eq.${t}&select=id,prenom,nom,ordre,actif,user_id,created_at&order=ordre.asc,created_at.asc`),
+    sbAll(`/rest/v1/plan_semaines?tenant_id=eq.${t}&select=lundi,label,publiee,officielle&order=lundi.asc`),
+    sbAll(`/rest/v1/plan_shifts?tenant_id=eq.${t}&select=id,employe_id,jour,debut,fin,type&order=jour.asc`),
+  ]);
+  employes = emps.map(e => ({ ...e, created: (e.created_at || '').slice(0, 10) }));
+  semaines = new Map(sems.map(s => [s.lundi, s]));
+  shifts = new Map(sh.map(s => [s.employe_id + '|' + s.jour, s]));
+  setStatus('');
+}
+
+// ── Vues ──
+function setView(v) {
+  view = v;
+  ['today', 'week', 'emp', 'stats', 'prep'].forEach(k => document.getElementById('tab-' + k).classList.toggle('active', k === v));
+  render();
+}
+function render() {
+  if (view === 'week') renderWeek();
+  else if (view === 'emp') renderEmp();
+  else if (view === 'stats') renderStats();
+  else if (view === 'prep') renderPrep();
+  else renderToday();
+}
+
+function weekNavHTML() {
+  const mondays = knownMondays().filter(weekVisible);
+  const cur = mondayOf(todayISO());
+  const prevOk = isMgr || mondays.some(m => m < weekMon);
+  const nextOk = isMgr ? true : mondays.some(m => m > weekMon);
+  const s = semaines.get(weekMon);
+  let badge = '';
+  if (weekMon === cur) badge = '<span class="badge cur">Cette semaine</span>';
+  else if (weekMon > cur && isMgr) badge = s && s.publiee ? '<span class="badge pub">Visible par l’équipe</span>' : '<span class="badge draft">Brouillon · invisible pour l’équipe</span>';
+  else if (weekMon < cur) badge = '<span class="badge">Passée</span>';
+  return `<div class="weeknav">
+    <button class="nav-btn" type="button" onclick="moveWeek(-1)" ${prevOk ? '' : 'disabled'} aria-label="Semaine précédente"><svg width="9" height="15" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M8 2 2 8l6 6"/></svg></button>
+    <div class="wk"><div class="wk-title">${esc(weekTitle(weekMon))}</div>
+      <div class="wk-sub"><span>${esc(weekRange(weekMon))}</span>${badge}${weekMon !== cur ? `<button class="badge" type="button" style="border:none;cursor:pointer" onclick="goWeek('${cur}')">Revenir à aujourd’hui</button>` : ''}</div></div>
+    <button class="nav-btn" type="button" onclick="moveWeek(1)" ${nextOk ? '' : 'disabled'} aria-label="Semaine suivante"><svg width="9" height="15" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"/></svg></button>
+  </div>`;
+}
+function moveWeek(dir) {
+  if (isMgr) { weekMon = addDays(weekMon, dir * 7); render(); return; }
+  const list = knownMondays().filter(weekVisible);
+  const next = dir > 0 ? list.find(m => m > weekMon) : [...list].reverse().find(m => m < weekMon);
+  if (next) { weekMon = next; render(); }
+}
+function goWeek(mon) { weekMon = mon; if (view !== 'week' && view !== 'stats') view = 'week'; setView(view); }
+
+function renderWeek() {
+  const el = document.getElementById('view');
+  if (!weekVisible(weekMon)) {
+    el.innerHTML = weekNavHTML() + `<div class="card"><div class="empty"><div class="et">Pas encore publiée</div>L’horaire de cette semaine sera visible dès qu’il est prêt.</div></div>`;
+    return;
+  }
+  const days = weekDays(weekMon), today = todayISO(), people = roster(weekMon);
+  if (!people.length) {
+    el.innerHTML = weekNavHTML() + `<div class="card"><div class="empty"><div class="et">Aucune personne dans le planning</div>${isMgr ? 'Ajoute ton équipe ou importe un horaire.' : 'Le planning n’a pas encore été rempli.'}</div>${isMgr ? `<div class="wk-foot"><button class="pill primary" type="button" onclick="openEmp()">Ajouter une personne</button><button class="pill" type="button" onclick="openImport()">Importer un horaire</button></div>` : ''}</div>`;
+    return;
+  }
+  const cell = (e, d) => `<div class="cell" ${isMgr ? `onclick="openEdit('${e.id}','${d}')" role="button" tabindex="0" aria-label="Modifier ${esc(empName(e))}, ${esc(fmtDay(d))}"` : ''}>${chip(shiftOf(e.id, d))}</div>`;
+  const grid = `<div class="grid"><table>
+    <thead><tr><th class="name-h">Équipe</th>${days.map((d, i) => `<th class="${d === today ? 'today' : ''}">${DAY_SHORT[i]}<span class="num">${parseISO(d).getDate()}</span></th>`).join('')}</tr></thead>
+    <tbody>${people.map(e => `<tr><td class="name" onclick="showEmp('${e.id}')"><div class="pn">${esc(e.prenom || e.nom)}</div><div class="nn">${esc(e.prenom ? e.nom : '')}</div></td>${days.map(d => `<td class="${d === today ? 'today' : ''}">${cell(e, d)}</td>`).join('')}</tr>`).join('')}
+      <tr class="count-row"><td style="text-align:left;padding-left:12px">En poste</td>${days.map(d => `<td>${people.filter(e => isWorking(shiftOf(e.id, d))).length}</td>`).join('')}</tr>
+    </tbody></table></div>`;
+  const cards = `<div class="days">${days.map((d, i) => {
+    const n = people.filter(e => isWorking(shiftOf(e.id, d))).length;
+    return `<div class="day ${d === today ? 'today' : ''}" id="day-${d}"><div class="day-h"><span class="dn">${DAY_LONG[i]} ${parseISO(d).getDate()}</span><span class="dc">${n} en poste</span></div>
+      ${people.map(e => `<div class="row"><div class="who" onclick="showEmp('${e.id}')"><div class="pn">${esc(e.prenom || e.nom)}</div><div class="nn">${esc(e.prenom ? e.nom : '')}</div></div>${cell(e, d)}</div>`).join('')}</div>`;
+  }).join('')}</div>`;
+  const s = semaines.get(weekMon), future = weekMon > mondayOf(today);
+  const foot = isMgr ? `<div class="wk-foot">
+      ${future ? `<button class="pill ${s && s.publiee ? '' : 'primary'}" type="button" onclick="togglePublish()">${s && s.publiee ? 'Masquer à l’équipe' : 'Publier pour l’équipe'}</button>` : ''}
+      <button class="pill" type="button" onclick="openCopy()">Copier une semaine</button>
+      <button class="pill" type="button" onclick="openEmp()">Ajouter une personne</button>
+    </div>` : '';
+  el.innerHTML = weekNavHTML() + `<div class="card">${grid}${cards}${foot}</div>`;
+  if (weekMon === mondayOf(today) && window.innerWidth < 760) {
+    const t = document.getElementById('day-' + today);
+    if (t && !renderWeek._scrolled) { renderWeek._scrolled = true; setTimeout(() => t.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60); }
+  }
+}
+
+function myEmp() { return employes.find(e => e.user_id && e.user_id === me.id) || null; }
+function renderToday() {
+  const el = document.getElementById('view'), today = todayISO(), mon = mondayOf(today);
+  const people = roster(mon);
+  const working = people.map(e => ({ e, s: shiftOf(e.id, today) })).filter(x => isWorking(x.s)).sort((a, b) => mins(a.s.debut) - mins(b.s.debut));
+  const absent = people.map(e => ({ e, s: shiftOf(e.id, today) })).filter(x => x.s && !isWorking(x.s));
+  const undef = people.filter(e => !shiftOf(e.id, today)).length;
+  let html = '';
+  const mine = myEmp();
+  if (mine) {
+    const next = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i)).filter(d => parseISO(d).getDay() !== 0 || shiftOf(mine.id, d));
+    html += `<div class="card"><div class="list-h"><div><h2>Ton horaire</h2><div class="sub">${esc(empName(mine))}</div></div><button class="pill" type="button" onclick="showEmp('${mine.id}')">Tout voir</button></div>
+      <div class="me-card">${next.slice(0, 6).map(d => `<div class="me-day"><div class="d">${d === today ? 'Aujourd’hui' : esc(fmtDay(d, { weekday: 'short', day: 'numeric' }))}</div>${weekVisible(mondayOf(d)) ? chip(shiftOf(mine.id, d)) : '<div class="chip undef">À venir</div>'}</div>`).join('')}</div></div>`;
+  }
+  html += `<div class="card"><div class="list-h"><div><div class="big-date">${esc(fmtDay(today, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, c => c.toUpperCase()))}</div>
+      <div class="sub">${working.length} en poste${undef && isMgr ? ` · ${undef} à définir` : ''}</div></div>
+      <button class="pill" type="button" onclick="goWeek('${mon}')">Semaine</button></div>
+    ${working.length ? working.map(x => `<div class="li ${isMgr ? 'click' : ''}" ${isMgr ? `onclick="openEdit('${x.e.id}','${today}')"` : ''}><div><div class="t1">${esc(empName(x.e))}</div><div class="t2">${fmtH(hours(x.s))}</div></div>${chip(x.s)}</div>`).join('')
+      : `<div class="empty" style="padding:28px 20px">${people.length ? 'Personne en poste aujourd’hui.' : 'Le planning n’a pas encore été rempli.'}</div>`}
+  </div>`;
+  if (absent.length) {
+    html += `<div class="card"><div class="list-h"><div><h2 style="font-size:17px">Absents ou en repos</h2></div></div>
+      ${absent.map(x => `<div class="li ${isMgr ? 'click' : ''}" ${isMgr ? `onclick="openEdit('${x.e.id}','${today}')"` : ''}><div><div class="t1">${esc(empName(x.e))}</div></div>${chip(x.s)}</div>`).join('')}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+function showEmp(id) { selEmp = id; setView('emp'); }
+function renderEmp() {
+  const el = document.getElementById('view');
+  const list = employes.filter(e => e.actif || [...shifts.values()].some(s => s.employe_id === e.id));
+  if (!selEmp) { const m = myEmp(); selEmp = m ? m.id : ''; }
+  const opts = `<option value="">Choisir une personne</option>` + list.map(e => `<option value="${e.id}" ${e.id === selEmp ? 'selected' : ''}>${esc(empName(e))}${e.actif ? '' : ' (ancien)'}</option>`).join('');
+  let html = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap"><select class="select" style="flex:1;min-width:200px" onchange="selEmp=this.value;renderEmp()" aria-label="Personne">${opts}</select>${isMgr ? '<button class="pill" type="button" onclick="openEmp()">Ajouter</button>' : ''}</div>`;
+  const e = employes.find(x => x.id === selEmp);
+  if (!e) { el.innerHTML = html + `<div class="card"><div class="empty"><div class="et">Choisis une personne</div>ou touche un nom dans la semaine.</div></div>`; return; }
+  const mons = knownMondays().filter(m => weekVisible(m) && (hasShiftInWeek(e.id, m) || (e.actif && m >= mondayOf(todayISO()) && weekHasData(m))));
+  const today = todayISO();
+  html += `<div class="card"><div class="list-h"><div><h2>${esc(empName(e))}</h2><div class="sub">${e.actif ? 'Dans l’équipe' : 'Ne fait plus partie du planning'}${e.user_id ? ' · compte lié' : ''}</div></div>
+    ${isMgr ? `<div class="actions"><button class="pill" type="button" onclick="openEmp('${e.id}')">Modifier</button>${e.actif ? `<button class="pill" type="button" style="color:var(--red)" onclick="removeEmp('${e.id}')">Retirer</button>` : `<button class="pill" type="button" onclick="reactivateEmp('${e.id}')">Réintégrer</button>`}</div>` : ''}</div></div>`;
+  html += mons.map(m => {
+    const days = weekDays(m);
+    const h = days.reduce((a, d) => a + hours(shiftOf(e.id, d)), 0);
+    return `<div class="card"><div class="list-h"><div><h2 style="font-size:17px">${esc(weekTitle(m))}</h2><div class="sub">${esc(weekRange(m))} · ${fmtH(h)}</div></div></div>
+      ${days.map(d => `<div class="li ${d === today ? 'today-hl' : d < today ? 'past' : ''} ${isMgr ? 'click' : ''}" data-date="${d}" ${isMgr ? `onclick="openEdit('${e.id}','${d}')"` : ''}><div><div class="t1">${esc(fmtDay(d, { weekday: 'long', day: 'numeric', month: 'short' }).replace(/^./, c => c.toUpperCase()))}</div></div>${chip(shiftOf(e.id, d))}</div>`).join('')}</div>`;
+  }).join('') || `<div class="card"><div class="empty">Aucun horaire pour l’instant.</div></div>`;
+  el.innerHTML = html;
+  const target = el.querySelector(`.li[data-date="${today}"]`) || [...el.querySelectorAll('.li[data-date]')].find(x => x.dataset.date > today);
+  if (target) setTimeout(() => target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
+}
+
+function renderStats() {
+  const el = document.getElementById('view');
+  if (!weekVisible(weekMon)) { el.innerHTML = weekNavHTML() + `<div class="card"><div class="empty"><div class="et">Pas encore publiée</div></div></div>`; return; }
+  const days = weekDays(weekMon), people = roster(weekMon);
+  const rows = people.map(e => {
+    const ss = days.map(d => shiftOf(e.id, d));
+    return { e, h: ss.reduce((a, s) => a + hours(s), 0), o: ss.filter(s => isWorking(s) && family(s) === 'ouv').length, f: ss.filter(s => isWorking(s) && family(s) === 'ferm').length, n: ss.filter(isWorking).length };
+  });
+  const tot = rows.reduce((a, r) => a + r.h, 0);
+  el.innerHTML = weekNavHTML() + `<div class="card"><div class="list-h"><div><h2>Heures de la semaine</h2><div class="sub">${fmtH(tot)} au total · 1 h de pause retirée dès 9 h d’amplitude</div></div></div>
+    <div class="stats">${rows.map(r => `<div class="stat"><div class="pn">${esc(empName(r.e))}</div><div class="v">${fmtH(r.h)}</div><div class="m">${r.n} jour${r.n > 1 ? 's' : ''} · ${r.o} ouv. · ${r.f} ferm.</div></div>`).join('') || '<div class="m">Aucune donnée.</div>'}</div></div>`;
+}
+
+function prepItems() {
+  const today = todayISO(), cur = mondayOf(today);
+  const last = knownMondays().filter(m => weekHasData(m)).pop() || cur;
+  const items = [];
+  for (let m = cur; m <= last; m = addDays(m, 7)) {
+    roster(m).filter(e => e.actif).forEach(e => weekDays(m).forEach(d => { if (d >= today && !shiftOf(e.id, d)) items.push({ m, d, e }); }));
+  }
+  return items;
+}
+function renderPrep() {
+  const el = document.getElementById('view');
+  if (!isMgr) { setView('today'); return; }
+  const items = prepItems();
+  if (!items.length) { el.innerHTML = `<div class="card"><div class="empty"><div class="et">Tout est rempli</div>Aucune case à définir sur les semaines en cours et à venir.</div></div>`; return; }
+  let html = `<div class="card"><div class="list-h"><div><h2>À préparer</h2><div class="sub">${items.length} case${items.length > 1 ? 's' : ''} à définir</div></div></div></div>`;
+  const byWeek = {};
+  items.forEach(it => { (byWeek[it.m] = byWeek[it.m] || []).push(it); });
+  Object.entries(byWeek).forEach(([m, its]) => {
+    html += `<div class="card"><div class="list-h"><div><h2 style="font-size:17px">${esc(weekTitle(m))}</h2><div class="sub">${esc(weekRange(m))} · ${its.length} case${its.length > 1 ? 's' : ''}</div></div><button class="pill" type="button" onclick="goWeek('${m}')">Ouvrir</button></div>
+      ${its.map(it => `<div class="li click" onclick="openEdit('${it.e.id}','${it.d}')"><div><div class="t1">${esc(empName(it.e))}</div><div class="t2">${esc(fmtDay(it.d, { weekday: 'long', day: 'numeric', month: 'short' }))}</div></div>${chip(null)}</div>`).join('')}</div>`;
+  });
+  el.innerHTML = html;
+}
+
+// ── Modifier une case ──
+function openEdit(empId, day) {
+  if (!isMgr) return;
+  const e = employes.find(x => x.id === empId); if (!e) return;
+  editCtx = { empId, day };
+  const s = shiftOf(empId, day);
+  document.getElementById('edit-title').textContent = empName(e);
+  document.getElementById('edit-sub').textContent = fmtDay(day).replace(/^./, c => c.toUpperCase());
+  document.getElementById('edit-quick').innerHTML = SPECIALS.map(q => `<button type="button" class="qbtn" onclick="pickSpecial('${esc(q)}')">${esc(q)}</button>`).join('');
+  const f = family(s), t = s ? String(s.type || '') : '';
+  const type = !s ? 'Ouverture' : f === 'ouv' && norm(t).startsWith('ouv') ? 'Ouverture' : f === 'ferm' && norm(t).startsWith('ferm') ? 'Fermeture' : norm(t) === 'repos' ? 'repos' : (f === 'ouv' && !t) ? 'Ouverture' : (f === 'ferm' && !t) ? 'Fermeture' : 'special';
+  document.getElementById('edit-label').value = type === 'special' ? t : '';
+  document.getElementById('edit-start').value = s ? hm(s.debut) : '';
+  document.getElementById('edit-end').value = s ? hm(s.fin) : '';
+  pickType(type, true);
+  document.getElementById('edit-has-time').checked = s ? !!s.debut : type !== 'repos';
+  syncTimes();
+  openOv('ov-edit');
+}
+function pickType(t, silent) {
+  editType = t;
+  document.querySelectorAll('#ov-edit .tbtn').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  document.getElementById('edit-special').style.display = t === 'special' ? 'block' : 'none';
+  document.getElementById('edit-times-wrap').style.display = t === 'repos' ? 'none' : 'block';
+  if (!silent) {
+    document.getElementById('edit-has-time').checked = t === 'Ouverture' || t === 'Fermeture';
+    syncTimes();
+  }
+}
+function pickSpecial(label) { document.getElementById('edit-label').value = label; document.getElementById('edit-has-time').checked = false; syncTimes(); }
+function syncTimes() { const on = document.getElementById('edit-has-time').checked; const w = document.getElementById('edit-times'); w.style.opacity = on ? 1 : .4; w.querySelectorAll('input').forEach(i => i.disabled = !on); }
+async function saveEdit() {
+  if (!editCtx) return;
+  let type = editType === 'special' ? document.getElementById('edit-label').value.trim() : editType;
+  if (editType === 'special' && !type) { toast('Indique un libellé (ex. CRDT)', true); return; }
+  const withTime = editType !== 'repos' && document.getElementById('edit-has-time').checked;
+  const debut = withTime ? document.getElementById('edit-start').value : '';
+  const fin = withTime ? document.getElementById('edit-end').value : '';
+  if (withTime && (!debut || !fin)) { toast('Indique le début et la fin', true); return; }
+  if (withTime && mins(fin) <= mins(debut)) { toast('La fin doit être après le début', true); return; }
+  if ((editType === 'Ouverture' || editType === 'Fermeture') && !withTime) { toast('Une ouverture ou une fermeture a besoin d’un horaire', true); return; }
+  const btn = document.getElementById('edit-save'); btn.disabled = true;
+  try {
+    const rows = await sbFetch('/rest/v1/plan_shifts?on_conflict=employe_id,jour', {
+      method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify({ tenant_id: me.tenant_id, employe_id: editCtx.empId, jour: editCtx.day, type, debut: debut || null, fin: fin || null }),
+    });
+    const r = Array.isArray(rows) ? rows[0] : null;
+    shifts.set(editCtx.empId + '|' + editCtx.day, r || { employe_id: editCtx.empId, jour: editCtx.day, type, debut, fin });
+    closeOv('ov-edit'); render();
+  } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; }
+}
+async function clearEdit() {
+  if (!editCtx) return;
+  try {
+    await sbFetch(`/rest/v1/plan_shifts?employe_id=eq.${editCtx.empId}&jour=eq.${editCtx.day}`, { method: 'DELETE' });
+    shifts.delete(editCtx.empId + '|' + editCtx.day);
+    closeOv('ov-edit'); render();
+  } catch (e) { toast(e.message, true); }
+}
+
+// ── Publication ──
+async function togglePublish() {
+  const s = semaines.get(weekMon);
+  const next = !(s && s.publiee);
+  try {
+    const rows = await sbFetch('/rest/v1/plan_semaines?on_conflict=tenant_id,lundi', {
+      method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify({ tenant_id: me.tenant_id, lundi: weekMon, label: (s && s.label) || autoLabel(weekMon), publiee: next, officielle: !!(s && s.officielle), updated_at: new Date().toISOString() }),
+    });
+    semaines.set(weekMon, (rows && rows[0]) || { lundi: weekMon, publiee: next });
+    toast(next ? 'Semaine visible par l’équipe' : 'Semaine masquée à l’équipe');
+    render();
+  } catch (e) { toast(e.message, true); }
+}
+
+// ── Personnes ──
+async function loadTenantUsers() {
+  if (!isAdmin || tenantUsers.length) return;
+  try { tenantUsers = await sbFetch(`/rest/v1/profiles?tenant_id=eq.${encodeURIComponent(me.tenant_id)}&select=id,email,nom&order=email.asc`) || []; } catch (e) { tenantUsers = []; }
+}
+async function openEmp(id) {
+  empEditId = id || null;
+  const e = employes.find(x => x.id === id);
+  document.getElementById('emp-title').textContent = e ? 'Modifier' : 'Ajouter une personne';
+  document.getElementById('emp-sub').textContent = e ? 'Le changement s’applique à tout le planning.' : 'Elle apparaîtra dans les semaines en cours et à venir.';
+  document.getElementById('emp-prenom').value = e ? e.prenom : '';
+  document.getElementById('emp-nom').value = e ? e.nom : '';
+  const wrap = document.getElementById('emp-link-wrap');
+  wrap.style.display = 'none';
+  if (isAdmin && e) {
+    await loadTenantUsers();
+    const sel = document.getElementById('emp-user');
+    sel.innerHTML = '<option value="">Aucun compte</option>' + tenantUsers.map(u => `<option value="${u.id}" ${u.id === e.user_id ? 'selected' : ''}>${esc(u.nom ? u.nom + ' · ' + u.email : u.email)}</option>`).join('');
+    wrap.style.display = 'block';
+  }
+  openOv('ov-emp');
+  setTimeout(() => document.getElementById('emp-prenom').focus(), 80);
+}
+async function saveEmp() {
+  const prenom = document.getElementById('emp-prenom').value.trim(), nom = document.getElementById('emp-nom').value.trim();
+  if (!prenom && !nom) { toast('Indique au moins un prénom ou un nom', true); return; }
+  try {
+    if (empEditId) {
+      const body = { prenom, nom };
+      if (document.getElementById('emp-link-wrap').style.display !== 'none') body.user_id = document.getElementById('emp-user').value || null;
+      await sbFetch(`/rest/v1/plan_employes?id=eq.${empEditId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      Object.assign(employes.find(x => x.id === empEditId), body);
+    } else {
+      const k = empKey(prenom, nom);
+      if (employes.some(e => e.actif && empKey(e.prenom, e.nom) === k)) { toast('Cette personne est déjà dans le planning', true); return; }
+      const ordre = employes.reduce((a, e) => Math.max(a, e.ordre || 0), 0) + 1;
+      const rows = await sbFetch('/rest/v1/plan_employes', { method: 'POST', body: JSON.stringify({ tenant_id: me.tenant_id, prenom, nom, ordre }) });
+      employes.push({ ...rows[0], created: todayISO() });
+    }
+    closeOv('ov-emp'); render();
+  } catch (e) { toast(e.message, true); }
+}
+async function removeEmp(id) {
+  const e = employes.find(x => x.id === id); if (!e) return;
+  if (!confirm(`Retirer ${empName(e)} du planning ?\n\nSes horaires passés sont gardés, ceux à partir d’aujourd’hui sont effacés.`)) return;
+  try {
+    await sbFetch(`/rest/v1/plan_shifts?employe_id=eq.${id}&jour=gte.${todayISO()}`, { method: 'DELETE' });
+    await sbFetch(`/rest/v1/plan_employes?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ actif: false }) });
+    e.actif = false;
+    [...shifts.keys()].forEach(k => { const s = shifts.get(k); if (s.employe_id === id && s.jour >= todayISO()) shifts.delete(k); });
+    toast(`${empName(e)} retiré du planning`); render();
+  } catch (err) { toast(err.message, true); }
+}
+async function reactivateEmp(id) {
+  try { await sbFetch(`/rest/v1/plan_employes?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ actif: true }) }); employes.find(x => x.id === id).actif = true; render(); }
+  catch (e) { toast(e.message, true); }
+}
+
+// ── Copier une semaine ──
+function openCopy() {
+  const mons = knownMondays().filter(m => employes.some(e => hasShiftInWeek(e.id, m)));
+  const cur = mondayOf(todayISO());
+  const dests = []; for (let i = 0; i <= HORIZON_WEEKS; i++) dests.push(addDays(cur, i * 7));
+  const lab = m => `${weekTitle(m)} · ${weekRange(m)}`;
+  const src = document.getElementById('copy-src'), dst = document.getElementById('copy-dst');
+  src.innerHTML = mons.map(m => `<option value="${m}" ${m === weekMon ? 'selected' : ''}>${esc(lab(m))}</option>`).join('');
+  if (!mons.includes(weekMon) && mons.length) src.value = mons.filter(m => m <= weekMon).pop() || mons[mons.length - 1];
+  dst.innerHTML = dests.map(m => `<option value="${m}">${esc(lab(m))}</option>`).join('');
+  dst.value = dests.find(m => m > src.value) || dests[0];
+  copyRecap(); openOv('ov-copy');
+}
+function copyRecap() {
+  const s = document.getElementById('copy-src').value, d = document.getElementById('copy-dst').value;
+  const n = employes.filter(e => hasShiftInWeek(e.id, s)).length;
+  const exist = employes.reduce((a, e) => a + [0, 1, 2, 3, 4, 5, 6].filter(i => shiftOf(e.id, addDays(d, i * 1))).length, 0);
+  document.getElementById('copy-recap').textContent = !s ? 'Aucune semaine à copier.' : s === d ? 'Choisis une autre semaine cible.' : `${n} personne${n > 1 ? 's' : ''} copiée${n > 1 ? 's' : ''}.${exist ? ` ${exist} case${exist > 1 ? 's' : ''} déjà remplie${exist > 1 ? 's' : ''} dans la cible seront remplacées.` : ''}`;
+}
+async function confirmCopy() {
+  const src = document.getElementById('copy-src').value, dst = document.getElementById('copy-dst').value;
+  if (!src || src === dst) return;
+  const ups = [], dels = [];
+  employes.filter(e => hasShiftInWeek(e.id, src)).forEach(e => {
+    for (let i = 0; i < 7; i++) {
+      const a = shiftOf(e.id, addDays(src, i)), b = shiftOf(e.id, addDays(dst, i));
+      if (a) ups.push({ tenant_id: me.tenant_id, employe_id: e.id, jour: addDays(dst, i), type: a.type, debut: a.debut || null, fin: a.fin || null });
+      else if (b) dels.push(b.id);
+    }
+  });
+  try {
+    if (ups.length) await sbFetch('/rest/v1/plan_shifts?on_conflict=employe_id,jour', { method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(ups) });
+    if (dels.length) await sbFetch(`/rest/v1/plan_shifts?id=in.(${dels.join(',')})`, { method: 'DELETE' });
+    closeOv('ov-copy'); await loadAll(); weekMon = dst; setView('week');
+    toast('Semaine copiée');
+  } catch (e) { toast(e.message, true); }
+}
+
+// ── Import (photo IA, JSON, ancien Rob.Planning) ──
+function openImport() {
+  const sel = document.getElementById('imp-week'), cur = mondayOf(todayISO());
+  const opts = []; for (let i = -1; i <= 6; i++) opts.push(addDays(cur, i * 7));
+  sel.innerHTML = `<option value="">Lire la date sur la photo</option>` + opts.map(m => `<option value="${m}" ${m === addDays(cur, 7) ? 'selected' : ''}>${esc(weekTitle(m))} · ${esc(weekRange(m))}</option>`).join('');
+  document.getElementById('imp-legacy').style.display = me.tenant_id === LEGACY_TENANT ? 'block' : 'none';
+  document.getElementById('imp-preview').innerHTML = '';
+  document.getElementById('imp-go').disabled = true;
+  pendingImport = null;
+  openOv('ov-import');
+}
+function impTab(t) {
+  document.getElementById('imp-photo').style.display = t === 'photo' ? 'block' : 'none';
+  document.getElementById('imp-json').style.display = t === 'json' ? 'block' : 'none';
+  document.getElementById('imp-tab-photo').classList.toggle('active', t === 'photo');
+  document.getElementById('imp-tab-json').classList.toggle('active', t === 'json');
+}
+function readJSONFile(ev) {
+  const f = ev.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { document.getElementById('imp-text').value = r.result; analyseJSON(); };
+  r.readAsText(f); ev.target.value = '';
+}
+function downscale(file, max) {
+  return new Promise((resolve, reject) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.88));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image illisible')); };
+    img.src = url;
+  });
+}
+async function readPhoto(ev) {
+  const f = ev.target.files[0]; ev.target.value = '';
+  if (!f) return;
+  const prev = document.getElementById('imp-preview');
+  prev.innerHTML = `<div class="preview"><span class="spin"></span> Lecture de l’horaire… (20 à 60 secondes)</div>`;
+  document.getElementById('imp-go').disabled = true;
+  try {
+    if (window.slEnsureSession) await window.slEnsureSession();
+    const image = await downscale(f, 2200);
+    const r = await slFetch(SUPABASE_URL + '/functions/v1/planning-import', {
+      method: 'POST', headers: sbHeaders(),
+      body: JSON.stringify({ image, monday: document.getElementById('imp-week').value || null, roster: employes.filter(e => e.actif).map(empName) }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 404) throw new Error('La lecture photo n’est pas encore activée sur ce serveur');
+    if (!r.ok || !d.ok) throw new Error(d.error || 'Lecture impossible');
+    document.getElementById('imp-text').value = JSON.stringify({ weeks: d.weeks }, null, 2);
+    analyse(d.weeks, 'photo');
+  } catch (e) {
+    prev.innerHTML = `<div class="preview" style="color:var(--red)">${esc(e.message)}</div>`;
+  }
+}
+function analyseJSON() {
+  const raw = document.getElementById('imp-text').value.trim();
+  if (!raw) return;
+  try {
+    const p = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    const weeks = Array.isArray(p) ? p : p.weeks ? p.weeks : p.days ? [p] : null;
+    if (!weeks || !weeks.length) throw new Error('Format non reconnu : il faut {"weeks":[…]}');
+    analyse(weeks, 'json');
+  } catch (e) {
+    document.getElementById('imp-preview').innerHTML = `<div class="preview" style="color:var(--red)">JSON invalide : ${esc(e.message)}</div>`;
+    document.getElementById('imp-go').disabled = true;
+  }
+}
+function loadLegacy() {
+  if (me.tenant_id !== LEGACY_TENANT) return;
+  const prev = document.getElementById('imp-preview');
+  prev.innerHTML = `<div class="preview"><span class="spin"></span> Lecture de l’ancien Rob.Planning…</div>`;
+  const cb = 'slPlanLegacy' + Date.now(), sc = document.createElement('script');
+  const timer = setTimeout(() => { done(); prev.innerHTML = `<div class="preview" style="color:var(--red)">Ancien planning injoignable</div>`; }, 20000);
+  function done() { clearTimeout(timer); delete window[cb]; sc.remove(); }
+  window[cb] = d => {
+    done();
+    if (!d || !d.ok || !Array.isArray(d.weeks)) { prev.innerHTML = `<div class="preview" style="color:var(--red)">Réponse invalide</div>`; return; }
+    document.getElementById('imp-text').value = JSON.stringify({ weeks: d.weeks }, null, 2);
+    analyse(d.weeks.map(w => ({ ...w, _published: w.published })), 'legacy');
+  };
+  sc.onerror = () => { done(); prev.innerHTML = `<div class="preview" style="color:var(--red)">Ancien planning injoignable</div>`; };
+  sc.src = LEGACY_API + '?' + new URLSearchParams({ action: 'data', callback: cb });
+  document.head.appendChild(sc);
+}
+
+// Normalise une semaine importée → { mon, label, published?, people: [{ key, first, last, days: Map(jour → shift|null) }] }
+function normWeeks(weeks) {
+  const out = [];
+  weeks.forEach(w => {
+    const days = (w.days || []).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    const dates = new Set(days);
+    (w.employees || []).forEach(e => (e.shifts || []).forEach(s => { if (/^\d{4}-\d{2}-\d{2}$/.test(s.date || '')) dates.add(s.date); }));
+    if (!dates.size) return;
+    const mon = mondayOf([...dates].sort()[0]);
+    const people = [];
+    (w.employees || []).forEach(e => {
+      const first = String(e.firstName || e.prenom || '').trim(), last = String(e.lastName || e.nom || '').trim();
+      if (!first && !last) return;
+      const m = new Map();
+      [...dates].forEach(d => m.set(d, null));
+      (e.shifts || []).forEach(s => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(s.date || '')) return;
+        let type = String(s.type || '').trim();
+        const debut = /^\d{1,2}:\d{2}$/.test(s.start || '') ? s.start.padStart(5, '0') : null;
+        const fin = /^\d{1,2}:\d{2}$/.test(s.end || '') ? s.end.padStart(5, '0') : null;
+        if (norm(type) === 'a definir' || (!type && !debut)) { m.set(s.date, null); return; }
+        if (!type) type = mins(debut) < 12 * 60 ? 'Ouverture' : 'Fermeture'; // pas de type mais une heure : avant midi = ouverture
+        m.set(s.date, { type, debut: debut && fin ? debut : null, fin: debut && fin ? fin : null });
+      });
+      people.push({ key: empKey(first, last), first, last, days: m });
+    });
+    out.push({ mon, label: String(w.label || '').trim() || autoLabel(mon), published: w._published, generated: !!w.generated, people });
+  });
+  return out;
+}
+function same(a, b) { if (!a && !b) return true; if (!a || !b) return false; return norm(a.type) === norm(b.type) && hm(a.debut) === hm(b.debut) && hm(a.fin) === hm(b.fin); }
+function analyse(weeks, source) {
+  const ws = normWeeks(weeks);
+  const prev = document.getElementById('imp-preview');
+  if (!ws.length) { prev.innerHTML = `<div class="preview" style="color:var(--red)">Aucune semaine exploitable.</div>`; document.getElementById('imp-go').disabled = true; return; }
+  const byKey = new Map(employes.map(e => [empKey(e.prenom, e.nom), e]));
+  const newPeople = new Map();
+  let changes = 0, cells = 0, replaced = 0;
+  ws.forEach(w => w.people.forEach(p => {
+    const e = byKey.get(p.key);
+    if (!e && !newPeople.has(p.key)) newPeople.set(p.key, p);
+    p.days.forEach((s, d) => { cells++; const old = e ? shiftOf(e.id, d) : null; if (!same(old, s)) { changes++; if (old) replaced++; } });
+  }));
+  // Ordre des nouvelles personnes : celui de la semaine la plus récente (l'ordre habituel de la feuille)
+  const order = [];
+  [...ws].sort((x, y) => y.mon.localeCompare(x.mon)).forEach(w => w.people.forEach(p => { if (!order.includes(p.key)) order.push(p.key); }));
+  pendingImport = { ws, source, newPeople: [...newPeople.values()].sort((x, y) => order.indexOf(x.key) - order.indexOf(y.key)) };
+  const w0 = ws[0];
+  const days = [...new Set(w0.people.flatMap(p => [...p.days.keys()]))].sort();
+  const table = `<div class="grid"><table><thead><tr><th class="name-h">Équipe</th>${days.map(d => `<th>${DAY_SHORT[(parseISO(d).getDay() + 6) % 7]}<span class="num">${parseISO(d).getDate()}</span></th>`).join('')}</tr></thead>
+    <tbody>${w0.people.map(p => `<tr><td class="name"><div class="pn">${esc(p.first || p.last)}</div><div class="nn">${esc(p.first ? p.last : '')}</div></td>${days.map(d => `<td>${chip(p.days.get(d) || null)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  prev.innerHTML = `<div class="preview">
+    <div style="font-weight:700;margin-bottom:4px">${ws.length} semaine${ws.length > 1 ? 's' : ''} · ${cells} cases · ${changes} changement${changes > 1 ? 's' : ''}</div>
+    <div class="note" style="margin:0 0 10px">${ws.slice(0, 4).map(w => esc(weekTitle(w.mon) + ' · ' + weekRange(w.mon))).join('<br>')}${ws.length > 4 ? `<br>+ ${ws.length - 4} autres` : ''}
+    ${replaced ? `<br><b style="color:var(--red)">${replaced} case${replaced > 1 ? 's' : ''} déjà remplie${replaced > 1 ? 's' : ''} seront remplacée${replaced > 1 ? 's' : ''}.</b>` : ''}
+    ${pendingImport.newPeople.length ? `<br>Nouvelles personnes : ${pendingImport.newPeople.map(p => esc(`${prettyFirst(p.first)} ${p.last}`.trim())).join(', ')}` : ''}</div>
+    ${source === 'photo' ? '<div class="note" style="margin:0 0 8px"><b>Compare avec la feuille avant d’importer.</b> Tu pourras corriger une case ensuite en la touchant.</div>' : ''}
+    ${table}</div>`;
+  document.getElementById('imp-go').disabled = !changes && !pendingImport.newPeople.length && !ws.some(w => !semaines.get(w.mon));
+}
+async function applyImport() {
+  if (!pendingImport) return;
+  const btn = document.getElementById('imp-go'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Import…';
+  try {
+    const { ws, newPeople } = pendingImport;
+    // 1. Nouvelles personnes
+    if (newPeople.length) {
+      let ordre = employes.reduce((a, e) => Math.max(a, e.ordre || 0), 0);
+      const rows = await sbFetch('/rest/v1/plan_employes', { method: 'POST', body: JSON.stringify(newPeople.map(p => ({ tenant_id: me.tenant_id, prenom: prettyFirst(p.first), nom: p.last, ordre: ++ordre }))) });
+      (rows || []).forEach(r => employes.push({ ...r, created: todayISO() }));
+    }
+    const byKey = new Map(employes.map(e => [empKey(e.prenom, e.nom), e]));
+    // 2. Cases : remplace exactement la semaine importée pour chaque personne présente
+    const ups = [], dels = [];
+    ws.forEach(w => w.people.forEach(p => {
+      const e = byKey.get(p.key); if (!e) return;
+      p.days.forEach((s, d) => {
+        const old = shiftOf(e.id, d);
+        if (s) { if (!same(old, s)) ups.push({ tenant_id: me.tenant_id, employe_id: e.id, jour: d, type: s.type, debut: s.debut, fin: s.fin }); }
+        else if (old) dels.push(old.id);
+      });
+    }));
+    for (let i = 0; i < ups.length; i += 500) await sbFetch('/rest/v1/plan_shifts?on_conflict=employe_id,jour', { method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(ups.slice(i, i + 500)) });
+    for (let i = 0; i < dels.length; i += 150) await sbFetch(`/rest/v1/plan_shifts?id=in.(${dels.slice(i, i + 150).join(',')})`, { method: 'DELETE' });
+    // 3. Semaines : officielles ; une semaine à venir reste dans son état de publication (brouillon par défaut)
+    const cur = mondayOf(todayISO());
+    const semRows = ws.map(w => {
+      const old = semaines.get(w.mon);
+      const pub = old ? old.publiee : (w.mon <= cur ? true : w.published === true);
+      return { tenant_id: me.tenant_id, lundi: w.mon, label: w.label, publiee: pub, officielle: !w.generated, updated_at: new Date().toISOString() };
+    });
+    const uniq = [...new Map(semRows.map(r => [r.lundi, r])).values()];
+    await sbFetch('/rest/v1/plan_semaines?on_conflict=tenant_id,lundi', { method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(uniq) });
+    closeOv('ov-import');
+    await loadAll();
+    weekMon = ws[0].mon; setView('week');
+    toast(`Import terminé : ${ups.length} case${ups.length > 1 ? 's' : ''} mise${ups.length > 1 ? 's' : ''} à jour`);
+  } catch (e) { toast(e.message, true); }
+  finally { btn.textContent = 'Importer'; btn.disabled = false; }
+}
+
+// ── Démarrage ──
+async function init() {
+  me = JSON.parse(localStorage.getItem('sl_user') || '{}');
+  isAdmin = ['superadmin', 'admin'].includes(me.role);
+  isMgr = isAdmin || me.role === 'manager';
+  document.body.classList.toggle('is-mgr', isMgr);
+  weekMon = mondayOf(todayISO());
+  if (!me.tenant_id) { setStatus('Magasin introuvable pour ce compte', true); return; }
+  try { await loadAll(); }
+  catch (e) {
+    setStatus(/relation|does not exist|schema cache|404/i.test(e.message) ? 'Le module Planning n’est pas encore installé sur le serveur' : e.message, true);
+    return;
+  }
+  setView('today');
+}
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || window.__guardPassed !== true || document.querySelector('.ov.open')) return;
+  try { await loadAll(); render(); } catch (e) {}
+});
+function _runWhenReady() {
+  if (window.__guardPassed === true) init();
+  else if (window.__guardPassed === false) {}
+  else setTimeout(_runWhenReady, 50);
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _runWhenReady); else _runWhenReady();
+</script>
+</body>
+</html>
