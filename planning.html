@@ -430,12 +430,8 @@ window.__guardPassed = undefined;
 <div class="ov" id="ov-import" onclick="if(event.target===this)closeOv('ov-import')">
   <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="imp-title">
     <h3 id="imp-title">Importer un horaire</h3>
-    <div class="sub">Photo de l’horaire papier, ou JSON.</div>
-    <div class="seg" style="margin-bottom:12px">
-      <button class="seg-btn active" id="imp-tab-photo" type="button" onclick="impTab('photo')">Photo</button>
-      <button class="seg-btn" id="imp-tab-json" type="button" onclick="impTab('json')">JSON</button>
-    </div>
-    <div id="imp-photo">
+    <div class="sub">Colle le JSON de l’horaire, vérifie l’aperçu, puis importe.</div>
+    <div id="imp-photo" style="display:none">
       <label class="drop" for="imp-file">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
         <div class="dt">Prendre ou choisir une photo</div>
@@ -446,7 +442,7 @@ window.__guardPassed = undefined;
       <select class="select" id="imp-week" style="width:100%"></select>
       <div class="note">La photo est lue par une IA selon tes règles (cadre jaune = heures, vert = ouverture, bleu = fermeture, gris = repos). Tu vérifies toujours le résultat avant d’importer.</div>
     </div>
-    <div id="imp-json" style="display:none">
+    <div id="imp-json">
       <textarea class="inp" id="imp-text" placeholder='{"weeks":[{"label":"…","days":["2026-10-12",…],"employees":[…]}]}' spellcheck="false"></textarea>
       <div class="btns" style="margin-top:8px">
         <button type="button" class="btn" onclick="document.getElementById('imp-jsonfile').click()">Fichier .json</button>
@@ -464,7 +460,7 @@ window.__guardPassed = undefined;
 </div>
 
 <div class="toast-c" id="toasts" aria-live="polite"></div>
-<div class="version-tag">planning v1.1 · 12/10/2026 13:40</div>
+<div class="version-tag">planning v1.2 · 12/10/2026 13:45</div>
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
@@ -949,12 +945,7 @@ function openImport() {
   pendingImport = null;
   openOv('ov-import');
 }
-function impTab(t) {
-  document.getElementById('imp-photo').style.display = t === 'photo' ? 'block' : 'none';
-  document.getElementById('imp-json').style.display = t === 'json' ? 'block' : 'none';
-  document.getElementById('imp-tab-photo').classList.toggle('active', t === 'photo');
-  document.getElementById('imp-tab-json').classList.toggle('active', t === 'json');
-}
+function impTab() { /* import photo désactivé : JSON uniquement */ }
 function readJSONFile(ev) {
   const f = ev.target.files[0]; if (!f) return;
   const r = new FileReader();
