@@ -343,6 +343,7 @@ window.__guardPassed = undefined;
     <div class="sl-head-top">
       <a class="sl-back" href="hub.html"><svg width="11" height="18" viewBox="0 0 11 18" aria-hidden="true"><path d="M9 1.5 1.8 9 9 16.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Accueil</span></a>
       <div class="actions">
+        <button class="pill" id="share-btn" type="button" style="display:none" onclick="openShare()">Partager</button>
         <button class="pill mgr-only" type="button" onclick="openImport()">Importer</button>
         <button class="pill" type="button" onclick="window.print()" aria-label="Imprimer la semaine">Imprimer</button>
       </div>
@@ -459,8 +460,26 @@ window.__guardPassed = undefined;
   </div>
 </div>
 
+<!-- Partager (admins) -->
+<div class="ov" id="ov-share" onclick="if(event.target===this)closeOv('ov-share')">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="share-title">
+    <h3 id="share-title">Partager le planning</h3>
+    <div class="sub">Un lien à ouvrir sans compte, en lecture seule. Les semaines non publiées restent cachées. Tu peux désactiver un lien à tout moment.</div>
+    <div id="share-list"></div>
+    <label class="lbl" for="share-label">Nouveau lien · pour qui ?</label>
+    <input class="inp" id="share-label" maxlength="80" placeholder="Ex. : copain d’Esteban" autocomplete="off">
+    <label class="lbl" for="share-scope">Horaire partagé</label>
+    <select class="select" id="share-scope" style="width:100%"></select>
+    <div class="note">Un lien « Toute l’équipe » montre l’horaire de tes collègues : ne le donne qu’à des personnes de confiance.</div>
+    <div class="btns">
+      <button type="button" class="btn primary" id="share-create" onclick="createShare()">Créer le lien</button>
+      <button type="button" class="btn" onclick="closeOv('ov-share')">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-c" id="toasts" aria-live="polite"></div>
-<div class="version-tag">planning v1.2 · 12/10/2026 13:45</div>
+<div class="version-tag">planning v1.3 · 24/10/2026 16:00</div>
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
@@ -1120,12 +1139,75 @@ async function applyImport() {
   finally { btn.textContent = 'Importer'; btn.disabled = false; }
 }
 
+// ── Partage par lien (admins) ──
+let shares = [], justCreated = '';
+const shareUrl = tok => new URL('horaire.html?t=' + tok, location.href).href;
+function agoTxt(ts) {
+  if (!ts) return 'Jamais ouvert';
+  const m = Math.round((Date.now() - new Date(ts)) / 60000);
+  if (m < 60) return 'Ouvert il y a moins d’une heure';
+  if (m < 1440) return `Ouvert il y a ${Math.round(m / 60)} h`;
+  return 'Ouvert le ' + new Date(ts).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' });
+}
+async function openShare() {
+  const sel = document.getElementById('share-scope');
+  sel.innerHTML = '<option value="">Toute l’équipe</option>' + employes.filter(e => e.actif).map(e => `<option value="${e.id}">${esc(empName(e))} seulement</option>`).join('');
+  document.getElementById('share-label').value = '';
+  openOv('ov-share');
+  await loadShares();
+}
+async function loadShares() {
+  const el = document.getElementById('share-list');
+  el.innerHTML = '<div class="note">Chargement…</div>';
+  try {
+    shares = await sbFetch(`/rest/v1/plan_partages?tenant_id=eq.${encodeURIComponent(me.tenant_id)}&revoked_at=is.null&select=id,token,label,employe_id,created_at,last_seen_at&order=created_at.desc`) || [];
+  } catch (e) {
+    el.innerHTML = `<div class="note" style="color:var(--red)">${/relation|does not exist|schema cache|404/i.test(e.message) ? 'Partage pas encore installé : lance p6_partage.sql dans Supabase.' : esc(e.message)}</div>`;
+    return;
+  }
+  el.innerHTML = shares.length ? shares.map(sh => {
+    const who = sh.employe_id ? empName(employes.find(e => e.id === sh.employe_id) || {}) : 'Toute l’équipe';
+    return `<div class="li" style="align-items:flex-start;gap:10px;padding:12px 0"><div style="min-width:0;flex:1"><div class="t1">${esc(sh.label || 'Sans nom')}</div>
+      <div class="note" style="margin-top:2px">${esc(who)} · ${esc(agoTxt(sh.last_seen_at))}</div>
+      <input class="inp share-url" readonly value="${esc(shareUrl(sh.token))}" onclick="this.select()" aria-label="Lien de partage" style="height:36px;font-size:12px;margin-top:6px;${sh.id === justCreated ? 'border-color:var(--fill)' : ''}"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="pill" type="button" onclick="sendShare('${sh.id}')">Envoyer</button><button class="pill" type="button" style="color:var(--red)" onclick="revokeShare('${sh.id}', this)">Désactiver</button></div></div>`;
+  }).join('') : '<div class="note">Aucun lien actif pour l’instant.</div>';
+}
+async function sendShare(id) {
+  const sh = shares.find(x => x.id === id); if (!sh) return;
+  const url = shareUrl(sh.token);
+  if (navigator.share) { try { await navigator.share({ title: 'Horaire', url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+  try { await navigator.clipboard.writeText(url); toast('Lien copié'); }
+  catch (e) { toast('Sélectionne le lien sous le nom pour le copier', true); }
+}
+async function createShare() {
+  const btn = document.getElementById('share-create'); btn.disabled = true;
+  try {
+    const rows = await sbFetch('/rest/v1/plan_partages', { method: 'POST', body: JSON.stringify({ tenant_id: me.tenant_id, label: document.getElementById('share-label').value.trim().slice(0, 80), employe_id: document.getElementById('share-scope').value || null }) });
+    document.getElementById('share-label').value = '';
+    const sh = Array.isArray(rows) && rows[0];
+    justCreated = sh ? sh.id : '';
+    await loadShares();
+    if (sh) toast('Lien créé : touche « Envoyer » pour le partager');
+  } catch (e) {
+    toast(/relation|does not exist|schema cache|404/i.test(e.message) ? 'Partage pas encore installé : lance p6_partage.sql' : e.message, true);
+  } finally { btn.disabled = false; }
+}
+async function revokeShare(id, btn) {
+  if (!btn.dataset.armed) { btn.dataset.armed = '1'; btn.textContent = 'Confirmer'; setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = 'Désactiver'; } }, 4000); return; }
+  try {
+    await sbFetch(`/rest/v1/plan_partages?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ revoked_at: new Date().toISOString() }) });
+    toast('Lien désactivé'); await loadShares();
+  } catch (e) { toast(e.message, true); }
+}
+
 // ── Démarrage ──
 async function init() {
   me = JSON.parse(localStorage.getItem('sl_user') || '{}');
   isAdmin = ['superadmin', 'admin'].includes(me.role);
   isMgr = isAdmin || me.role === 'manager';
   document.body.classList.toggle('is-mgr', isMgr);
+  document.getElementById('share-btn').style.display = isAdmin ? '' : 'none';
   weekMon = mondayOf(todayISO());
   if (!me.tenant_id) { setStatus('Magasin introuvable pour ce compte', true); return; }
   try { await loadAll(); }

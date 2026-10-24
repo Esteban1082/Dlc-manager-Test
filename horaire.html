@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<script id="sl-helpers">
+// StoreLine — utilitaires communs : échappement HTML, recherche sans accents, messages d'erreur lisibles
+window.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+window.norm = function (s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+window.localISO = function (d) { d = d ? new Date(d) : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+window.slFetch = function (url, opts) {
+  return fetch(url, opts).catch(function () { throw new Error('Pas de connexion. Réessaie dans un instant.'); });
+};
+window.slErrMsg = function (status, data) {
+  var code = data && data.code, msg = String((data && (data.message || data.error_description || data.error)) || '');
+  if (code === '23505') {
+    if (/code_barres|barcode/i.test(msg)) return 'Ce code-barres est déjà utilisé';
+    return 'Cet élément existe déjà';
+  }
+  if (code === '23503') return 'Élément encore utilisé ailleurs : action impossible';
+  if (code === '42501' || status === 403) return "Tu n'as pas les droits pour cette action";
+  if (status === 401 || /jwt/i.test(msg)) return 'Session expirée, reconnecte-toi';
+  if (code === '22P02' || code === '23502' || code === '23514' || code === '22007' || code === '22008') return 'Donnée invalide, vérifie les champs';
+  if (status >= 500) return 'Le serveur ne répond pas, réessaie dans un instant';
+  return msg || ('Erreur ' + status);
+};
+// Page restée ouverte (tablette en magasin) : on recharge au changement de jour pour que « aujourd'hui » reste juste
+(function () {
+  if (/login|set-password/.test(location.pathname)) return;
+  var day = window.localISO();
+  function check() { if (document.visibilityState === 'visible' && window.localISO() !== day) location.reload(); }
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 5 * 60 * 1000);
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f4efe7">
+<title>Horaire · StoreLine</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<script>
+(function(){ try { var t = localStorage.getItem('sl_ui_theme') || 'light'; if (t === 'light') document.documentElement.dataset.theme = 'light'; } catch(e) {} })();
+</script>
+<style>
+  /* StoreLine — Planning, design D */
+  html[data-theme="light"] {
+    --bg:#f4efe7; --surface:#fffcf7; --surface2:#f1e6d6; --border:#e2d7c9; --text:#23201c; --muted:#6e6256;
+    --fill:#e8a045; --accent:#ad5a10; --red:#b3261e; --red-bg:#fbece9; --green:#2f6b45; --green-bg:#e7f1e9;
+    --blue:#1f5f96; --blue-bg:#e6eef7; --purple:#6b4fc0; --purple-bg:#efeafb; --off-bg:#efe9e1;
+    --shadow:0 1px 2px rgba(60,40,20,.05), 0 10px 28px rgba(60,40,20,.08);
+  }
+  html:not([data-theme="light"]) {
+    --bg:#161412; --surface:#211e1b; --surface2:#2b2723; --border:#3a342e; --text:#f4efe7; --muted:#a3978a;
+    --fill:#e8a045; --accent:#f0b264; --red:#ff7a6e; --red-bg:rgba(255,122,110,.13); --green:#6fcf97; --green-bg:rgba(111,207,151,.13);
+    --blue:#7fb8ff; --blue-bg:rgba(127,184,255,.13); --purple:#b9a2ff; --purple-bg:rgba(185,162,255,.14); --off-bg:#2b2723;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.25);
+  }
+  :root { --sans:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', sans-serif; --serif:'Fraunces', Georgia, serif; --w:760px; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { background:var(--bg); color:var(--text); font-family:var(--sans); font-size:15px; -webkit-font-smoothing:antialiased; -webkit-tap-highlight-color:transparent; }
+  button, input, select, textarea { font:inherit; color:inherit; }
+  button { cursor:pointer; }
+  :focus-visible { outline:2px solid var(--fill); outline-offset:2px; }
+
+  header.sl-head { position:sticky; top:0; z-index:50; padding:calc(env(safe-area-inset-top) + 10px) 0 12px; background:color-mix(in srgb, var(--bg) 86%, transparent); -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); border-bottom:.5px solid var(--border); }
+  .sl-head-in, .main { max-width:var(--w); margin:0 auto; padding:0 20px; }
+  .sl-head-top { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:34px; }
+  .sl-back { display:inline-flex; align-items:center; gap:6px; color:var(--accent); font-size:16px; font-weight:500; text-decoration:none; }
+  .sl-title { font-family:var(--serif); font-size:32px; font-weight:700; letter-spacing:-.6px; line-height:1.1; margin-top:6px; }
+  .actions { display:flex; gap:8px; }
+  .pill { height:34px; padding:0 14px; border-radius:17px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px; }
+  .pill.primary { background:var(--fill); border-color:var(--fill); color:#23201c; }
+  .mgr-only { display:none !important; }
+  body.is-mgr .mgr-only { display:revert !important; }
+  body.is-mgr .pill.mgr-only, body.is-mgr .seg-btn.mgr-only { display:inline-flex !important; }
+  .day { scroll-margin-top:170px; }
+  .li { scroll-margin-top:170px; }
+
+  .main { padding-top:16px; padding-bottom:calc(env(safe-area-inset-bottom) + 60px); }
+  .seg { display:flex; gap:0; background:var(--surface2); border-radius:10px; padding:2px; overflow-x:auto; scrollbar-width:none; margin-bottom:16px; }
+  .seg::-webkit-scrollbar { display:none; }
+  .seg-btn { display:inline-flex; align-items:center; justify-content:center; flex:1 1 0; min-width:max-content; height:32px; padding:0 12px; border:none; border-radius:8px; background:transparent; font-size:13px; font-weight:500; white-space:nowrap; }
+  .seg-btn.active { background:var(--surface); font-weight:600; box-shadow:0 1px 3px rgba(60,40,20,.15); }
+  html:not([data-theme="light"]) .seg-btn.active { background:#48413a; }
+
+  .status { min-height:18px; font-size:12px; color:var(--muted); text-align:center; margin:-6px 0 10px; }
+  .status.err { color:var(--red); }
+
+  /* Navigation semaine */
+  .weeknav { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .weeknav .nav-btn { width:40px; height:40px; border-radius:20px; border:1px solid var(--border); background:var(--surface); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .weeknav .nav-btn:disabled { opacity:.3; cursor:default; }
+  .weeknav .wk { flex:1; text-align:center; min-width:0; }
+  .wk-title { font-family:var(--serif); font-size:20px; font-weight:700; letter-spacing:-.3px; }
+  .wk-sub { font-size:12px; color:var(--muted); margin-top:2px; display:flex; gap:6px; justify-content:center; align-items:center; flex-wrap:wrap; }
+  .badge { display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:10px; font-size:11px; font-weight:600; background:var(--surface2); color:var(--muted); }
+  .badge.cur { background:var(--fill); color:#23201c; }
+  .badge.draft { background:var(--red-bg); color:var(--red); }
+  .badge.pub { background:var(--green-bg); color:var(--green); }
+
+  .card { background:var(--surface); border-radius:18px; box-shadow:var(--shadow); overflow:hidden; }
+  .card + .card { margin-top:12px; }
+
+  /* Pastilles d'horaire */
+  .chip { border-radius:9px; padding:6px 8px; min-height:34px; display:flex; flex-direction:column; justify-content:center; gap:1px; font-size:11px; line-height:1.25; border-left:3px solid transparent; width:100%; }
+  .chip b { font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-.1px; }
+  .chip span { color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chip.ouv { background:var(--green-bg); border-left-color:var(--green); }
+  .chip.ouv span { color:var(--green); }
+  .chip.ferm { background:var(--blue-bg); border-left-color:var(--blue); }
+  .chip.ferm span { color:var(--blue); }
+  .chip.special { background:var(--purple-bg); border-left-color:var(--purple); }
+  .chip.special span { color:var(--purple); text-transform:none; letter-spacing:0; white-space:normal; font-size:11px; }
+  .chip.off { background:var(--off-bg); color:var(--muted); font-style:italic; font-size:12px; }
+  .chip.undef { background:transparent; border:1.5px dashed var(--border); border-left-width:1.5px; color:var(--muted); font-size:12px; }
+
+  /* Grille semaine (tablette, ordinateur, mobile paysage) */
+  .grid { display:none; }
+  .grid table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  .grid th, .grid td { border-bottom:1px solid var(--border); padding:6px; vertical-align:middle; }
+  .grid tr:last-child td { border-bottom:none; }
+  .grid th { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; padding:10px 6px; background:var(--surface2); }
+  .grid th .num { display:block; font-family:var(--serif); font-size:18px; color:var(--text); text-transform:none; letter-spacing:-.2px; margin-top:1px; }
+  .grid th.today { background:color-mix(in srgb, var(--fill) 22%, var(--surface2)); }
+  .grid td.name { width:150px; background:var(--surface2); cursor:pointer; }
+  .grid th.name-h { width:150px; text-align:left; padding-left:12px; }
+  .grid td.today { background:color-mix(in srgb, var(--fill) 7%, transparent); }
+  .pn { font-weight:700; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .nn { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  body.is-mgr .cell { cursor:pointer; }
+  body.is-mgr .cell:hover .chip { filter:brightness(.97); outline:1.5px solid var(--fill); outline-offset:-1px; }
+  .count-row td { font-size:11px; color:var(--muted); text-align:center; padding:6px; background:var(--surface2); }
+
+  /* Cartes par jour (téléphone en portrait) */
+  .days .day { border-bottom:1px solid var(--border); }
+  .days .day:last-child { border-bottom:none; }
+  .day-h { display:flex; align-items:baseline; justify-content:space-between; padding:12px 14px 8px; position:sticky; top:0; }
+  .day-h .dn { font-family:var(--serif); font-size:19px; font-weight:700; letter-spacing:-.2px; }
+  .day-h .dc { font-size:12px; color:var(--muted); }
+  .day.today .day-h .dn { color:var(--accent); }
+  .day.today { background:color-mix(in srgb, var(--fill) 6%, transparent); }
+  .row { display:grid; grid-template-columns:118px minmax(0,1fr); align-items:center; gap:10px; padding:5px 14px; }
+  .row:last-child { padding-bottom:12px; }
+  .row .who { cursor:pointer; min-width:0; }
+
+  @media (min-width:760px), (orientation:landscape) and (min-width:560px) {
+    .grid { display:block; overflow-x:auto; }
+    .days { display:none; }
+    :root { --w:1100px; }
+  }
+
+  .wk-foot { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; padding:12px; border-top:1px solid var(--border); background:var(--surface2); }
+
+  /* Listes (aujourd'hui, employé, préparation) */
+  .list-h { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 16px 10px; }
+  .list-h h2 { font-family:var(--serif); font-size:20px; font-weight:700; letter-spacing:-.3px; }
+  .list-h .sub { font-size:12px; color:var(--muted); }
+  .li { display:grid; grid-template-columns:minmax(0,1fr) minmax(120px, 46%); align-items:center; gap:12px; padding:9px 16px; border-top:1px solid var(--border); }
+  .li.click { cursor:pointer; }
+  .li.today-hl { background:color-mix(in srgb, var(--fill) 10%, transparent); }
+  .li.past { opacity:.6; }
+  .li .t1 { font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .li .t2 { font-size:12px; color:var(--muted); margin-top:1px; }
+  .big-date { font-family:var(--serif); font-size:26px; font-weight:700; letter-spacing:-.4px; }
+  .me-card { padding:16px; display:flex; gap:12px; overflow-x:auto; scrollbar-width:none; }
+  .me-day { min-width:96px; flex:0 0 auto; }
+  .me-day .d { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; margin-bottom:4px; }
+  .empty { text-align:center; padding:44px 20px; color:var(--muted); }
+  .empty .et { font-family:var(--serif); font-size:20px; font-weight:700; color:var(--text); margin-bottom:6px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:10px; padding:0 16px 16px; }
+  .stat { background:var(--surface2); border-radius:14px; padding:12px 14px; }
+  .stat .v { font-family:var(--serif); font-size:24px; font-weight:700; margin-top:4px; }
+  .stat .m { font-size:12px; color:var(--muted); }
+  .select { height:40px; border-radius:12px; border:1.5px solid transparent; background:var(--surface2); padding:0 12px; font-size:15px; max-width:100%; }
+
+  /* Feuilles (modales) */
+  .ov { display:none; position:fixed; inset:0; z-index:200; background:rgba(35,32,28,.38); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); align-items:center; justify-content:center; padding:20px; }
+  .ov.open { display:flex; }
+  .sheet { background:var(--surface); border-radius:22px; width:100%; max-width:520px; max-height:92vh; overflow-y:auto; padding:22px; box-shadow:0 20px 60px rgba(0,0,0,.18); }
+  .sheet.wide { max-width:760px; }
+  .sheet h3 { font-family:var(--serif); font-size:22px; font-weight:700; letter-spacing:-.3px; }
+  .sheet .sub { font-size:13px; color:var(--muted); margin:3px 0 16px; }
+  .lbl { display:block; font-size:12px; font-weight:600; color:var(--muted); margin:12px 0 6px; letter-spacing:.03em; }
+  .inp { width:100%; height:46px; border-radius:12px; border:1.5px solid transparent; background:var(--surface2); padding:0 14px; font-size:16px; }
+  .inp:focus, .select:focus, textarea.inp:focus { outline:none; border-color:var(--fill); background:var(--surface); }
+  textarea.inp { height:170px; padding:12px 14px; font-family:ui-monospace, Menlo, monospace; font-size:12px; resize:vertical; }
+  .types { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+  .tbtn { height:44px; border-radius:12px; border:1.5px solid var(--border); background:var(--surface); font-weight:600; font-size:14px; }
+  .tbtn.on.ouv { background:var(--green-bg); border-color:var(--green); color:var(--green); }
+  .tbtn.on.ferm { background:var(--blue-bg); border-color:var(--blue); color:var(--blue); }
+  .tbtn.on.repos { background:var(--off-bg); border-color:var(--muted); }
+  .tbtn.on.special { background:var(--purple-bg); border-color:var(--purple); color:var(--purple); }
+  .quick { display:flex; flex-wrap:wrap; gap:6px; }
+  .qbtn { height:32px; padding:0 12px; border-radius:16px; border:1px solid var(--border); background:var(--surface); font-size:13px; font-weight:600; }
+  .times { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .check { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:14px; }
+  .check input { width:20px; height:20px; accent-color:var(--fill); }
+  .btns { display:flex; gap:8px; margin-top:20px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:110px; height:48px; border-radius:999px; border:1px solid var(--border); background:var(--surface); font-weight:600; font-size:15px; }
+  .btn.primary { background:var(--fill); border-color:var(--fill); color:#23201c; font-weight:700; box-shadow:0 4px 14px rgba(232,160,69,.28); }
+  .btn.danger { color:var(--red); background:var(--red-bg); border-color:transparent; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .drop { border:2px dashed var(--border); border-radius:16px; padding:22px; text-align:center; cursor:pointer; }
+  .drop:hover { border-color:var(--fill); }
+  .drop .dt { font-weight:700; margin-top:8px; }
+  .drop .ds { font-size:12px; color:var(--muted); margin-top:3px; }
+  .preview { margin-top:14px; border-radius:14px; background:var(--surface2); padding:12px; font-size:13px; }
+  .preview .grid { display:block; overflow-x:auto; }
+  .preview .grid table { min-width:640px; }
+  .preview .grid td, .preview .grid th { padding:4px; }
+  .note { font-size:12px; color:var(--muted); margin-top:10px; line-height:1.45; }
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:sp .8s linear infinite; vertical-align:-2px; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+  .toast-c { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 20px); z-index:400; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; }
+  .toast { background:var(--text); color:var(--bg); padding:11px 16px; border-radius:14px; font-size:14px; font-weight:500; box-shadow:var(--shadow); max-width:min(92vw, 420px); text-align:center; }
+  .toast.err { background:var(--red); color:#fff; }
+  .version-tag { position:fixed; bottom:8px; left:12px; font-size:10px; color:var(--muted); opacity:.45; }
+
+  @media (max-width:640px) {
+    .ov { align-items:flex-end; padding:0; }
+    .sheet { border-radius:22px 22px 0 0; max-height:94vh; padding-bottom:calc(env(safe-area-inset-bottom) + 22px); }
+    .sl-head-in, .main { padding:0 16px; }
+    .sl-title { font-size:30px; }
+    .main { padding-top:14px; }
+    .types { grid-template-columns:repeat(2, 1fr); }
+  }
+
+  /* Téléphone en paysage : grille compacte, toute l'équipe tient à l'écran */
+  @media (orientation:landscape) and (max-height:560px) {
+    header.sl-head { position:static; padding:calc(env(safe-area-inset-top) + 6px) 0 6px; }
+    .sl-head-top { min-height:30px; }
+    .sl-title { display:none; }
+    .main { padding-top:8px; padding-left:max(16px, env(safe-area-inset-left)); padding-right:max(16px, env(safe-area-inset-right)); }
+    .seg { margin-bottom:8px; }
+    .seg-btn { height:28px; }
+    .status:empty { display:none; }
+    .weeknav { margin-bottom:6px; gap:8px; scroll-margin-top:4px; }
+    .weeknav .nav-btn { width:32px; height:32px; }
+    .wk-title { font-size:16px; display:inline; }
+    .wk-sub { display:inline-flex; margin:0 0 0 8px; }
+    .wk-sub > span:first-child { display:none; }
+    .grid th { padding:4px 3px; font-size:10px; }
+    .grid th .num { display:inline; font-size:13px; margin-left:3px; }
+    .grid td { padding:2px 3px; }
+    .grid td.name, .grid th.name-h { width:96px; padding-left:8px; }
+    .grid .nn { display:none; }
+    .grid .pn { font-size:12px; }
+    .grid .chip { min-height:0; padding:3px 6px; border-radius:6px; flex-direction:row; align-items:center; }
+    .grid .chip b { font-size:11.5px; white-space:nowrap; letter-spacing:-.2px; }
+    .grid .chip.special:has(b) span { display:none !important; }
+    .grid .chip span { display:none; }
+    .grid .chip.special span { display:block; font-size:10.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .grid .chip.off, .grid .chip.undef { font-size:11px; padding:3px 6px; }
+    .grid .count-row td { padding:2px; font-size:10px; }
+    .wk-foot { padding:8px; }
+  }
+  @media (orientation:landscape) and (max-height:560px) and (max-width:720px) {
+    .grid td.name, .grid th.name-h { width:78px; padding-left:6px; }
+    .grid td { padding:2px; }
+    .grid .chip { padding:3px 4px; border-left-width:2px; }
+    .grid .chip b { font-size:10.5px; letter-spacing:-.3px; }
+  }
+  @media print {
+    header, .seg, .weeknav .nav-btn, .wk-foot, .toast-c, .status, .version-tag, .ov { display:none !important; }
+    body, html { background:#fff; color:#000; }
+    .card { box-shadow:none; border:1px solid #bbb; }
+    .grid { display:block !important; }
+    .days { display:none !important; }
+    .main { max-width:none; padding:0; }
+  }
+</style>
+<style>
+  .pub-sub { font-size:13px; color:var(--muted); margin-top:2px; }
+  .cal-opt { display:flex; align-items:center; gap:12px; width:100%; padding:14px; border-radius:14px; background:var(--surface2); border:none; text-align:left; margin-top:8px; text-decoration:none; color:var(--text); }
+  .cal-opt b { display:block; font-size:15px; }
+  .cal-opt span { font-size:12.5px; color:var(--muted); }
+  .cal-opt .ci { width:38px; height:38px; border-radius:10px; background:var(--surface); display:flex; align-items:center; justify-content:center; flex:none; color:var(--accent); }
+  .err-page { text-align:center; padding:60px 20px; }
+  .err-page .et { font-family:var(--serif); font-size:24px; font-weight:700; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<header class="sl-head">
+  <div class="sl-head-in">
+    <div class="sl-head-top">
+      <div class="pub-sub" id="pub-mag">StoreLine</div>
+      <div class="actions">
+        <button class="pill" type="button" id="cal-btn" style="display:none" onclick="openCal()">Agenda</button>
+      </div>
+    </div>
+    <h1 class="sl-title" id="pub-title">Horaire</h1>
+  </div>
+</header>
+
+<div class="main">
+  <div class="seg" role="tablist" aria-label="Vues" id="tabs" style="display:none">
+    <button class="seg-btn" id="tab-today" type="button" onclick="setView('today')">Aujourd’hui</button>
+    <button class="seg-btn" id="tab-week" type="button" onclick="setView('week')">Semaine</button>
+    <button class="seg-btn" id="tab-emp" type="button" onclick="setView('emp')">Par personne</button>
+  </div>
+  <div class="status" id="status" role="status"></div>
+  <div id="view"></div>
+</div>
+
+<!-- Ajouter à mon agenda -->
+<div class="ov" id="ov-cal" onclick="if(event.target===this)closeOv('ov-cal')">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="cal-title">
+    <h3 id="cal-title">Ajouter à mon agenda</h3>
+    <div class="sub" id="cal-sub"></div>
+    <label class="lbl" for="cal-who">Horaire de</label>
+    <select class="select" id="cal-who" style="width:100%" onchange="renderCal()"></select>
+    <div id="cal-opts"></div>
+    <div class="note">L’agenda se met à jour tout seul. Google Agenda peut mettre plusieurs heures à afficher un changement : pour une modification de dernière minute, cette page fait foi.</div>
+    <div class="btns"><button type="button" class="btn" onclick="closeOv('ov-cal')">Fermer</button></div>
+  </div>
+</div>
+
+<div class="toast-c" id="toasts" aria-live="polite"></div>
+<div class="version-tag">horaire v1.0 · 24/10/2026 16:00</div>
+
+<script>
+const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
+const DAY_SHORT = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'];
+const DAY_LONG = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+const TOKEN = (new URLSearchParams(location.search).get('t') || '').trim();
+const PIN_KEY = 'sl_pub_pin_' + TOKEN.slice(0, 8);
+
+const isMgr = false;
+let employes = [], semaines = new Map(), shifts = new Map();
+let view = 'today', weekMon = '', selEmp = '', scope = 'equipe', magasin = '';
+
+function toast(msg, err) {
+  const c = document.getElementById('toasts'), t = document.createElement('div');
+  t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg; c.appendChild(t);
+  setTimeout(() => t.remove(), err ? 5000 : 3000);
+}
+function setStatus(msg, err) { const el = document.getElementById('status'); el.className = 'status' + (err ? ' err' : ''); el.textContent = msg || ''; }
+function openOv(id) { document.getElementById(id).classList.add('open'); }
+function closeOv(id) { document.getElementById(id).classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.ov.open').forEach(o => o.classList.remove('open')); });
+function getPin() { try { return localStorage.getItem(PIN_KEY) || ''; } catch (e) { return ''; } }
+function setPin(id) { try { if (id) localStorage.setItem(PIN_KEY, id); } catch (e) {} }
+
+// Dates (toujours en heure locale)
+function parseISO(s) { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d, 12); }
+function addDays(s, n) { const d = parseISO(s); d.setDate(d.getDate() + n); return localISO(d); }
+function mondayOf(s) { const d = parseISO(s); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return localISO(d); }
+function todayISO() { return localISO(); }
+function isoWeekNum(s) { const d = parseISO(s); const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day); const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return Math.ceil(((t - y0) / 86400000 + 1) / 7); }
+function fmtDay(s, opts) { return parseISO(s).toLocaleDateString('fr-BE', opts || { weekday: 'long', day: 'numeric', month: 'long' }); }
+function weekTitle(mon) { return `Semaine ${isoWeekNum(mon)}`; }
+function weekRange(mon) {
+  const end = addDays(mon, 5), a = parseISO(mon), b = parseISO(end);
+  const m1 = a.toLocaleDateString('fr-BE', { month: 'long' }), m2 = b.toLocaleDateString('fr-BE', { month: 'long' });
+  return m1 === m2 ? `${a.getDate()} au ${b.getDate()} ${m2} ${b.getFullYear()}` : `${a.getDate()} ${m1} au ${b.getDate()} ${m2} ${b.getFullYear()}`;
+}
+function autoLabel(mon) { return `Sem ${isoWeekNum(mon)} — ${weekRange(mon)}`; }
+
+// Horaires
+function hm(t) { return t ? String(t).slice(0, 5) : ''; }
+function mins(t) { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+function isAbsence(type) { return /^(repos|va\b|vae|crdt|mal\b|vacances|f[ée]ri[ée]|r[ée]cup|rec|cong[ée]|absnp|css|absent|maladie)/i.test(String(type || '').trim()); }
+function isWorking(s) { return !!s && mins(s.debut) !== null && mins(s.fin) !== null && !isAbsence(s.type); }
+function family(s) {
+  if (!s) return '';
+  const t = norm(s.type);
+  if (t.startsWith('ferm')) return 'ferm';
+  if (t.startsWith('ouv') || t === 'atelier') return 'ouv';
+  if (t === 'repos' || isAbsence(s.type)) return '';
+  const st = mins(s.debut);
+  return st === null ? '' : (st < 12 * 60 ? 'ouv' : 'ferm');
+}
+
+function chip(s) {
+  if (!s) return '<div class="chip undef">À définir</div>';
+  const t = String(s.type || '').trim();
+  const time = s.debut ? `<b>${esc(hm(s.debut))} – ${esc(hm(s.fin))}</b>` : '';
+  if (norm(t) === 'repos' && !s.debut) return '<div class="chip off">Jour off</div>';
+  const f = family(s);
+  if (f === 'ouv') return `<div class="chip ouv">${time}<span>${esc(norm(t) === 'ouverture' || !t ? 'Ouverture' : t)}</span></div>`;
+  if (f === 'ferm') return `<div class="chip ferm">${time}<span>Fermeture</span></div>`;
+  return `<div class="chip special">${time}<span>${esc(t || 'À définir')}</span></div>`;
+}
+
+// ── Données ──
+function shiftOf(empId, day) { return shifts.get(empId + '|' + day) || null; }
+function empName(e) { return `${e.prenom || ''} ${e.nom || ''}`.trim() || 'Sans nom'; }
+function empKey(first, last) { return norm(first).replace(/\s+/g, ' ') + '|' + norm(last).replace(/\s+/g, ' '); }
+function prettyFirst(s) { s = String(s || '').trim(); return s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase()) : s; }
+function weekDays(mon) {
+  const days = [0, 1, 2, 3, 4, 5].map(i => addDays(mon, i));
+  const sun = addDays(mon, 6);
+  if (employes.some(e => shiftOf(e.id, sun))) days.push(sun);
+  return days;
+}
+function hasShiftInWeek(empId, mon) { for (let i = 0; i < 7; i++) if (shiftOf(empId, addDays(mon, i))) return true; return false; }
+// Personnes affichées : celles qui ont un horaire cette semaine, plus toute l'équipe active pour les semaines en cours et à venir
+function roster(mon) {
+  const cur = mondayOf(todayISO());
+  return employes.filter(e => hasShiftInWeek(e.id, mon) || (e.actif && mon >= cur));
+}
+function weekVisible(mon) {
+  if (isMgr) return true;
+  if (mon <= mondayOf(todayISO())) return true;
+  const s = semaines.get(mon);
+  return !!(s && s.publiee);
+}
+function weekHasData(mon) { return !!semaines.get(mon) || employes.some(e => hasShiftInWeek(e.id, mon)); }
+function knownMondays() {
+  const set = new Set([mondayOf(todayISO())]);
+  semaines.forEach((_, k) => set.add(k));
+  shifts.forEach(s => set.add(mondayOf(s.jour)));
+  return [...set].sort();
+}
+
+
+// ── Vues ──
+function setView(v) {
+  view = v;
+  ['today', 'week', 'emp'].forEach(k => document.getElementById('tab-' + k).classList.toggle('active', k === v));
+  render();
+}
+function render() {
+  if (view === 'week') renderWeek();
+  else if (view === 'emp') renderEmp();
+  else renderToday();
+}
+
+function weekNavHTML() {
+  const mondays = knownMondays().filter(weekVisible);
+  const cur = mondayOf(todayISO());
+  const prevOk = isMgr || mondays.some(m => m < weekMon);
+  const nextOk = isMgr ? true : mondays.some(m => m > weekMon);
+  const s = semaines.get(weekMon);
+  let badge = '';
+  if (weekMon === cur) badge = '<span class="badge cur">Cette semaine</span>';
+  else if (weekMon > cur && isMgr) badge = s && s.publiee ? '<span class="badge pub">Visible par l’équipe</span>' : '<span class="badge draft">Brouillon · invisible pour l’équipe</span>';
+  else if (weekMon < cur) badge = '<span class="badge">Passée</span>';
+  return `<div class="weeknav">
+    <button class="nav-btn" type="button" onclick="moveWeek(-1)" ${prevOk ? '' : 'disabled'} aria-label="Semaine précédente"><svg width="9" height="15" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M8 2 2 8l6 6"/></svg></button>
+    <div class="wk"><div class="wk-title">${esc(weekTitle(weekMon))}</div>
+      <div class="wk-sub"><span>${esc(weekRange(weekMon))}</span>${badge}${weekMon !== cur ? `<button class="badge" type="button" style="border:none;cursor:pointer" onclick="goWeek('${cur}')">Revenir à aujourd’hui</button>` : ''}</div></div>
+    <button class="nav-btn" type="button" onclick="moveWeek(1)" ${nextOk ? '' : 'disabled'} aria-label="Semaine suivante"><svg width="9" height="15" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6-6 6"/></svg></button>
+  </div>`;
+}
+function moveWeek(dir) {
+  if (isMgr) { weekMon = addDays(weekMon, dir * 7); render(); return; }
+  const list = knownMondays().filter(weekVisible);
+  const next = dir > 0 ? list.find(m => m > weekMon) : [...list].reverse().find(m => m < weekMon);
+  if (next) { weekMon = next; render(); }
+}
+function goWeek(mon) { weekMon = mon; setView('week'); }
+
+function renderWeek() {
+  const el = document.getElementById('view');
+  if (!weekVisible(weekMon)) {
+    el.innerHTML = weekNavHTML() + `<div class="card"><div class="empty"><div class="et">Pas encore publiée</div>L’horaire de cette semaine sera visible dès qu’il est prêt.</div></div>`;
+    return;
+  }
+  const days = weekDays(weekMon), today = todayISO(), people = roster(weekMon);
+  if (!people.length) {
+    el.innerHTML = weekNavHTML() + `<div class="card"><div class="empty"><div class="et">Aucune personne dans le planning</div>${isMgr ? 'Ajoute ton équipe ou importe un horaire.' : 'Le planning n’a pas encore été rempli.'}</div>${isMgr ? `<div class="wk-foot"><button class="pill primary" type="button" onclick="openEmp()">Ajouter une personne</button><button class="pill" type="button" onclick="openImport()">Importer un horaire</button></div>` : ''}</div>`;
+    return;
+  }
+  const cell = (e, d) => `<div class="cell" ${isMgr ? `onclick="openEdit('${e.id}','${d}')" role="button" tabindex="0" aria-label="Modifier ${esc(empName(e))}, ${esc(fmtDay(d))}"` : ''}>${chip(shiftOf(e.id, d))}</div>`;
+  const grid = `<div class="grid"><table>
+    <thead><tr><th class="name-h">Équipe</th>${days.map((d, i) => `<th class="${d === today ? 'today' : ''}">${DAY_SHORT[i]}<span class="num">${parseISO(d).getDate()}</span></th>`).join('')}</tr></thead>
+    <tbody>${people.map(e => `<tr><td class="name" onclick="showEmp('${e.id}')"><div class="pn">${esc(e.prenom || e.nom)}</div><div class="nn">${esc(e.prenom ? e.nom : '')}</div></td>${days.map(d => `<td class="${d === today ? 'today' : ''}">${cell(e, d)}</td>`).join('')}</tr>`).join('')}
+      <tr class="count-row"><td style="text-align:left;padding-left:12px">En poste</td>${days.map(d => `<td>${people.filter(e => isWorking(shiftOf(e.id, d))).length}</td>`).join('')}</tr>
+    </tbody></table></div>`;
+  const cards = `<div class="days">${days.map((d, i) => {
+    const n = people.filter(e => isWorking(shiftOf(e.id, d))).length;
+    return `<div class="day ${d === today ? 'today' : ''}" id="day-${d}"><div class="day-h"><span class="dn">${DAY_LONG[i]} ${parseISO(d).getDate()}</span><span class="dc">${n} en poste</span></div>
+      ${people.map(e => `<div class="row"><div class="who" onclick="showEmp('${e.id}')"><div class="pn">${esc(e.prenom || e.nom)}</div><div class="nn">${esc(e.prenom ? e.nom : '')}</div></div>${cell(e, d)}</div>`).join('')}</div>`;
+  }).join('')}</div>`;
+  const s = semaines.get(weekMon), future = weekMon > mondayOf(today);
+  const foot = isMgr ? `<div class="wk-foot">
+      ${future ? `<button class="pill ${s && s.publiee ? '' : 'primary'}" type="button" onclick="togglePublish()">${s && s.publiee ? 'Masquer à l’équipe' : 'Publier pour l’équipe'}</button>` : ''}
+      <button class="pill" type="button" onclick="openCopy()">Copier une semaine</button>
+      <button class="pill" type="button" onclick="openEmp()">Ajouter une personne</button>
+    </div>` : '';
+  el.innerHTML = weekNavHTML() + `<div class="card">${grid}${cards}${foot}</div>`;
+  if (matchMedia('(orientation:landscape) and (max-height:560px)').matches) {
+    const nav = el.querySelector('.weeknav');
+    if (nav) requestAnimationFrame(() => nav.scrollIntoView({ block: 'start' }));
+  }
+  if (weekMon === mondayOf(today) && window.innerWidth < 760) {
+    const t = document.getElementById('day-' + today);
+    if (t && !renderWeek._scrolled) { renderWeek._scrolled = true; setTimeout(() => t.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60); }
+  }
+}
+
+function renderToday() {
+  const el = document.getElementById('view'), today = todayISO(), mon = mondayOf(today);
+  const people = roster(mon);
+  const working = people.map(e => ({ e, s: shiftOf(e.id, today) })).filter(x => isWorking(x.s)).sort((a, b) => mins(a.s.debut) - mins(b.s.debut));
+  const absent = people.map(e => ({ e, s: shiftOf(e.id, today) })).filter(x => x.s && !isWorking(x.s));
+  const undef = people.filter(e => !shiftOf(e.id, today)).length;
+  let html = '';
+  const mine = myEmp();
+  if (mine) {
+    const next = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i)).filter(d => parseISO(d).getDay() !== 0 || shiftOf(mine.id, d));
+    html += `<div class="card"><div class="list-h"><div><h2>Horaire de ${esc(mine.prenom || mine.nom)}</h2><div class="sub">${esc(empName(mine))}</div></div><button class="pill" type="button" onclick="showEmp('${mine.id}')">Tout voir</button></div>
+      <div class="me-card">${next.slice(0, 6).map(d => `<div class="me-day"><div class="d">${d === today ? 'Aujourd’hui' : esc(fmtDay(d, { weekday: 'short', day: 'numeric' }))}</div>${weekVisible(mondayOf(d)) ? chip(shiftOf(mine.id, d)) : '<div class="chip undef">À venir</div>'}</div>`).join('')}</div></div>`;
+  }
+  if (!mine && scope === 'equipe') {
+    html += `<div class="card"><div class="list-h"><div><h2 style="font-size:17px">Tu suis l’horaire de qui ?</h2><div class="sub">Son horaire s’affichera en premier sur cet appareil.</div></div></div>
+      <div style="padding:0 16px 16px"><select class="select" style="width:100%" onchange="if(this.value){setPin(this.value);render()}" aria-label="Personne"><option value="">Choisir…</option>${employes.filter(e => e.actif).map(e => `<option value="${e.id}">${esc(empName(e))}</option>`).join('')}</select></div></div>`;
+  }
+  html += `<div class="card"><div class="list-h"><div><div class="big-date">${esc(fmtDay(today, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, c => c.toUpperCase()))}</div>
+      <div class="sub">${working.length} en poste${undef && isMgr ? ` · ${undef} à définir` : ''}</div></div>
+      <button class="pill" type="button" onclick="goWeek('${mon}')">Semaine</button></div>
+    ${working.length ? working.map(x => `<div class="li ${isMgr ? 'click' : ''}" ${isMgr ? `onclick="openEdit('${x.e.id}','${today}')"` : ''}><div><div class="t1">${esc(empName(x.e))}</div></div>${chip(x.s)}</div>`).join('')
+      : `<div class="empty" style="padding:28px 20px">${people.length ? 'Personne en poste aujourd’hui.' : 'Le planning n’a pas encore été rempli.'}</div>`}
+  </div>`;
+  if (absent.length) {
+    html += `<div class="card"><div class="list-h"><div><h2 style="font-size:17px">Absents ou en repos</h2></div></div>
+      ${absent.map(x => `<div class="li ${isMgr ? 'click' : ''}" ${isMgr ? `onclick="openEdit('${x.e.id}','${today}')"` : ''}><div><div class="t1">${esc(empName(x.e))}</div></div>${chip(x.s)}</div>`).join('')}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+function showEmp(id) { selEmp = id; setView('emp'); }
+function renderEmp() {
+  const el = document.getElementById('view');
+  const list = employes.filter(e => e.actif || [...shifts.values()].some(s => s.employe_id === e.id));
+  if (!selEmp) { const m = myEmp(); selEmp = m ? m.id : ''; }
+  const opts = `<option value="">Choisir une personne</option>` + list.map(e => `<option value="${e.id}" ${e.id === selEmp ? 'selected' : ''}>${esc(empName(e))}${e.actif ? '' : ' (ancien)'}</option>`).join('');
+  let html = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap"><select class="select" style="flex:1;min-width:200px" onchange="selEmp=this.value;setPin(this.value);renderEmp()" aria-label="Personne">${opts}</select></div>`;
+  if (scope === 'personne') html = '';
+  const e = employes.find(x => x.id === selEmp);
+  if (!e) { el.innerHTML = html + `<div class="card"><div class="empty"><div class="et">Choisis une personne</div>ou touche un nom dans la semaine.</div></div>`; return; }
+  const mons = knownMondays().filter(m => weekVisible(m) && (hasShiftInWeek(e.id, m) || (e.actif && m >= mondayOf(todayISO()) && weekHasData(m))));
+  const today = todayISO();
+  html += `<div class="card"><div class="list-h"><div><h2>${esc(empName(e))}</h2><div class="sub">${e.actif ? 'Dans l’équipe' : 'Ne fait plus partie du planning'}</div></div><button class="pill" type="button" onclick="openCal()">Ajouter à mon agenda</button>
+    ${isMgr ? `<div class="actions"><button class="pill" type="button" onclick="openEmp('${e.id}')">Modifier</button>${e.actif ? `<button class="pill" type="button" style="color:var(--red)" onclick="removeEmp('${e.id}')">Retirer</button>` : `<button class="pill" type="button" onclick="reactivateEmp('${e.id}')">Réintégrer</button>`}</div>` : ''}</div></div>`;
+  html += mons.map(m => {
+    const days = weekDays(m);
+    return `<div class="card"><div class="list-h"><div><h2 style="font-size:17px">${esc(weekTitle(m))}</h2><div class="sub">${esc(weekRange(m))}</div></div></div>
+      ${days.map(d => `<div class="li ${d === today ? 'today-hl' : d < today ? 'past' : ''} ${isMgr ? 'click' : ''}" data-date="${d}" ${isMgr ? `onclick="openEdit('${e.id}','${d}')"` : ''}><div><div class="t1">${esc(fmtDay(d, { weekday: 'long', day: 'numeric', month: 'short' }).replace(/^./, c => c.toUpperCase()))}</div></div>${chip(shiftOf(e.id, d))}</div>`).join('')}</div>`;
+  }).join('') || `<div class="card"><div class="empty">Aucun horaire pour l’instant.</div></div>`;
+  el.innerHTML = html;
+  const target = el.querySelector(`.li[data-date="${today}"]`) || [...el.querySelectorAll('.li[data-date]')].find(x => x.dataset.date > today);
+  if (target) setTimeout(() => target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
+}
+
+// La personne « suivie » (choisie une fois, retenue sur cet appareil)
+function myEmp() { const p = getPin(); return employes.find(e => e.id === p) || (employes.length === 1 ? employes[0] : null); }
+
+async function loadAll() {
+  const r = await slFetch(SUPABASE_URL + '/rest/v1/rpc/plan_public', { method: 'POST', headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_token: TOKEN }) });
+  const text = await r.text();
+  let d = null; try { d = text ? JSON.parse(text) : null; } catch (e) {}
+  if (!r.ok) throw new Error(r.status === 404 ? 'Le partage n’est pas encore activé sur le serveur.' : slErrMsg(r.status, d));
+  if (!d) { const e = new Error('revoked'); e.revoked = true; throw e; }
+  magasin = d.magasin || ''; scope = d.scope;
+  employes = (d.employes || []).map(e => ({ ...e, user_id: null }));
+  semaines = new Map((d.semaines || []).map(s => [s.lundi, s]));
+  shifts = new Map((d.shifts || []).map(s => [s.employe_id + '|' + s.jour, s]));
+}
+
+// ── Agenda ──
+function icsUrl(empId) { return `${SUPABASE_URL}/functions/v1/planning-ics?t=${encodeURIComponent(TOKEN)}${empId ? '&p=' + encodeURIComponent(empId) : ''}`; }
+function openCal() {
+  const sel = document.getElementById('cal-who'), pin = myEmp();
+  const list = employes.filter(e => e.actif);
+  sel.innerHTML = (scope === 'equipe' ? '<option value="">Toute l’équipe</option>' : '') + list.map(e => `<option value="${e.id}" ${pin && pin.id === e.id ? 'selected' : ''}>${esc(empName(e))}</option>`).join('');
+  document.getElementById('cal-sub').textContent = 'Les horaires apparaissent dans ton agenda, à côté de tes rendez-vous.';
+  renderCal(); openOv('ov-cal');
+}
+function renderCal() {
+  const id = document.getElementById('cal-who').value, https = icsUrl(id), webcal = https.replace(/^https:/, 'webcal:');
+  const google = 'https://calendar.google.com/calendar/render?cid=' + encodeURIComponent(webcal);
+  const ico = p => `<span class="ci"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg></span>`;
+  document.getElementById('cal-opts').innerHTML = `
+    <a class="cal-opt" href="${esc(google)}" target="_blank" rel="noopener">${ico('<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>')}<span><b>Google Agenda</b><span>S’ouvre dans Google Agenda : confirme l’ajout (sur ordinateur de préférence).</span></span></a>
+    <a class="cal-opt" href="${esc(webcal)}">${ico('<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4M9 15h6"/>')}<span><b>iPhone, iPad, Mac, Outlook</b><span>S’abonner directement depuis cet appareil.</span></span></a>
+    <button class="cal-opt" type="button" onclick="copyIcs('${esc(id)}')">${ico('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>')}<span><b>Copier l’adresse de l’agenda</b><span>Google Agenda → Autres agendas → + → À partir de l’URL.</span></span></button>`;
+}
+async function copyIcs(id) {
+  const u = icsUrl(id);
+  try { await navigator.clipboard.writeText(u); toast('Adresse copiée'); }
+  catch (e) { toast('Copie impossible : ' + u, true); }
+}
+
+// ── Démarrage ──
+async function init() {
+  if (!/^[0-9a-f]{32}$/i.test(TOKEN)) { showError('Lien incomplet', 'Vérifie que tu as copié le lien en entier.'); return; }
+  setStatus('Chargement…');
+  try { await loadAll(); }
+  catch (e) {
+    setStatus('');
+    if (e.revoked) showError('Lien désactivé', 'Ce lien de partage n’est plus actif. Demande un nouveau lien.');
+    else showError('Impossible de charger l’horaire', e.message);
+    return;
+  }
+  setStatus('');
+  document.getElementById('pub-mag').textContent = magasin;
+  if (scope === 'personne' && employes[0]) document.getElementById('pub-title').textContent = 'Horaire de ' + (employes[0].prenom || employes[0].nom);
+  document.getElementById('tabs').style.display = scope === 'personne' ? 'none' : '';
+  document.getElementById('cal-btn').style.display = '';
+  weekMon = mondayOf(todayISO());
+  if (scope === 'personne') { selEmp = employes[0] ? employes[0].id : ''; view = 'emp'; render(); return; }
+  setView('today');
+}
+function showError(title, sub) {
+  document.getElementById('view').innerHTML = `<div class="card err-page"><div class="et">${esc(title)}</div><div class="note">${esc(sub)}</div></div>`;
+}
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || !employes.length || document.querySelector('.ov.open')) return;
+  try { await loadAll(); render(); } catch (e) {}
+});
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+</script>
+</body>
+</html>
