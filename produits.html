@@ -359,6 +359,14 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     .appliance-card { margin:0 !important; }
   }
 
+  /* Suggestions de marques déjà enregistrées */
+  .brand-wrap { position:relative; }
+  .brand-sugg { display:none; position:absolute; left:0; right:0; top:calc(100% - 10px); z-index:30; background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.25); overflow:hidden; max-height:240px; overflow-y:auto; }
+  .brand-sugg.open { display:block; }
+  .brand-sugg button { display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%; padding:11px 14px; background:transparent; border:none; border-bottom:1px solid var(--border); color:var(--text); font-size:14px; text-align:left; cursor:pointer; }
+  .brand-sugg button:last-child { border-bottom:none; }
+  .brand-sugg button:hover, .brand-sugg button:active { background:var(--surface2, var(--bg)); }
+  .brand-sugg .bs-n { color:var(--muted); font-size:12px; flex-shrink:0; }
 </style>
 </head>
 <body>
@@ -432,7 +440,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     <label class="form-label">Nom de l'article *</label>
     <input id="add-nom" class="form-input" type="text" placeholder="Ex : Tarte au citron">
     <label class="form-label">Marque / fournisseur</label>
-    <input id="add-marque" class="form-input" type="text" placeholder="Ex : Maison">
+    <div class="brand-wrap"><input id="add-marque" class="form-input" type="text" placeholder="Ex : Maison" autocomplete="off" autocapitalize="words"><div class="brand-sugg" id="add-marque-sugg"></div></div>
     <label class="form-label">Code-barres (optionnel)</label>
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <input id="add-barcode" class="form-input" type="text" placeholder="Ex : 5400141234567" style="flex:1;margin-bottom:0">
@@ -459,7 +467,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
     <label class="form-label">Nom de l'article *</label>
     <input id="edit-nom" class="form-input" type="text" placeholder="Ex : Tarte au citron">
     <label class="form-label">Marque / fournisseur</label>
-    <input id="edit-marque" class="form-input" type="text" placeholder="Ex : Maison">
+    <div class="brand-wrap"><input id="edit-marque" class="form-input" type="text" placeholder="Ex : Maison" autocomplete="off" autocapitalize="words"><div class="brand-sugg" id="edit-marque-sugg"></div></div>
     <label class="form-label">Code-barres</label>
     <input id="edit-barcode" class="form-input" type="text" placeholder="Ex : 5400141234567">
     <label class="form-label">Categorie</label>
@@ -484,7 +492,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">produits v2.4 · 12/10/2026 12:45</div>
+<div class="version-tag">produits v2.5 · 13/11/2026 12:00</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -708,7 +716,7 @@ async function saveProductEdit() {
   const index = parseInt(document.getElementById('edit-index').value, 10);
   const current = sheetProducts[index];
   const nom = document.getElementById('edit-nom').value.trim();
-  const marque = document.getElementById('edit-marque').value.trim();
+  const marque = canonMarque(document.getElementById('edit-marque').value);
   const barcode = document.getElementById('edit-barcode').value.trim();
   const categorie = document.getElementById('edit-categorie').value.trim();
 
@@ -740,9 +748,54 @@ function openAddModal() {
 }
 function closeAddModal() { document.getElementById('modal-add').style.display = 'none'; }
 
+// ── Marques : suggestions + anti-doublons (é = e, majuscules, tirets et espaces ignorés) ──
+function marqueKey(s) { return norm(s).replace(/[^a-z0-9]+/g, ''); }
+function marquesConnues() {
+  const map = new Map(); // clé → { labels: Map(orthographe → nb), total }
+  sheetProducts.forEach(p => {
+    const m = getProduitFields(p).marque; if (!m) return;
+    const k = marqueKey(m); if (!k) return;
+    const e = map.get(k) || { labels: new Map(), total: 0 };
+    e.labels.set(m, (e.labels.get(m) || 0) + 1); e.total++;
+    map.set(k, e);
+  });
+  return [...map.entries()].map(([key, e]) => ({
+    key, total: e.total,
+    label: [...e.labels.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'fr'))[0][0], // orthographe la plus utilisée
+  })).sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+}
+// Si la marque tapée existe déjà (à l'accent près), on reprend l'orthographe enregistrée
+function canonMarque(m) {
+  m = (m || '').trim(); if (!m) return m;
+  const k = marqueKey(m), hit = marquesConnues().find(x => x.key === k);
+  if (hit && hit.label !== m) { toast(`Marque « ${hit.label} » reprise telle qu'enregistrée`); return hit.label; }
+  return m;
+}
+function setupMarqueSuggest(id) {
+  const inp = document.getElementById(id), box = document.getElementById(id + '-sugg');
+  if (!inp || !box) return;
+  const hide = () => box.classList.remove('open');
+  const show = () => {
+    const q = marqueKey(inp.value);
+    const list = marquesConnues().filter(x => (!q || x.key.includes(q)) && x.label !== inp.value.trim()).slice(0, 8);
+    if (!list.length) { hide(); return; }
+    box.innerHTML = list.map((x, i) => `<button type="button" data-i="${i}"><span>${esc(x.label)}</span><span class="bs-n">${x.total} produit${x.total > 1 ? 's' : ''}</span></button>`).join('');
+    box.querySelectorAll('button').forEach((b, i) => {
+      b.addEventListener('mousedown', ev => { ev.preventDefault(); inp.value = list[i].label; hide(); });
+    });
+    box.classList.add('open');
+  };
+  inp.addEventListener('input', show);
+  inp.addEventListener('focus', show);
+  inp.addEventListener('blur', () => setTimeout(hide, 120));
+  inp.addEventListener('keydown', ev => { if (ev.key === 'Escape') hide(); });
+}
+setupMarqueSuggest('add-marque');
+setupMarqueSuggest('edit-marque');
+
 async function addProduct() {
   const nom    = document.getElementById('add-nom').value.trim();
-  const marque = document.getElementById('add-marque').value.trim();
+  const marque = canonMarque(document.getElementById('add-marque').value);
   const barcode= document.getElementById('add-barcode').value.trim();
   const categorie = document.getElementById('add-categorie').value.trim();
   if (!nom) { toast('Le nom est obligatoire', true); return; }

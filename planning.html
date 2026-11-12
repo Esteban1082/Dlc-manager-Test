@@ -448,7 +448,6 @@ window.__guardPassed = undefined;
       <div class="btns" style="margin-top:8px">
         <button type="button" class="btn" onclick="document.getElementById('imp-jsonfile').click()">Fichier .json</button>
         <button type="button" class="btn" onclick="analyseJSON()">Vérifier</button>
-        <button type="button" class="btn" id="imp-legacy" style="display:none" onclick="loadLegacy()">Ancien Rob.Planning</button>
       </div>
       <input type="file" id="imp-jsonfile" accept=".json,application/json" style="display:none" onchange="readJSONFile(event)">
     </div>
@@ -479,12 +478,10 @@ window.__guardPassed = undefined;
 </div>
 
 <div class="toast-c" id="toasts" aria-live="polite"></div>
-<div class="version-tag">planning v1.3 · 24/10/2026 16:00</div>
+<div class="version-tag">planning v1.4 · 13/11/2026 12:00</div>
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
-const LEGACY_TENANT = 'b1a616f5-010d-42c8-919b-ce39961269a5'; // Rob The Market : ancien Rob.Planning (Google Sheet)
-const LEGACY_API = 'https://script.google.com/macros/s/AKfycbxkRwejUPDsjpUG6z7oRIQlGxj3lmJbYMgefCrNB8HCzWWI8Q5zHxPYL8tKn_hvg_ar/exec';
 const DAY_SHORT = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'];
 const DAY_LONG = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 const SPECIALS = ['CRDT', 'VA', 'VAE', 'Récup JF', 'Férié', 'MAL 1/2T', 'Formation', 'Congé sans solde'];
@@ -953,12 +950,11 @@ async function confirmCopy() {
   } catch (e) { toast(e.message, true); }
 }
 
-// ── Import (photo IA, JSON, ancien Rob.Planning) ──
+// ── Import (JSON ; photo IA désactivée) ──
 function openImport() {
   const sel = document.getElementById('imp-week'), cur = mondayOf(todayISO());
   const opts = []; for (let i = -1; i <= 6; i++) opts.push(addDays(cur, i * 7));
   sel.innerHTML = `<option value="">Lire la date sur la photo</option>` + opts.map(m => `<option value="${m}" ${m === addDays(cur, 7) ? 'selected' : ''}>${esc(weekTitle(m))} · ${esc(weekRange(m))}</option>`).join('');
-  document.getElementById('imp-legacy').style.display = me.tenant_id === LEGACY_TENANT ? 'block' : 'none';
   document.getElementById('imp-preview').innerHTML = '';
   document.getElementById('imp-go').disabled = true;
   pendingImport = null;
@@ -1020,24 +1016,6 @@ function analyseJSON() {
     document.getElementById('imp-go').disabled = true;
   }
 }
-function loadLegacy() {
-  if (me.tenant_id !== LEGACY_TENANT) return;
-  const prev = document.getElementById('imp-preview');
-  prev.innerHTML = `<div class="preview"><span class="spin"></span> Lecture de l’ancien Rob.Planning…</div>`;
-  const cb = 'slPlanLegacy' + Date.now(), sc = document.createElement('script');
-  const timer = setTimeout(() => { done(); prev.innerHTML = `<div class="preview" style="color:var(--red)">Ancien planning injoignable</div>`; }, 20000);
-  function done() { clearTimeout(timer); delete window[cb]; sc.remove(); }
-  window[cb] = d => {
-    done();
-    if (!d || !d.ok || !Array.isArray(d.weeks)) { prev.innerHTML = `<div class="preview" style="color:var(--red)">Réponse invalide</div>`; return; }
-    document.getElementById('imp-text').value = JSON.stringify({ weeks: d.weeks }, null, 2);
-    analyse(d.weeks.map(w => ({ ...w, _published: w.published })), 'legacy');
-  };
-  sc.onerror = () => { done(); prev.innerHTML = `<div class="preview" style="color:var(--red)">Ancien planning injoignable</div>`; };
-  sc.src = LEGACY_API + '?' + new URLSearchParams({ action: 'data', callback: cb });
-  document.head.appendChild(sc);
-}
-
 // Normalise une semaine importée → { mon, label, published?, people: [{ key, first, last, days: Map(jour → shift|null) }] }
 function normWeeks(weeks) {
   const out = [];
