@@ -111,6 +111,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
         'https://jeqptodorjzeyhapbmrz.supabase.co/rest/v1/permissions?user_id=eq.' + user.id + '&module=eq.dlc&actif=eq.true&select=id',
         { headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk', 'Authorization': 'Bearer ' + tok } }
       );
+      if (!r.ok) { allow(); return; } // jeton refusé ou serveur en erreur : ne pas afficher « Module non activé » à tort (la base reste le vrai verrou)
       const perms = await r.json();
       if (!Array.isArray(perms) || perms.length === 0) {
         showBlock('Module non activé', "Demande l\'accès à ton responsable");
@@ -510,7 +511,6 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
   .bloc-pill:hover:not(.active) { border-color:var(--bloc-color, var(--amber)); color:var(--text); }
   .theme-toggle-global, #theme-toggle { display:none !important; }
 </style>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" crossorigin="anonymous"></script>
 
 <style id="sl-ui">
   /* StoreLine UI v2 — Verre × Atelier */
@@ -767,7 +767,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  dlc v5.3 · 13/11/2026 13:00
+  dlc v5.5 · 13/11/2026 16:00
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -802,7 +802,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
       <button class="btn-cancel" onclick="closeProdEdit()">Annuler</button>
       <button class="btn-confirm" onclick="saveProdEdit()">Enregistrer →</button>
     </div>
-    <button onclick="deleteProdEdit()" style="width:100%;margin-top:12px;padding:10px;background:transparent;border:1px solid rgba(255,64,64,.35);border-radius:8px;color:var(--red);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer">Supprimer définitivement de la base</button>
+    <button onclick="deleteProdEdit(this)" style="width:100%;margin-top:12px;padding:10px;background:transparent;border:1px solid rgba(255,64,64,.35);border-radius:8px;color:var(--red);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer">Supprimer définitivement de la base</button>
   </div>
 </div>
 
@@ -950,7 +950,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
       <button class="btn-cancel" onclick="closeEditDate()" aria-label="Annuler la modification">Annuler</button>
       <button class="btn-confirm" onclick="confirmEditDate()" aria-label="Enregistrer">Enregistrer →</button>
     </div>
-    <button class="danger-btn" onclick="deleteFromEdit()">Supprimer définitivement</button>
+    <button class="danger-btn" onclick="deleteFromEdit(this)">Supprimer définitivement</button>
   </div>
 </div>
 
@@ -962,6 +962,15 @@ const today = new Date(); today.setHours(0,0,0,0);
 let products      = [];
 let sheetProducts = [];
 let nextId        = 1;
+let _loaded       = false; // premier chargement terminé (réussi ou non)
+// Identifiants d'affichage stables : un article garde le même numéro d'une synchro à l'autre
+let _idSeq = 0;
+const _idByDb = new Map();
+function stableId(dbId) {
+  if (!dbId) return ++_idSeq;
+  if (!_idByDb.has(dbId)) _idByDb.set(dbId, ++_idSeq);
+  return _idByDb.get(dbId);
+}
 let currentFilter = 'all';
 
 // ── v3.0 : Blocs DLC ──
@@ -972,7 +981,7 @@ let _blocFilter     = null; // null = tous, 'BLOC_ID' = filtré
 
 // ── Helpers ──
 const daysUntil  = dateStr => { const d = /^\d{4}-\d{2}-\d{2}$/.test(String(dateStr)) ? new Date(dateStr + 'T00:00:00') : new Date(dateStr); d.setHours(0,0,0,0); return Math.round((d - today) / 86400000); };
-const statusClass = days => days <= 0 ? 'red' : days <= 3 ? 'yellow' : days <= 10 ? 'green' : 'grey';
+const statusClass = days => days <= 0 ? 'red' : days <= 7 ? 'yellow' : days <= 10 ? 'green' : 'grey';
 const statusLabel = days => days < 0 ? `Périmé il y a ${Math.abs(days)}j` : days === 0 ? 'Périmé aujourd\'hui !' : days === 1 ? 'Demain !' : `Dans ${days} jours`;
 const fmtDate    = dateStr => new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-BE', { day:'2-digit', month:'short', year:'numeric' });
 
@@ -1128,7 +1137,7 @@ function normalizeDlcRow(row, index) {
   const rawId = row.id || '';
   const isUuid = /^[0-9a-f-]{36}$/i.test(String(rawId));
   return {
-    id: isUuid ? index + 1 : (rawId || index + 1),
+    id: isUuid ? stableId(rawId) : stableId(),
     dbId: isUuid ? rawId : '',
     brand: row.marque || row.brand || '',
     name: row.nom || row.name || '',
@@ -1178,6 +1187,7 @@ async function fullSync() {
     products = Array.isArray(supaDlc) ? supaDlc : [];
     nextId = products.length + 1;
     syncRetries = 0;
+    _loaded = true;
     setSyncStatus('connected', 'À jour', true);
     toast(`${products.length} DLC chargée${products.length > 1 ? 's' : ''}`);
     startAutoSync();
@@ -1193,6 +1203,7 @@ async function fullSync() {
       return;
     }
     syncRetries = 0;
+    _loaded = true;
     setSyncStatus('error', 'Hors ligne', true);
     toast('Connexion impossible — touche la pastille pour réessayer', true);
     render();
@@ -1311,6 +1322,7 @@ function hideSuggestions() {
 }
 
 function fillFromProduct(p) {
+  if (!p) return;
   document.getElementById('f-brand').value   = p.patissier   || '';
   document.getElementById('f-name').value    = p.nom_article || '';
   document.getElementById('f-barcode').value = p.code_barres || '';
@@ -1323,6 +1335,7 @@ function fillFromProduct(p) {
 }
 
 let searchTimer = null;
+let _formMatches = [];
 function onSearchInput() { clearTimeout(searchTimer); searchTimer = setTimeout(triggerSearch, 300); }
 
 function triggerSearch() {
@@ -1337,13 +1350,14 @@ function triggerSearch() {
   } else if (matches.length > 1) {
     lr.style.display = 'none';
     sugg.style.display = 'block';
-    sugg.innerHTML = matches.map(p => `
-      <div onclick="fillFromProduct(sheetProducts.find(x => x.nom_article===\`${p.nom_article.replace(/`/g,"'")}\` && x.patissier===\`${p.patissier.replace(/`/g,"'")}\`))"
+    _formMatches = matches;
+    sugg.innerHTML = matches.map((p, i) => `
+      <div onclick="fillFromProduct(_formMatches[${i}])"
         style="padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);background:var(--surface);transition:background .15s"
-        onmouseover="this.style.background='#252520'" onmouseout="this.style.background='var(--surface)'">
-        <span style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">${p.patissier}</span><br>
-        <span>${p.nom_article}</span>
-        ${p.code_barres ? `<span style="color:var(--muted);font-size:10px;margin-left:8px">${p.code_barres}</span>` : ''}
+        onmouseover="this.style.background='var(--surface2, var(--bg))'" onmouseout="this.style.background='var(--surface)'">
+        <span style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">${escHtml(p.patissier || '')}</span><br>
+        <span>${escHtml(p.nom_article)}</span>
+        ${p.code_barres ? `<span style="color:var(--muted);font-size:10px;margin-left:8px">${escHtml(p.code_barres)}</span>` : ''}
       </div>`).join('');
   } else {
     hideSuggestions();
@@ -1509,7 +1523,8 @@ async function updateBaseProduct(sp, info) {
 
 async function deleteBaseProduct(sp) {
   if (!sp.id) throw new Error('Produit introuvable en ligne');
-  await sbFetch(`/rest/v1/produits?id=eq.${encodeURIComponent(sp.id)}`, { method:'DELETE' });
+  const del = await sbFetch(`/rest/v1/produits?id=eq.${encodeURIComponent(sp.id)}`, { method:'DELETE' });
+  if (Array.isArray(del) && !del.length) throw new Error('Suppression refusée : seul un responsable peut supprimer de la base produits');
   sheetProducts = sheetProducts.filter(x => x !== sp);
   _missingProducts = _missingProducts.filter(x => x !== sp);
 }
@@ -1521,13 +1536,16 @@ async function syncProduitBase(oldInfo, newInfo) {
   catch(e) { toast('Base produits non mise à jour : ' + e.message, true); }
 }
 
-async function deleteFromEdit() {
+async function deleteFromEdit(btn) {
   const p = products.find(x => x.id === editingId);
   if (!p) return;
-  if (!confirm(`Supprimer définitivement "${p.name}" ?\nL'article sort du suivi DLC et de la base produits.`)) return;
+  if (!armBtn(btn, 'Confirmer : sort du suivi ET de la base produits')) return;
   closeEditDate();
   try {
-    if (p.dbId) await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, { method:'DELETE' });
+    if (p.dbId) {
+      const del = await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(p.dbId)}`, { method:'DELETE' });
+      if (Array.isArray(del) && !del.length) throw new Error('Suppression refusée : seul un responsable peut supprimer. Utilise « Vérifié — retiré du rayon ».');
+    }
     products = products.filter(x => x !== p);
     const sp = findBaseProduct(p);
     if (sp) await deleteBaseProduct(sp);
@@ -1560,10 +1578,10 @@ async function saveProdEdit() {
   catch(e) { toast('' + e.message, true); }
 }
 
-async function deleteProdEdit() {
+async function deleteProdEdit(btn) {
   const sp = _prodEditRef;
   if (!sp) return;
-  if (!confirm(`Supprimer définitivement "${sp.nom_article || sp.nom}" de la base produits ?`)) return;
+  if (!armBtn(btn, 'Confirmer la suppression')) return;
   closeProdEdit();
   try { await deleteBaseProduct(sp); toast('Produit supprimé'); renderNoDlcList(); updateNoDlcBadge(); }
   catch(e) { toast('' + e.message, true); }
@@ -1627,9 +1645,11 @@ function quickLookup() {
     const icons  = { red:'🔴', yellow:'🟡', green:'🟢', grey:'⚪' };
 
     // En-tête avec nom du produit
-    let html = `
+    const sameProd = matches.every(p => norm(p.name) === norm(first.name) && norm(p.brand) === norm(first.brand));
+    let html = sameProd ? `
       <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;margin-bottom:4px">${escHtml(first.name)}</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${escHtml(first.brand)}</div>`;
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${escHtml(first.brand)}</div>` : `
+      <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;margin-bottom:16px">Plusieurs produits trouvés</div>`;
 
     if (matches.length === 1) {
       // Un seul — affichage large
@@ -1655,7 +1675,8 @@ function quickLookup() {
         html += `
           <div style="display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:8px;padding:10px 12px;border:1px solid var(--border)">
             <span style="font-size:18px">${icons[cls]}</span>
-            <div style="flex:1;text-align:left">
+            <div style="flex:1;min-width:0;text-align:left">
+              ${sameProd ? '' : `<div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.name)}</div><div style="font-size:11px;color:var(--muted);margin-bottom:2px">${escHtml(p.brand)}</div>`}
               <div style="font-family:'Fraunces',serif;font-size:11px;font-weight:700;font-weight:700;color:${colors[cls]}">${fmtDate(p.dlc)}</div>
               <div style="font-size:11px;color:${colors[cls]}">${statusLabel(days)}</div>
             </div>
@@ -1895,7 +1916,7 @@ function renderExclusionsList() {
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;
       background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
       <div>
-        <div style="font-size:13px;color:var(--text)">${nom}</div>
+        <div style="font-size:13px;color:var(--text)">${escHtml(nom)}</div>
         <div style="font-size:10px;color:var(--muted)">Jeter quotidien — exclu de la liste Sans DLC</div>
       </div>
       <button onclick="reintegrerArticle(${i})" title="Réintégrer dans la liste"
@@ -1959,16 +1980,21 @@ function marquesConnues() {
   sheetProducts.forEach(p => add(p.patissier || p.marque));
   products.forEach(p => add(p.brand));
   return [...map.entries()].map(([key, e]) => ({
-    key, total: e.total,
+    key, total: e.total, all: [...e.labels.keys()],
     label: [...e.labels.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'fr'))[0][0], // orthographe la plus utilisée
   })).sort((a, b) => a.label.localeCompare(b.label, 'fr'));
 }
-// Si la marque tapée existe déjà (à l'accent près), on reprend l'orthographe enregistrée
+// Nouvelle marque : toujours une majuscule à chaque mot, jamais d'accent (règle du magasin)
+function formatMarque(m) {
+  return String(m || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
+    .replace(/(^|[\s-])(\p{L})/gu, (x, a, b) => a + b.toUpperCase());
+}
+// Marque déjà connue (à l'accent ou à la majuscule près) : on reprend l'orthographe enregistrée
 function canonMarque(m) {
   m = (m || '').trim(); if (!m) return m;
   const k = marqueKey(m), hit = marquesConnues().find(x => x.key === k);
-  if (hit && hit.label !== m) { toast(`Marque « ${hit.label} » reprise telle qu'enregistrée`); return hit.label; }
-  return m;
+  if (hit) { if (hit.label !== m) toast(`Marque « ${hit.label} » reprise telle qu'enregistrée`); return hit.label; }
+  return formatMarque(m);
 }
 function setupMarqueSuggest(id) {
   const inp = document.getElementById(id), box = document.getElementById(id + '-sugg');
@@ -1985,7 +2011,6 @@ function setupMarqueSuggest(id) {
     box.classList.add('open');
   };
   inp.addEventListener('input', show);
-  inp.addEventListener('focus', show);
   inp.addEventListener('blur', () => setTimeout(hide, 120));
   inp.addEventListener('keydown', ev => { if (ev.key === 'Escape') hide(); });
 }
@@ -2245,7 +2270,7 @@ function findProductForHisto(e) {
 async function restoreRetrait(e, dlc) {
   if (!e.dbId) throw new Error('article introuvable en ligne');
   await sbFetch(`/rest/v1/dlc?id=eq.${encodeURIComponent(e.dbId)}`, { method:'PATCH', body: JSON.stringify({ actif:true, dlc_date: dlc }) });
-  products.push({ id: nextId++, dbId: e.dbId, brand: e.brand, name: e.name, barcode: e.barcode, dlc, archived:false });
+  products.push({ id: stableId(e.dbId), dbId: e.dbId, brand: e.brand, name: e.name, barcode: e.barcode, dlc, archived:false });
 }
 
 async function setProductDate(p, dlc) {
@@ -2373,7 +2398,7 @@ function renderProducts() {
   list.classList.remove('by-brand');
   list.style.removeProperty('--cols');
   if (!active.length) {
-    list.innerHTML = '<div class="dlc-empty">' + (products.length ? 'Rien à afficher ici.' : 'Aucun produit suivi pour l’instant.') + '</div>';
+    list.innerHTML = '<div class="dlc-empty">' + (!_loaded ? 'Chargement…' : products.length ? 'Rien à afficher ici.' : 'Aucun produit suivi pour l’instant.') + '</div>';
     return;
   }
   const section = (title, cls, items) => `<div class="dlc-section ${cls}">${title} · ${items.length}</div><div class="dlc-group">${items.map(productRow).join('')}</div>`;
@@ -2448,6 +2473,15 @@ function undoLast() {
 function setDatePreset(inputId, n) {
   const x = new Date(); x.setHours(12, 0, 0, 0); x.setDate(x.getDate() + n);
   document.getElementById(inputId).value = localISO(x);
+}
+
+// Bouton à double appui (remplace confirm()) : 1er appui = demande de confirmation, 2e appui dans les 4 s = action
+function armBtn(btn, label) {
+  if (!btn) return true;
+  if (btn.dataset.armed) { delete btn.dataset.armed; if (btn.dataset.orig != null) btn.textContent = btn.dataset.orig; return true; }
+  btn.dataset.armed = '1'; btn.dataset.orig = btn.textContent; btn.textContent = label || 'Confirmer';
+  setTimeout(() => { if (btn.isConnected && btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = btn.dataset.orig; } }, 4000);
+  return false;
 }
 
 // ── Toast v2.8 ──

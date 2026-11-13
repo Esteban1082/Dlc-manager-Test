@@ -94,6 +94,7 @@ window.__guardPassed = undefined;
   try {
     const r = await fetch('https://jeqptodorjzeyhapbmrz.supabase.co/rest/v1/permissions?user_id=eq.' + user.id + '&module=eq.planning&actif=eq.true&select=id',
       { headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk', 'Authorization': 'Bearer ' + tok } });
+    if (!r.ok) { allow(); return; } // jeton refusé ou serveur en erreur : ne pas afficher « Module non activé » à tort
     const perms = await r.json();
     if (!Array.isArray(perms) || !perms.length) { block('Module non activé', 'Demande l’accès à ton responsable'); return; }
     allow();
@@ -478,7 +479,7 @@ window.__guardPassed = undefined;
 </div>
 
 <div class="toast-c" id="toasts" aria-live="polite"></div>
-<div class="version-tag">planning v1.4 · 13/11/2026 12:00</div>
+<div class="version-tag">planning v1.5 · 13/11/2026 15:00</div>
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplcXB0b2Rvcmp6ZXloYXBibXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjI0ODksImV4cCI6MjA4OTIzODQ4OX0.j4JqeDnDMEghnBtKy5Knpb4QYDFEXiRtDeq7SSz3zWk';
@@ -576,7 +577,7 @@ function chip(s) {
   if (norm(t) === 'repos' && !s.debut) return '<div class="chip off">Jour off</div>';
   const f = family(s);
   if (f === 'ouv') return `<div class="chip ouv">${time}<span>${esc(norm(t) === 'ouverture' || !t ? 'Ouverture' : t)}</span></div>`;
-  if (f === 'ferm') return `<div class="chip ferm">${time}<span>Fermeture</span></div>`;
+  if (f === 'ferm') return `<div class="chip ferm">${time}<span>${esc(norm(t).startsWith('ferm') || !t ? 'Fermeture' : t)}</span></div>`;
   return `<div class="chip special">${time}<span>${esc(t || 'À définir')}</span></div>`;
 }
 
@@ -741,7 +742,7 @@ function renderEmp() {
   const mons = knownMondays().filter(m => weekVisible(m) && (hasShiftInWeek(e.id, m) || (e.actif && m >= mondayOf(todayISO()) && weekHasData(m))));
   const today = todayISO();
   html += `<div class="card"><div class="list-h"><div><h2>${esc(empName(e))}</h2><div class="sub">${e.actif ? 'Dans l’équipe' : 'Ne fait plus partie du planning'}${e.user_id ? ' · compte lié' : ''}</div></div>
-    ${isMgr ? `<div class="actions"><button class="pill" type="button" onclick="openEmp('${e.id}')">Modifier</button>${e.actif ? `<button class="pill" type="button" style="color:var(--red)" onclick="removeEmp('${e.id}')">Retirer</button>` : `<button class="pill" type="button" onclick="reactivateEmp('${e.id}')">Réintégrer</button>`}</div>` : ''}</div></div>`;
+    ${isMgr ? `<div class="actions"><button class="pill" type="button" onclick="openEmp('${e.id}')">Modifier</button>${e.actif ? `<button class="pill" type="button" style="color:var(--red)" onclick="removeEmp('${e.id}', this)">Retirer</button>` : `<button class="pill" type="button" onclick="reactivateEmp('${e.id}')">Réintégrer</button>`}</div>` : ''}</div></div>`;
   html += mons.map(m => {
     const days = weekDays(m);
     return `<div class="card"><div class="list-h"><div><h2 style="font-size:17px">${esc(weekTitle(m))}</h2><div class="sub">${esc(weekRange(m))}</div></div></div>
@@ -896,9 +897,10 @@ async function saveEmp() {
     closeOv('ov-emp'); render();
   } catch (e) { toast(e.message, true); }
 }
-async function removeEmp(id) {
+async function removeEmp(id, btn) {
   const e = employes.find(x => x.id === id); if (!e) return;
-  if (!confirm(`Retirer ${empName(e)} du planning ?\n\nSes horaires passés sont gardés, ceux à partir d’aujourd’hui sont effacés.`)) return;
+  // Double appui (pas de confirm()) : les horaires passés sont gardés, ceux à partir d'aujourd'hui sont effacés
+  if (btn && !btn.dataset.armed) { btn.dataset.armed = '1'; btn.textContent = 'Confirmer : efface ses horaires à venir'; setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = 'Retirer'; } }, 4000); return; }
   try {
     await sbFetch(`/rest/v1/plan_shifts?employe_id=eq.${id}&jour=gte.${todayISO()}`, { method: 'DELETE' });
     await sbFetch(`/rest/v1/plan_employes?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ actif: false }) });
@@ -927,7 +929,7 @@ function openCopy() {
 }
 function copyRecap() {
   const s = document.getElementById('copy-src').value, d = document.getElementById('copy-dst').value;
-  const n = employes.filter(e => hasShiftInWeek(e.id, s)).length;
+  const n = employes.filter(e => e.actif && hasShiftInWeek(e.id, s)).length;
   const exist = employes.reduce((a, e) => a + [0, 1, 2, 3, 4, 5, 6].filter(i => shiftOf(e.id, addDays(d, i * 1))).length, 0);
   document.getElementById('copy-recap').textContent = !s ? 'Aucune semaine à copier.' : s === d ? 'Choisis une autre semaine cible.' : `${n} personne${n > 1 ? 's' : ''} copiée${n > 1 ? 's' : ''}.${exist ? ` ${exist} case${exist > 1 ? 's' : ''} déjà remplie${exist > 1 ? 's' : ''} dans la cible seront remplacées.` : ''}`;
 }
@@ -935,7 +937,7 @@ async function confirmCopy() {
   const src = document.getElementById('copy-src').value, dst = document.getElementById('copy-dst').value;
   if (!src || src === dst) return;
   const ups = [], dels = [];
-  employes.filter(e => hasShiftInWeek(e.id, src)).forEach(e => {
+  employes.filter(e => e.actif && hasShiftInWeek(e.id, src)).forEach(e => { // les personnes retirées du planning ne sont pas recopiées
     for (let i = 0; i < 7; i++) {
       const a = shiftOf(e.id, addDays(src, i)), b = shiftOf(e.id, addDays(dst, i));
       if (a) ups.push({ tenant_id: me.tenant_id, employe_id: e.id, jour: addDays(dst, i), type: a.type, debut: a.debut || null, fin: a.fin || null });

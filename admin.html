@@ -578,7 +578,7 @@ window.slErrMsg = function (status, data) {
     headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${token}` }
   });
   if (!authResp.ok) {
-    localStorage.clear();
+    ['sl_access_token', 'sl_refresh_token', 'sl_auth', 'sl_user'].forEach(k => localStorage.removeItem(k)); // on ne vide plus tout (thème, historique en attente)
     window.location.replace('login.html?from=admin');
     return;
   }
@@ -910,7 +910,7 @@ window.slErrMsg = function (status, data) {
 
 <div class="toast-container" id="toast-container"></div>
 <div class="version-tag" style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:80;letter-spacing:1px;opacity:.4">
-  admin v2.5 · 12/10/2026 16:30
+  admin v2.6 · 13/11/2026 15:00
 </div>
 
 <script>
@@ -924,8 +924,7 @@ const ME = getMe();
 function applyTheme(theme) {
   const next = theme === 'light' ? 'light' : 'dark';
   document.documentElement.dataset.theme = next;
-  localStorage.setItem('sl_theme', next);
-  localStorage.setItem('sl_admin_theme', next);
+  localStorage.setItem('sl_ui_theme', next); // même réglage que les autres pages
   const btn = document.getElementById('theme-toggle');
   if (btn) btn.textContent = next === 'light' ? 'Mode sombre' : 'Mode clair';
 }
@@ -1166,9 +1165,9 @@ function openUserHisto(userId) {
 document.getElementById('sidebar-email').textContent = ME.email || '—';
 
 async function logout() {
-  await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method:'POST', headers:{'apikey':SUPABASE_ANON,'Authorization':`Bearer ${localStorage.getItem('sl_access_token')}`} });
-  localStorage.removeItem('sl_auth');
-  localStorage.removeItem('sl_user');
+  // Hors connexion, la déconnexion doit quand même vider l'appareil
+  try { await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method:'POST', headers:{'apikey':SUPABASE_ANON,'Authorization':`Bearer ${localStorage.getItem('sl_access_token')}`} }); } catch(e) {}
+  ['sl_auth', 'sl_user', 'sl_access_token', 'sl_refresh_token'].forEach(k => localStorage.removeItem(k));
   window.location.href = 'login.html';
 }
 
@@ -1210,6 +1209,8 @@ async function loadUsers() {
   document.getElementById('users-list').innerHTML = '<div class="loading">Chargement…</div>';
   try {
     await ensureTenantsLoaded();
+    // Blocs DLC : nécessaires pour afficher « Blocs assignés » dans la fiche, même sans être passé par l'onglet Blocs
+    if (!allBlocs.length) { try { allBlocs = await sbFetch('/rest/v1/dlc_blocs?select=id,nom,couleur,description,ordre,actif,tenant_id,dlc_blocs_marques(id,marque),dlc_blocs_produits(id,produit_id,nom,marque,code_barres),dlc_blocs_users(id,user_id)&order=ordre.asc,nom.asc') || []; } catch(_) {} }
     const profiles = await sbSelect('profiles', '?select=id,email,nom,role,actif,tenant_id,created_at,dlc_search_libre,permissions(*)&order=created_at.desc');
     const error = (!profiles || profiles.message) ? {message: profiles?.message || 'Erreur lecture'} : null;
 
@@ -1371,7 +1372,7 @@ function renderUsers() {
           <button class="btn btn-green" onclick="setAllModules('${u.id}',true)">Tout activer</button>
           <button class="btn btn-ghost" onclick="setAllModules('${u.id}',false)">Tout désactiver</button>
           <button class="btn btn-ghost" onclick="openUserHisto('${u.id}')">Historique DLC</button>
-          <button class="btn btn-ghost" onclick="sendAccess('${u.id}')">Renvoyer un lien d’accès</button>
+          <button class="btn btn-ghost" onclick="sendAccess('${u.id}', this)">Renvoyer un lien d’accès</button>
         </div>
       </div>` : ''}
     </div>`;
@@ -1531,9 +1532,8 @@ async function sendInvite() {
   finally { btn.disabled = false; btn.textContent = 'Envoyer l’invitation'; }
 }
 
-async function sendAccess(userId) {
-  const u = allUsers.find(x => x.id === userId);
-  if (!confirm(`Envoyer un lien d’accès à ${u ? u.email : 'cet utilisateur'} ?`)) return;
+async function sendAccess(userId, btn) {
+  if (!armBtn(btn, 'Confirmer l’envoi de l’e-mail')) return;
   try {
     const d = await adminFn('send_access', { user_id: userId });
     toast(d.sent === 'invite' ? 'Invitation renvoyée' : 'Lien de nouveau mot de passe envoyé');
@@ -1686,6 +1686,14 @@ async function copyTenantSlug(slug) {
 }
 
 // ── Utils ──
+// Bouton à double appui (remplace confirm()) : 1er appui = demande de confirmation, 2e appui dans les 4 s = action
+function armBtn(btn, label) {
+  if (!btn) return true;
+  if (btn.dataset.armed) { delete btn.dataset.armed; if (btn.dataset.orig != null) btn.textContent = btn.dataset.orig; return true; }
+  btn.dataset.armed = '1'; btn.dataset.orig = btn.textContent; btn.textContent = label || 'Confirmer';
+  setTimeout(() => { if (btn.isConnected && btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = btn.dataset.orig; } }, 4000);
+  return false;
+}
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 // ── Init ──
@@ -1708,6 +1716,8 @@ async function loadBlocs() {
       ? '?select=id,nom,couleur,description,ordre,actif,tenant_id,dlc_blocs_marques(id,marque),dlc_blocs_produits(id,produit_id,nom,marque,code_barres),dlc_blocs_users(id,user_id)&order=ordre.asc,nom.asc'
       : `?tenant_id=eq.${tenantId}&select=id,nom,couleur,description,ordre,actif,tenant_id,dlc_blocs_marques(id,marque),dlc_blocs_produits(id,produit_id,nom,marque,code_barres),dlc_blocs_users(id,user_id)&order=ordre.asc,nom.asc`;
     allBlocs = await sbFetch('/rest/v1/dlc_blocs' + query) || [];
+    // Noms des personnes assignées : charger les comptes si l'onglet Utilisateurs n'a pas encore été ouvert
+    if (!allUsers.length) { try { allUsers = await sbSelect('profiles', '?select=id,email,nom,role,actif,tenant_id,created_at,dlc_search_libre,permissions(*)&order=created_at.desc') || []; } catch(_) {} }
     renderBlocs();
   } catch(e) {
     el.innerHTML = `<div class="loading" style="color:var(--red)">${escapeHtml(e.message)}</div>`;
@@ -1756,7 +1766,7 @@ function renderBlocs() {
         <button class="btn btn-ghost" onclick="openMarquesModal('${b.id}')" style="font-size:11px;padding:6px 12px">Contenu</button>
         <button class="btn btn-ghost" onclick="openBlocUsersModal('${b.id}')" style="font-size:11px;padding:6px 12px">Assigner</button>
         <button class="btn btn-ghost" onclick="toggleBlocActif('${b.id}',${b.actif})" style="font-size:11px;padding:6px 12px">${b.actif?'⏸ Désactiver':'▶ Activer'}</button>
-        <button class="btn btn-ghost" onclick="deleteBloc('${b.id}')" style="font-size:11px;padding:6px 12px;color:var(--red);border-color:rgba(255,64,64,.3)">Supprimer</button>
+        <button class="btn btn-ghost" onclick="deleteBloc('${b.id}', this)" style="font-size:11px;padding:6px 12px;color:var(--red);border-color:rgba(255,64,64,.3)">Supprimer</button>
       </div>
     </div>`;
   }).join('');
@@ -1823,10 +1833,10 @@ async function toggleBlocActif(id, currentActif) {
   } catch(e) { toast('' + e.message, true); }
 }
 
-async function deleteBloc(id) {
+async function deleteBloc(id, btn) {
   const b = allBlocs.find(x => x.id === id);
   if (!b) return;
-  if (!confirm(`Supprimer le bloc "${b.nom}" ? Les marques et attributions seront supprimées.`)) return;
+  if (!armBtn(btn, 'Confirmer (marques et attributions supprimées)')) return;
   try {
     await sbFetch(`/rest/v1/dlc_blocs?id=eq.${id}`, { method:'DELETE' });
     toast('Bloc supprimé');

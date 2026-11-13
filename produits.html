@@ -492,7 +492,7 @@ window.__guardPassed = undefined; // undefined = en cours, true = OK, false = bl
 </div>
 
 <div class="toast-container" id="toast-container"></div>
-<div class="version-tag">produits v2.5 · 13/11/2026 12:00</div>
+<div class="version-tag">produits v2.7 · 13/11/2026 16:00</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -760,16 +760,21 @@ function marquesConnues() {
     map.set(k, e);
   });
   return [...map.entries()].map(([key, e]) => ({
-    key, total: e.total,
+    key, total: e.total, all: [...e.labels.keys()],
     label: [...e.labels.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'fr'))[0][0], // orthographe la plus utilisée
   })).sort((a, b) => a.label.localeCompare(b.label, 'fr'));
 }
-// Si la marque tapée existe déjà (à l'accent près), on reprend l'orthographe enregistrée
+// Nouvelle marque : toujours une majuscule à chaque mot, jamais d'accent (règle du magasin)
+function formatMarque(m) {
+  return String(m || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
+    .replace(/(^|[\s-])(\p{L})/gu, (x, a, b) => a + b.toUpperCase());
+}
+// Marque déjà connue (à l'accent ou à la majuscule près) : on reprend l'orthographe enregistrée
 function canonMarque(m) {
   m = (m || '').trim(); if (!m) return m;
   const k = marqueKey(m), hit = marquesConnues().find(x => x.key === k);
-  if (hit && hit.label !== m) { toast(`Marque « ${hit.label} » reprise telle qu'enregistrée`); return hit.label; }
-  return m;
+  if (hit) { if (hit.label !== m) toast(`Marque « ${hit.label} » reprise telle qu'enregistrée`); return hit.label; }
+  return formatMarque(m);
 }
 function setupMarqueSuggest(id) {
   const inp = document.getElementById(id), box = document.getElementById(id + '-sugg');
@@ -786,7 +791,6 @@ function setupMarqueSuggest(id) {
     box.classList.add('open');
   };
   inp.addEventListener('input', show);
-  inp.addEventListener('focus', show);
   inp.addEventListener('blur', () => setTimeout(hide, 120));
   inp.addEventListener('keydown', ev => { if (ev.key === 'Escape') hide(); });
 }

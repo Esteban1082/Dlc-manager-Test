@@ -317,7 +317,7 @@ window.slErrMsg = function (status, data) {
 </div>
 
 <div class="toast-c" id="toasts" aria-live="polite"></div>
-<div class="version-tag">horaire v1.0 · 24/10/2026 16:00</div>
+<div class="version-tag">horaire v1.1 · 13/11/2026 15:00</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -380,7 +380,7 @@ function chip(s) {
   if (norm(t) === 'repos' && !s.debut) return '<div class="chip off">Jour off</div>';
   const f = family(s);
   if (f === 'ouv') return `<div class="chip ouv">${time}<span>${esc(norm(t) === 'ouverture' || !t ? 'Ouverture' : t)}</span></div>`;
-  if (f === 'ferm') return `<div class="chip ferm">${time}<span>Fermeture</span></div>`;
+  if (f === 'ferm') return `<div class="chip ferm">${time}<span>${esc(norm(t).startsWith('ferm') || !t ? 'Fermeture' : t)}</span></div>`;
   return `<div class="chip special">${time}<span>${esc(t || 'À définir')}</span></div>`;
 }
 

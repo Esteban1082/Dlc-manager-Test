@@ -371,7 +371,7 @@ window.slErrMsg = function (status, data) {
   <p class="sso-note">Accès sur invitation uniquement.</p>
 </div>
 
-<div class="version">StoreLine v2.3 · 12/10/2026 12:45</div>
+<div class="version">StoreLine v2.4 · 13/11/2026 15:00</div>
 
 <script>
 const SUPABASE_URL  = 'https://jeqptodorjzeyhapbmrz.supabase.co';
@@ -576,13 +576,28 @@ async function checkExistingSession() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('from')) return;
 
-  const token = localStorage.getItem('sl_access_token');
+  let token = localStorage.getItem('sl_access_token');
   if (!token) return;
 
   try {
-    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${token}` }
-    });
+    const getUser = t => fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${t}` } });
+    let r = await getUser(token);
+    if (!r.ok && localStorage.getItem('sl_refresh_token')) {
+      // Jeton expiré (il ne dure qu'une heure) : on le renouvelle au lieu de redemander le mot de passe à chaque ouverture de l'appli
+      const rr = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON },
+        body: JSON.stringify({ refresh_token: localStorage.getItem('sl_refresh_token') }),
+      });
+      if (rr.ok) {
+        const d = await rr.json();
+        if (d.access_token) {
+          token = d.access_token;
+          localStorage.setItem('sl_access_token', d.access_token);
+          if (d.refresh_token) localStorage.setItem('sl_refresh_token', d.refresh_token);
+          r = await getUser(token);
+        }
+      } else if (rr.status >= 500) { return; } // serveur en panne : on ne déconnecte pas
+    }
     if (!r.ok) {
       // Token invalide — nettoyer
       localStorage.removeItem('sl_access_token');
